@@ -11,18 +11,20 @@ import (
 
 // Parser represents the C++ parser
 type Parser struct {
-	content    string
-	lines      []string
-	current    int
-	position   ast.Position
-	scopeStack []*ast.Entity
-	tree       *ast.ScopeTree
+	content     string
+	lines       []string
+	current     int
+	position    ast.Position
+	scopeStack  []*ast.Entity
+	tree        *ast.ScopeTree
+	accessStack []ast.AccessLevel // Track access levels for each scope
 }
 
 // New creates a new parser instance
 func New() *Parser {
 	return &Parser{
-		scopeStack: make([]*ast.Entity, 0),
+		scopeStack:  make([]*ast.Entity, 0),
+		accessStack: make([]ast.AccessLevel, 0),
 	}
 }
 
@@ -67,6 +69,9 @@ func (p *Parser) parseLine(line string) error {
 	}
 
 	// Parse different constructs
+	if p.isAccessSpecifier(trimmed) {
+		return p.parseAccessSpecifier(trimmed)
+	}
 	if p.isNamespace(trimmed) {
 		return p.parseNamespace(line)
 	}
@@ -102,14 +107,15 @@ func (p *Parser) parseLine(line string) error {
 
 // Regular expressions for identifying C++ constructs
 var (
-	namespaceRegex = regexp.MustCompile(`^\s*namespace\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{?`)
-	classRegex     = regexp.MustCompile(`^\s*class\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
-	structRegex    = regexp.MustCompile(`^\s*struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
-	enumRegex      = regexp.MustCompile(`^\s*enum\s+(?:class\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
-	functionRegex  = regexp.MustCompile(`^\s*(?:(?:inline|static|virtual|explicit|constexpr)\s+)*(?:[a-zA-Z_][a-zA-Z0-9_:<>]*\s+)+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^{]*\)\s*(?:const\s*)?(?:override\s*)?(?:final\s*)?(?:\{|;)`)
-	variableRegex  = regexp.MustCompile(`^\s*(?:(?:static|const|constexpr|mutable)\s+)*[a-zA-Z_][a-zA-Z0-9_:<>]*\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=.*?)?;`)
-	typedefRegex   = regexp.MustCompile(`^\s*typedef\s+.*?\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;`)
-	usingRegex     = regexp.MustCompile(`^\s*using\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=`)
+	namespaceRegex      = regexp.MustCompile(`^\s*namespace\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{?`)
+	classRegex          = regexp.MustCompile(`^\s*(?:template\s*<[^>]*>\s*)?class\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
+	structRegex         = regexp.MustCompile(`^\s*(?:template\s*<[^>]*>\s*)?struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
+	enumRegex           = regexp.MustCompile(`^\s*enum\s+(?:class\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
+	functionRegex       = regexp.MustCompile(`^\s*(?:(?:template\s*<[^>]*>\s*)?(?:inline|static|virtual|explicit|constexpr|friend|TCB_SPAN_CONSTEXPR11|TCB_SPAN_ARRAY_CONSTEXPR|TCB_SPAN_NODISCARD)\s+)*(?:(?:[a-zA-Z_][a-zA-Z0-9_:<>*&\s]*\s+)+)?([a-zA-Z_~][a-zA-Z0-9_]*)\s*\([^{]*\)\s*(?:const\s*)?(?:override\s*)?(?:final\s*)?(?:noexcept\s*)?(?:\{|;)`)
+	variableRegex       = regexp.MustCompile(`^\s*(?:(?:static|const|constexpr|mutable|extern)\s+)*[a-zA-Z_][a-zA-Z0-9_:<>*&\s]+\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=.*?)?;`)
+	typedefRegex        = regexp.MustCompile(`^\s*typedef\s+.*?\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;`)
+	usingRegex          = regexp.MustCompile(`^\s*using\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=`)
+	usingNamespaceRegex = regexp.MustCompile(`^\s*using\s+namespace\s+([a-zA-Z_][a-zA-Z0-9_:]*)\s*;`)
 )
 
 // isNamespace checks if line contains a namespace declaration
@@ -138,14 +144,37 @@ func (p *Parser) isFunction(line string) bool {
 	if p.isClass(line) || p.isStruct(line) {
 		return false
 	}
-	return functionRegex.MatchString(line) && !strings.Contains(line, "=") // Exclude variable assignments
+
+	// Skip variable declarations with initialization
+	if strings.Contains(line, "=") && !strings.Contains(line, "==") && !strings.Contains(line, "!=") {
+		return false
+	}
+
+	// Skip lines that are clearly not function declarations
+	if strings.Contains(line, "return ") || strings.Contains(line, "throw ") {
+		return false
+	}
+
+	return functionRegex.MatchString(line)
 }
 
 // isVariable checks if line contains a variable declaration
 func (p *Parser) isVariable(line string) bool {
-	if p.isFunction(line) || p.isClass(line) || p.isStruct(line) || p.isEnum(line) {
+	// Skip other types of declarations
+	if p.isFunction(line) || p.isClass(line) || p.isStruct(line) || p.isEnum(line) || p.isUsing(line) || p.isTypedef(line) {
 		return false
 	}
+
+	// Skip lines that don't end with semicolon
+	if !strings.HasSuffix(strings.TrimSpace(line), ";") {
+		return false
+	}
+
+	// Skip lines that look like function calls or statements
+	if strings.Contains(line, "return ") || strings.Contains(line, "throw ") || strings.Contains(line, "if ") {
+		return false
+	}
+
 	return variableRegex.MatchString(line)
 }
 
@@ -156,7 +185,12 @@ func (p *Parser) isTypedef(line string) bool {
 
 // isUsing checks if line contains a using declaration
 func (p *Parser) isUsing(line string) bool {
-	return usingRegex.MatchString(line)
+	return usingRegex.MatchString(line) || usingNamespaceRegex.MatchString(line)
+}
+
+// isAccessSpecifier checks if line contains an access specifier
+func (p *Parser) isAccessSpecifier(line string) bool {
+	return line == "public:" || line == "private:" || line == "protected:"
 }
 
 // parseNamespace parses a namespace declaration
@@ -389,24 +423,65 @@ func (p *Parser) parseTypedef(line string) error {
 
 // parseUsing parses a using declaration
 func (p *Parser) parseUsing(line string) error {
+	// Try regular using declaration first
 	matches := usingRegex.FindStringSubmatch(line)
-	if len(matches) < 2 {
-		return fmt.Errorf("failed to parse using: %s", line)
+	if len(matches) >= 2 {
+		name := matches[1]
+		entity := &ast.Entity{
+			Type:         ast.EntityUsing,
+			Name:         name,
+			FullName:     p.buildFullName(name),
+			Signature:    strings.TrimSpace(line),
+			SourceRange:  p.getCurrentRange(),
+			HeaderRange:  p.getCurrentRange(),
+			OriginalText: line,
+			Children:     make([]*ast.Entity, 0),
+		}
+
+		p.addEntity(entity)
+		return nil
 	}
 
-	name := matches[1]
-	entity := &ast.Entity{
-		Type:         ast.EntityUsing,
-		Name:         name,
-		FullName:     p.buildFullName(name),
-		Signature:    strings.TrimSpace(line),
-		SourceRange:  p.getCurrentRange(),
-		HeaderRange:  p.getCurrentRange(),
-		OriginalText: line,
-		Children:     make([]*ast.Entity, 0),
+	// Try using namespace directive
+	matches = usingNamespaceRegex.FindStringSubmatch(line)
+	if len(matches) >= 2 {
+		name := matches[1]
+		entity := &ast.Entity{
+			Type:         ast.EntityUsing,
+			Name:         name,
+			FullName:     p.buildFullName(name),
+			Signature:    strings.TrimSpace(line),
+			SourceRange:  p.getCurrentRange(),
+			HeaderRange:  p.getCurrentRange(),
+			OriginalText: line,
+			Children:     make([]*ast.Entity, 0),
+		}
+
+		p.addEntity(entity)
+		return nil
 	}
 
-	p.addEntity(entity)
+	return fmt.Errorf("failed to parse using: %s", line)
+}
+
+// parseAccessSpecifier parses an access specifier (public:, private:, protected:)
+func (p *Parser) parseAccessSpecifier(line string) error {
+	var accessLevel ast.AccessLevel
+	switch line {
+	case "public:":
+		accessLevel = ast.AccessPublic
+	case "private:":
+		accessLevel = ast.AccessPrivate
+	case "protected:":
+		accessLevel = ast.AccessProtected
+	default:
+		return fmt.Errorf("unknown access specifier: %s", line)
+	}
+
+	// Update the current access level for this scope
+	if len(p.accessStack) > 0 {
+		p.accessStack[len(p.accessStack)-1] = accessLevel
+	}
 
 	return nil
 }
@@ -450,6 +525,12 @@ func (p *Parser) getCurrentScope() *ast.Entity {
 
 // getCurrentAccessLevel returns the current access level (for class members)
 func (p *Parser) getCurrentAccessLevel() ast.AccessLevel {
+	// Use the access stack if available
+	if len(p.accessStack) > 0 {
+		return p.accessStack[len(p.accessStack)-1]
+	}
+
+	// Fall back to default based on scope type
 	scope := p.getCurrentScope()
 	if scope.Type == ast.EntityClass {
 		return ast.AccessPrivate // Default for class
@@ -471,16 +552,27 @@ func (p *Parser) buildFullName(name string) string {
 	return strings.Join(parts, "::")
 }
 
-// addEntity adds an entity to the current scope and the tree
+// addEntity adds an entity to the current scope
 func (p *Parser) addEntity(entity *ast.Entity) {
 	currentScope := p.getCurrentScope()
 	currentScope.AddChild(entity)
-	p.tree.AddEntity(entity)
+	// Don't add nested entities to the flat tree list - they should only exist in the hierarchy
 }
 
 // enterScope enters a new scope
 func (p *Parser) enterScope(entity *ast.Entity) {
 	p.scopeStack = append(p.scopeStack, entity)
+
+	// Initialize access level for the new scope
+	var defaultAccess ast.AccessLevel
+	if entity.Type == ast.EntityClass {
+		defaultAccess = ast.AccessPrivate
+	} else if entity.Type == ast.EntityStruct {
+		defaultAccess = ast.AccessPublic
+	} else {
+		defaultAccess = ast.AccessUnknown
+	}
+	p.accessStack = append(p.accessStack, defaultAccess)
 }
 
 // closeScope closes the current scope
@@ -490,6 +582,12 @@ func (p *Parser) closeScope() error {
 	}
 
 	p.scopeStack = p.scopeStack[:len(p.scopeStack)-1]
+
+	// Also pop the access stack
+	if len(p.accessStack) > 0 {
+		p.accessStack = p.accessStack[:len(p.accessStack)-1]
+	}
+
 	return nil
 }
 
@@ -519,9 +617,7 @@ func ParseDoxygenComment(comment string) *ast.DoxygenComment {
 		if i == len(lines)-1 && strings.HasSuffix(clean, "*/") {
 			clean = strings.TrimSuffix(clean, "*/")
 		}
-		if strings.HasPrefix(clean, "*") {
-			clean = strings.TrimPrefix(clean, "*")
-		}
+		clean = strings.TrimPrefix(clean, "*")
 
 		clean = strings.TrimSpace(clean)
 		if clean != "" {

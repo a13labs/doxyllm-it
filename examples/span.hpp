@@ -48,6 +48,11 @@ http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/n4820.pdf
 #  define TCB_SPAN_HAVE_CPP14
 #endif
 
+/**
+ * @brief Namespace containing all classes and functions related to the TCB Span.
+ *
+ * This namespace provides the necessary components for working with TCB Spans, including classes for representing the span, its metadata, and functions for creating and manipulating spans.
+ */
 namespace TCB_SPAN_NAMESPACE_NAME
 {
 
@@ -62,6 +67,11 @@ namespace TCB_SPAN_NAMESPACE_NAME
 #endif
 
 #if defined(TCB_SPAN_THROW_ON_CONTRACT_VIOLATION)
+/**
+ * @brief Exception thrown when a contract violation occurs.
+ *
+ * This exception inherits from `std::logic_error` and provides a specific error message indicating a contract violation.
+ */
   struct contract_violation_error : std::logic_error
   {
     explicit contract_violation_error(const char* msg)
@@ -136,6 +146,11 @@ namespace TCB_SPAN_NAMESPACE_NAME
 #endif
 
 #ifdef TCB_SPAN_HAVE_STD_BYTE
+/**
+ * @brief An alias for the `std::byte` type.
+ *
+ * The `byte` alias provides a convenient way to refer to the `std::byte` type, which is a standard C++ type that represents a single byte.
+ */
   using byte = std::byte;
 #else
   using byte = unsigned char;
@@ -150,8 +165,16 @@ namespace TCB_SPAN_NAMESPACE_NAME
   TCB_SPAN_INLINE_VAR constexpr std::size_t dynamic_extent = SIZE_MAX;
 
   template <typename ElementType, std::size_t Extent = dynamic_extent>
+/**
+ * @brief Represents a contiguous subrange of elements in an array.
+ *
+ * A span object provides read-only access to a contiguous subrange of elements in an array. It can be used to pass around subranges of data efficiently and safely.
+ */
   class span;
 
+/**
+ * @brief Namespace containing internal implementation details.
+ */
   namespace detail
   {
 

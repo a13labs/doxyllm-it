@@ -52,14 +52,6 @@ func init() {
 }
 
 func outputJSON(tree *ast.ScopeTree, showAll bool) error {
-	var entities []*ast.Entity
-
-	if showAll {
-		entities = tree.Root.GetAllEntities()
-	} else {
-		entities = tree.GetDocumentableEntities()
-	}
-
 	// Create a simplified structure for JSON output
 	type JSONEntity struct {
 		Type        string       `json:"type"`
@@ -102,8 +94,9 @@ func outputJSON(tree *ast.ScopeTree, showAll bool) error {
 		return je
 	}
 
+	// Convert only the direct children of root (no duplicates)
 	var jsonEntities []JSONEntity
-	for _, entity := range entities {
+	for _, entity := range tree.Root.Children {
 		if entity.Type != ast.EntityUnknown {
 			jsonEntities = append(jsonEntities, convertEntity(entity))
 		}
@@ -123,18 +116,11 @@ func outputHuman(tree *ast.ScopeTree, showAll bool) error {
 	fmt.Printf("Parsed file: %s\n", tree.Filename)
 	fmt.Printf("=====================================\n\n")
 
-	var entities []*ast.Entity
-	if showAll {
-		entities = tree.Root.GetAllEntities()
-	} else {
-		entities = tree.GetDocumentableEntities()
-	}
-
-	for _, entity := range entities {
+	// Print the tree hierarchically starting from root children
+	for _, entity := range tree.Root.Children {
 		if entity.Type == ast.EntityUnknown {
 			continue
 		}
-
 		printEntity(entity, 0)
 		fmt.Println()
 	}
@@ -142,6 +128,17 @@ func outputHuman(tree *ast.ScopeTree, showAll bool) error {
 	// Summary
 	fmt.Printf("Summary:\n")
 	fmt.Printf("--------\n")
+
+	// Get all entities for counting, but from root traversal to avoid duplicates
+	allEntities := tree.Root.GetAllEntities()
+	// Filter out the root entity itself
+	var entities []*ast.Entity
+	for _, entity := range allEntities {
+		if entity.Type != ast.EntityUnknown {
+			entities = append(entities, entity)
+		}
+	}
+
 	fmt.Printf("Total entities: %d\n", len(entities))
 
 	// Count by type

@@ -1,0 +1,9 @@
+# Global context for testing
+global: |
+  This is a test project for validating YAML context support.
+
+# File-specific contexts
+files:
+  test_specific.hpp: |
+    This file tests file-specific context loading.
+    It should include enhanced context about test utilities.

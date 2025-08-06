@@ -16,6 +16,7 @@ import (
 	"doxyllm-it/pkg/parser"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 )
 
 // OllamaRequest represents the request structure for Ollama API
@@ -42,6 +43,48 @@ type OllamaConfig struct {
 	Timeout     time.Duration
 }
 
+// DoxyllmConfig represents the structure of a .doxyllm configuration file
+type DoxyllmConfig struct {
+	Global string            `yaml:"global,omitempty"`
+	Files  map[string]string `yaml:"files,omitempty"`
+}
+
+// readDoxyllmContext reads a .doxyllm file from the same directory as the file being processed
+// Returns the context content (global + file-specific), or empty string if no file is found
+func readDoxyllmContext(filePath string) string {
+	dir := filepath.Dir(filePath)
+	doxyllmPath := filepath.Join(dir, ".doxyllm")
+
+	content, err := os.ReadFile(doxyllmPath)
+	if err != nil {
+		// File doesn't exist or can't be read, return empty string
+		return ""
+	}
+
+	// Try to parse as YAML first
+	var config DoxyllmConfig
+	if err := yaml.Unmarshal(content, &config); err != nil {
+		// If YAML parsing fails, treat as plain text (backward compatibility)
+		return strings.TrimSpace(string(content))
+	}
+
+	// Build context from YAML structure
+	var contextParts []string
+
+	// Add global context if present
+	if config.Global != "" {
+		contextParts = append(contextParts, config.Global)
+	}
+
+	// Add file-specific context if present
+	fileName := filepath.Base(filePath)
+	if fileContext, exists := config.Files[fileName]; exists && fileContext != "" {
+		contextParts = append(contextParts, fmt.Sprintf("SPECIFIC TO %s:\n%s", fileName, fileContext))
+	}
+
+	return strings.Join(contextParts, "\n\n")
+}
+
 const promptTemplate = `You are a C++ documentation expert. Generate a comprehensive Doxygen comment for ONLY the specific entity requested.
 
 CRITICAL INSTRUCTIONS:
@@ -53,6 +96,8 @@ CRITICAL INSTRUCTIONS:
 - For functions: Document parameters, return value, and behavior
 - Generate ONLY the Doxygen comment block (starting with /** and ending with */)
 - Do not include any code, explanations, or markdown formatting
+
+%s
 
 Context for understanding:
 ` + "```cpp\n%s\n```" + `
@@ -313,7 +358,7 @@ func processFileWithOllama(filepath string, config *OllamaConfig) int {
 
 		// Generate comment using Ollama
 		fmt.Printf("    🤖 Generating comment with %s...\n", config.Model)
-		comment, err := generateComment(context, entityPath, config)
+		comment, err := generateComment(context, entityPath, filepath, config)
 		if err != nil {
 			fmt.Printf("    ❌ Failed to generate comment: %v\n", err)
 			continue
@@ -350,14 +395,31 @@ func getUndocumentedEntities(filepath string) ([]string, error) {
 	lines := strings.Split(string(content), "\n")
 
 	var undocumented []string
+	documentedEntities := make(map[string]bool)
+
 	var traverse func(*ast.Entity)
 	traverse = func(entity *ast.Entity) {
+		// Skip template parameters and single-letter entities
+		if shouldSkipEntity(entity) {
+			return
+		}
+
 		// Check if entity has a comment or if there's a comment immediately before it
 		hasComment := entity.Comment != nil || hasCommentBefore(lines, entity.SourceRange.Start.Line)
 
-		if !hasComment {
+		if !hasComment && !documentedEntities[entity.FullName] {
+			// For constructors, check if parent class is already documented or will be documented
+			if entity.Type == ast.EntityConstructor {
+				parentName := getParentEntityName(entity.FullName)
+				if documentedEntities[parentName] {
+					return // Skip constructor if parent class is documented
+				}
+			}
+
 			undocumented = append(undocumented, entity.FullName)
+			documentedEntities[entity.FullName] = true
 		}
+
 		for _, child := range entity.Children {
 			traverse(child)
 		}
@@ -404,6 +466,69 @@ func hasCommentBefore(lines []string, entityLine int) bool {
 	}
 
 	return false
+}
+
+// shouldSkipEntity determines if an entity should be skipped during documentation
+func shouldSkipEntity(entity *ast.Entity) bool {
+	// Skip single-letter entities (likely template parameters)
+	if len(entity.Name) == 1 && entity.Name >= "A" && entity.Name <= "Z" {
+		return true
+	}
+	if len(entity.Name) == 1 && entity.Name >= "a" && entity.Name <= "z" {
+		return true
+	}
+
+	// Skip common template parameter names
+	commonTemplateParams := map[string]bool{
+		"T": true, "U": true, "V": true, "E": true, "N": true, "S": true,
+		"Container": true, "ElementType": true, "OtherElementType": true,
+		"Count": true, "Offset": true, "Extent": true, "OtherExtent": true,
+	}
+
+	if commonTemplateParams[entity.Name] {
+		return true
+	}
+
+	// Skip very short names that are likely template params
+	if len(entity.Name) <= 2 && strings.ToUpper(entity.Name) == entity.Name {
+		return true
+	}
+
+	// Skip standard library namespaces and common system entities
+	systemEntities := map[string]bool{
+		"std":       true,
+		"__gnu_cxx": true,
+		"__detail":  true,
+	}
+
+	if systemEntities[entity.Name] {
+		return true
+	}
+
+	// Skip type aliases that are clearly template-related or system-level
+	if entity.Type == ast.EntityTypedef || entity.Type == ast.EntityUsing || entity.Type == ast.EntityVariable {
+		// Skip common type aliases like value_type, size_type, etc. within templates
+		typeAliases := map[string]bool{
+			"value_type": true, "size_type": true, "difference_type": true,
+			"pointer": true, "const_pointer": true, "reference": true, "const_reference": true,
+			"iterator": true, "reverse_iterator": true, "element_type": true,
+		}
+
+		if typeAliases[entity.Name] {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getParentEntityName extracts the parent entity name from a full entity path
+func getParentEntityName(fullName string) string {
+	parts := strings.Split(fullName, "::")
+	if len(parts) <= 1 {
+		return ""
+	}
+	return strings.Join(parts[:len(parts)-1], "::")
 }
 
 func extractEntityContext(filepath, entityPath string) (string, error) {
@@ -534,10 +659,18 @@ func findEntityByPath(scopeTree *ast.ScopeTree, fullName string) *ast.Entity {
 	return find(scopeTree.Root)
 }
 
-func generateComment(context, entityName string, config *OllamaConfig) (string, error) {
+func generateComment(context, entityName, filePath string, config *OllamaConfig) (string, error) {
 	// Get entity type for better prompt context
 	entityType := getEntityTypeFromName(entityName)
-	prompt := fmt.Sprintf(promptTemplate, entityName, context, entityName, entityType)
+
+	// Read additional context from .doxyllm file if it exists
+	additionalContext := readDoxyllmContext(filePath)
+	var contextSection string
+	if additionalContext != "" {
+		contextSection = fmt.Sprintf("ADDITIONAL PROJECT CONTEXT:\n%s\n", additionalContext)
+	}
+
+	prompt := fmt.Sprintf(promptTemplate, entityName, contextSection, context, entityName, entityType)
 
 	reqBody := OllamaRequest{
 		Model:  config.Model,

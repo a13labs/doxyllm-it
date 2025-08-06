@@ -35,14 +35,18 @@ DoxLLM-IT is a CLI tool written in Go that parses C++ header files and creates a
    - `format` - Reconstruct and format code
    - `update` - Update files with LLM-generated comments
    - `batch-update` - Batch update multiple entities
+   - `ollama` - Built-in Ollama LLM integration with context-aware documentation
 
 ### Key Design Principles
 
 - **Non-destructive parsing**: Never lose original code structure
-- **Scope-aware**: Understand C++ scope rules and hierarchies  
-- **LLM-optimized**: Provide targeted context without overwhelming
+- **Scope-aware**: Understand C++ scope rules and hierarchies with access level tracking
+- **LLM-optimized**: Provide targeted context without overwhelming, enhanced with project-specific context
 - **Format-preserving**: Maintain code style and formatting
+- **Context-aware**: Support for `.doxyllm` configuration files with global and file-specific contexts
+- **Modern C++ support**: Enhanced parser for constexpr macros, template functions, and C++20 features
 - **Modular design**: Separate parsing, AST, and formatting concerns
+- **Comprehensive testing**: Unit tests for all parser components and regex patterns
 
 ## Code Patterns and Conventions
 
@@ -96,7 +100,29 @@ func (tree *ScopeTree) FindEntity(path string) *Entity
 func (f *Formatter) ExtractEntityContext(entity *Entity, includeParent, includeSiblings bool) string
 ```
 
-3. **Safe Name Conversion** for file paths:
+3. **Context Configuration**:
+```go
+type DoxyllmConfig struct {
+    Global string            `yaml:"global,omitempty"`
+    Files  map[string]string `yaml:"files,omitempty"`
+}
+func readDoxyllmContext(filePath string) string
+```
+
+4. **Enhanced Parser Patterns**:
+```go
+// Access level tracking with stack
+type accessStackItem struct {
+    level AccessLevel
+    line  int
+}
+var accessStack []accessStackItem
+
+// Enhanced regex for modern C++
+functionRegex = regexp.MustCompile(`^\s*(?:TCB_SPAN_CONSTEXPR11|TCB_SPAN_NODISCARD|TCB_SPAN_ARRAY_CONSTEXPR|\w+\s+)*(\w+)\s*\([^)]*\)\s*(?:const\s*)?(?:noexcept\s*)?(?:=\s*(?:default|delete)\s*)?;?\s*$`)
+```
+
+5. **Safe Name Conversion** for file paths:
 ```bash
 safe_name=$(echo "$entity" | tr ':' '_' | tr ' ' '_')
 ```
@@ -121,7 +147,24 @@ safe_name=$(echo "$entity" | tr ':' '_' | tr ' ' '_')
 - Always preserve `OriginalText` and formatting
 - Update both `SourceRange` and `HeaderRange`
 - Handle scope stack properly for nested entities
+- Update access level tracking with `accessStack`
+- Test regex patterns with comprehensive unit tests
+- Handle modern C++ constructs (constexpr macros, templates)
 - Test with complex C++ constructs
+
+### When Adding Context Features
+- Update `DoxyllmConfig` struct if needed
+- Maintain backward compatibility with plain text files
+- Test YAML parsing and fallback mechanisms
+- Ensure global + file-specific context combination works
+- Update prompt templates to include new context sections
+
+### Enhanced Parser Testing
+- Add unit tests for new regex patterns in `regex_test.go`
+- Test access level tracking scenarios
+- Validate modern C++ construct detection
+- Test scope management with complex nesting
+- Ensure entity deduplication works properly
 
 ### Error Handling
 - Use `fmt.Errorf()` for error wrapping
@@ -133,18 +176,50 @@ safe_name=$(echo "$entity" | tr ':' '_' | tr ' ' '_')
 
 ### Test Files Structure
 - `examples/example.hpp` - Comprehensive test case
-- `test_parser.go` - Basic functionality testing
+- `examples/span.hpp` - Real-world complex C++ with templates and macros
+- `examples/.doxyllm` - YAML context configuration for testing
+- `pkg/parser/parser_test.go` - Core parser functionality testing
+- `pkg/parser/regex_test.go` - Regex pattern validation tests
 - `workflow.sh` - Basic workflow demonstration
 - `llm_workflow.sh` - Complete LLM integration example
 
 ### Test Scenarios
-1. **Entity Recognition**: All C++ construct types
-2. **Scope Handling**: Nested namespaces and classes
-3. **Context Extraction**: Parent/sibling relationships
+1. **Entity Recognition**: All C++ construct types including modern features
+2. **Scope Handling**: Nested namespaces, classes, and access level tracking
+3. **Context Extraction**: Parent/sibling relationships with project context
 4. **Code Reconstruction**: Lossless formatting preservation
 5. **Update Operations**: Comment insertion and formatting
+6. **Context Configuration**: YAML parsing, fallback, and context combination
+7. **Regex Patterns**: Modern C++ constructs like constexpr macros
+8. **Access Level Tracking**: Public/private/protected section management
 
 ## LLM Integration Patterns
+
+### Ollama Integration (Built-in)
+```bash
+# Basic usage with context
+./doxyllm-it ollama --model codegemma:7b --backup header.hpp
+
+# Advanced configuration
+./doxyllm-it ollama --url http://remote:11434 --model deepseek-coder:6.7b \
+  --temperature 0.1 --context 8192 --max-entities 5 --dry-run src/
+
+# Process directories with context files
+./doxyllm-it ollama --in-place --format --exclude build,vendor .
+```
+
+### Context Configuration
+```yaml
+# .doxyllm file structure
+global: |
+  Project-wide context and design principles...
+  
+files:
+  header.hpp: |
+    File-specific implementation details...
+  platform.hpp: |
+    Platform-specific utilities and macros...
+```
 
 ### Context Extraction
 ```bash
@@ -180,10 +255,22 @@ safe_name=$(echo "$entity" | tr ':' '_' | tr ' ' '_')
 ## Common Issues and Solutions
 
 ### Parser Limitations
-- **Template parsing**: Basic recognition only, no complex parameter parsing
-- **Preprocessor directives**: Limited handling of #define, #ifdef
+- **Template parsing**: Basic recognition with improved support for constexpr templates
+- **Preprocessor directives**: Limited handling of #define, #ifdef but improved macro detection
 - **Complex inheritance**: Simple inheritance only
-- **Modern C++ features**: May need updates for newest C++20/23 features
+- **Modern C++ features**: Enhanced support for C++20 features, may need updates for newest C++23 features
+
+### Enhanced Parser Features
+- **Constexpr Macro Support**: Detects `TCB_SPAN_CONSTEXPR11`, `TCB_SPAN_NODISCARD`, `TCB_SPAN_ARRAY_CONSTEXPR`
+- **Access Level Tracking**: Stack-based tracking of public/private/protected sections
+- **Template Function Detection**: Improved recognition of template function declarations
+- **Entity Deduplication**: Prevents duplicate detection with enhanced filtering logic
+
+### Context System
+- **YAML Configuration**: Structured context with global and file-specific sections
+- **Backward Compatibility**: Plain text files automatically detected and supported
+- **Context Combination**: Smart merging of global and file-specific contexts
+- **Fallback Handling**: Graceful degradation when context files are missing or malformed
 
 ### Scope Resolution
 - Use `::` for global scope
@@ -211,23 +298,46 @@ doxyllm-it/
 
 - `github.com/spf13/cobra` - CLI framework
 - `github.com/spf13/viper` - Configuration management
+- `gopkg.in/yaml.v2` - YAML parsing for context configuration
 - Standard Go libraries for parsing and formatting
 
 ## Future Enhancement Areas
 
-1. **Enhanced Template Support**: Better template parameter parsing
-2. **Include Analysis**: Parse #include dependencies
-3. **C++20 Features**: Concepts, modules, coroutines
-4. **IDE Integration**: VS Code extension
-5. **Web Interface**: Browser-based tool for teams
-6. **Comment Quality**: AI-powered comment quality scoring
+1. **Enhanced Template Support**: Better template parameter parsing and constraint detection
+2. **Include Analysis**: Parse #include dependencies and cross-file relationships
+3. **C++20/23 Features**: Concepts, modules, coroutines, ranges
+4. **IDE Integration**: VS Code extension with context-aware documentation
+5. **Web Interface**: Browser-based tool for teams with collaborative context editing
+6. **Comment Quality**: AI-powered comment quality scoring and suggestions
+7. **Context Analytics**: Usage statistics and optimization suggestions for context files
+8. **Multi-language Support**: Extend parser for other languages (C, Rust, etc.)
+9. **Advanced Context**: Support for inheritance hierarchies and cross-file dependencies in context
+10. **Performance Optimization**: Parallel processing for large codebases
 
 ## Integration Examples
+
+### Ollama Integration (Recommended)
+```bash
+# Create project context
+cat > .doxyllm << 'EOF'
+global: |
+  C++20 span implementation with backward compatibility.
+  Design: zero-overhead, type safety, cross-platform support.
+files:
+  span.hpp: |
+    Template metaprogramming with SFINAE constraints.
+    Extensive use of feature detection macros.
+EOF
+
+# Auto-generate documentation
+./doxyllm-it ollama --model codegemma:7b --backup --in-place span.hpp
+```
 
 ### Python API Wrapper
 ```python
 import subprocess
 import json
+import yaml
 
 class DoxLLM:
     def parse(self, header_file):
@@ -237,6 +347,17 @@ class DoxLLM:
     def extract_context(self, header_file, entity_path):
         result = subprocess.run(['./doxyllm-it', 'extract', '-p', '-s', header_file, entity_path])
         return result.stdout
+    
+    def generate_docs(self, header_file, model='codegemma:7b'):
+        subprocess.run(['./doxyllm-it', 'ollama', '--model', model, '--backup', header_file])
+    
+    def create_context(self, directory, global_context, file_contexts=None):
+        config = {'global': global_context}
+        if file_contexts:
+            config['files'] = file_contexts
+        
+        with open(f"{directory}/.doxyllm", 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
 ```
 
-This tool bridges C++ code analysis with modern LLM-powered documentation generation, maintaining code integrity while enabling automated documentation workflows.
+This tool bridges C++ code analysis with modern LLM-powered documentation generation, maintaining code integrity while enabling automated documentation workflows. The enhanced context system and Ollama integration provide production-ready documentation automation for complex C++ projects.
