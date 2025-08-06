@@ -1,0 +1,11 @@
+#pragma once
+
+namespace Test {
+    class MyClass {
+    public:
+        void myFunction();
+        int myVariable;
+    };
+    
+    void globalFunction();
+}
