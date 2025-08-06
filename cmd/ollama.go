@@ -47,25 +47,35 @@ type OllamaConfig struct {
 type DoxyllmConfig struct {
 	Global string            `yaml:"global,omitempty"`
 	Files  map[string]string `yaml:"files,omitempty"`
+	Ignore []string          `yaml:"ignore,omitempty"`
 }
 
 // readDoxyllmContext reads a .doxyllm file from the same directory as the file being processed
 // Returns the context content (global + file-specific), or empty string if no file is found
-func readDoxyllmContext(filePath string) string {
+// Also returns a boolean indicating if the file should be ignored
+func readDoxyllmContext(filePath string) (string, bool) {
 	dir := filepath.Dir(filePath)
 	doxyllmPath := filepath.Join(dir, ".doxyllm")
 
 	content, err := os.ReadFile(doxyllmPath)
 	if err != nil {
 		// File doesn't exist or can't be read, return empty string
-		return ""
+		return "", false
 	}
 
 	// Try to parse as YAML first
 	var config DoxyllmConfig
 	if err := yaml.Unmarshal(content, &config); err != nil {
 		// If YAML parsing fails, treat as plain text (backward compatibility)
-		return strings.TrimSpace(string(content))
+		return strings.TrimSpace(string(content)), false
+	}
+
+	// Check if file should be ignored
+	fileName := filepath.Base(filePath)
+	for _, ignorePattern := range config.Ignore {
+		if matched, _ := filepath.Match(ignorePattern, fileName); matched {
+			return "", true
+		}
 	}
 
 	// Build context from YAML structure
@@ -77,12 +87,11 @@ func readDoxyllmContext(filePath string) string {
 	}
 
 	// Add file-specific context if present
-	fileName := filepath.Base(filePath)
 	if fileContext, exists := config.Files[fileName]; exists && fileContext != "" {
 		contextParts = append(contextParts, fmt.Sprintf("SPECIFIC TO %s:\n%s", fileName, fileContext))
 	}
 
-	return strings.Join(contextParts, "\n\n")
+	return strings.Join(contextParts, "\n\n"), false
 }
 
 const promptTemplate = `You are a C++ documentation expert. Generate a comprehensive Doxygen comment for ONLY the specific entity requested.
@@ -315,6 +324,13 @@ func isCppHeader(filename string) bool {
 func processFileWithOllama(filepath string, config *OllamaConfig) int {
 	fmt.Printf("\n📁 Processing: %s\n", filepath)
 
+	// Check if file should be ignored
+	_, shouldIgnore := readDoxyllmContext(filepath)
+	if shouldIgnore {
+		fmt.Println("  ⏭️  File ignored per .doxyllm configuration")
+		return 0
+	}
+
 	// Parse file to get undocumented entities
 	undocumented, err := getUndocumentedEntities(filepath)
 	if err != nil {
@@ -436,30 +452,65 @@ func hasCommentBefore(lines []string, entityLine int) bool {
 		return false
 	}
 
-	// Look back from the entity line to find the last non-empty line
-	for i := entityLine - 2; i >= 0; i-- {
+	// Look back from the entity line, allowing for template declarations and empty lines
+	foundCommentEnd := -1
+	maxLookback := 10 // Don't look back more than 10 lines to avoid false positives
+
+	// First pass: look for the end of a comment block, skipping template declarations and attributes
+	for i := entityLine - 2; i >= 0 && i >= entityLine-maxLookback; i-- {
 		line := strings.TrimSpace(lines[i])
 		if line == "" {
 			continue // Skip empty lines
 		}
 
+		// Skip template declarations, attributes, and inline specifiers
+		if strings.HasPrefix(line, "template") ||
+			strings.HasPrefix(line, "inline") ||
+			strings.HasPrefix(line, "static") ||
+			strings.HasPrefix(line, "const ") ||
+			strings.HasPrefix(line, "constexpr") ||
+			strings.HasPrefix(line, "[[") { // C++ attributes
+			continue
+		}
+
 		// Check if this line ends a Doxygen comment
-		if strings.HasSuffix(line, "*/") {
-			// Look backwards to find the start of the comment block
-			for j := i; j >= 0; j-- {
-				commentLine := strings.TrimSpace(lines[j])
-				if strings.HasPrefix(commentLine, "/**") {
-					return true
-				}
-				if !strings.HasPrefix(commentLine, "*") && !strings.HasPrefix(commentLine, "*/") {
-					break
-				}
+		if strings.HasSuffix(line, "*/") && !strings.HasSuffix(line, "**/") {
+			// Make sure it's not a single-line comment like /* ... */
+			if !strings.HasPrefix(line, "/*") || strings.HasPrefix(line, "/**") {
+				foundCommentEnd = i
+				break
 			}
 		}
 
-		// If we hit a non-comment line, stop looking
-		if !strings.HasPrefix(line, "//") && !strings.HasPrefix(line, "/*") && !strings.HasPrefix(line, "*") {
+		// Check for single-line Doxygen comments
+		if strings.HasPrefix(line, "///") || strings.HasPrefix(line, "//!") {
+			return true
+		}
+
+		// If we hit a non-comment line that's not a template/attribute, stop looking
+		if !strings.HasPrefix(line, "//") && !strings.HasPrefix(line, "/*") &&
+			!strings.HasPrefix(line, "*") && !strings.HasSuffix(line, "*/") {
 			break
+		}
+	}
+
+	// If we found a comment end, look backwards to find the start
+	if foundCommentEnd >= 0 {
+		for j := foundCommentEnd; j >= 0; j-- {
+			commentLine := strings.TrimSpace(lines[j])
+			if commentLine == "" {
+				continue
+			}
+
+			// Found the start of a Doxygen comment
+			if strings.HasPrefix(commentLine, "/**") {
+				return true
+			}
+
+			// If we hit something that's not part of the comment, break
+			if !strings.HasPrefix(commentLine, "*") && !strings.HasSuffix(commentLine, "*/") {
+				break
+			}
 		}
 	}
 
@@ -473,6 +524,101 @@ func shouldSkipEntity(entity *ast.Entity) bool {
 		return true
 	}
 	if len(entity.Name) == 1 && entity.Name >= "a" && entity.Name <= "z" {
+		return true
+	}
+
+	// Skip local variables and temporary variables (usually inside function bodies)
+	if entity.Type == ast.EntityVariable {
+		// Skip common local variable names
+		localVarNames := map[string]bool{
+			"msg": true, "result": true, "temp": true, "i": true, "j": true, "k": true,
+			"it": true, "iter": true, "val": true, "value": true, "ret": true,
+			"data": true, "ptr": true, "len": true, "size": true, "count": true,
+			"txt": true, "str": true, "buffer": true, "instance": true,
+			"binary": true, "in": true, "out": true, "trunc": true, "npos": true,
+			"end_index": true, "start_index": true, "srcIndex": true, "timepoint": true,
+		}
+
+		if localVarNames[entity.Name] {
+			return true
+		}
+
+		// Skip variables that are clearly local (short names, common patterns)
+		if len(entity.Name) <= 3 && strings.ToLower(entity.Name) == entity.Name {
+			return true
+		}
+
+		// Skip static const variables that are just aliases
+		if strings.Contains(entity.Signature, "static const") ||
+			strings.Contains(entity.Signature, "const ") {
+			return true
+		}
+
+		// Skip function parameters (detected by signature patterns)
+		// Parameters often have default values and end with ); or ,
+		if strings.Contains(entity.Signature, " = ") &&
+			(strings.HasSuffix(entity.Signature, ");") ||
+				strings.HasSuffix(entity.Signature, ",") ||
+				strings.Contains(entity.Signature, entity.Name+" = ")) {
+			return true
+		}
+
+		// Skip variable usages that are not declarations (e.g., "result << delimiter;")
+		if strings.Contains(entity.Signature, "<<") ||
+			strings.Contains(entity.Signature, ">>") ||
+			strings.Contains(entity.Signature, "->") ||
+			strings.Contains(entity.Signature, ".") {
+			return true
+		}
+	}
+
+	// Skip function calls that are not declarations
+	if entity.Type == ast.EntityFunction {
+		// Skip macro calls (all uppercase)
+		if strings.ToUpper(entity.Name) == entity.Name && strings.Contains(entity.Name, "_") {
+			return true
+		}
+
+		// Skip variable declarations that look like function calls
+		// These often have type names at the beginning of the signature
+		if strings.Contains(entity.Signature, "std::string "+entity.Name) ||
+			strings.Contains(entity.Signature, "auto "+entity.Name) ||
+			strings.Contains(entity.Signature, "const "+entity.Name) ||
+			strings.Contains(entity.Signature, "int "+entity.Name) ||
+			strings.Contains(entity.Signature, "float "+entity.Name) ||
+			strings.Contains(entity.Signature, "double "+entity.Name) ||
+			strings.Contains(entity.Signature, "bool "+entity.Name) {
+			return true
+		}
+
+		// If it's a function call (not a declaration), skip it
+		// Function calls typically don't have parameter lists in their signatures or have simple patterns
+		if !strings.Contains(entity.Signature, "(") ||
+			strings.HasPrefix(entity.Signature, entity.Name+"(") {
+			// This looks like a function call, not a declaration
+			return true
+		}
+
+		// Skip common assertion macros
+		assertMacros := map[string]bool{
+			"MGL_CORE_ASSERT": true, "assert": true, "ASSERT": true,
+			"CHECK": true, "VERIFY": true, "EXPECT": true,
+		}
+
+		if assertMacros[entity.Name] {
+			return true
+		}
+
+		// Skip very short function names that are likely local variables
+		if len(entity.Name) <= 3 && strings.ToLower(entity.Name) == entity.Name {
+			return true
+		}
+	}
+
+	// Skip macros (all uppercase names that are likely macros)
+	if len(entity.Name) > 1 && strings.ToUpper(entity.Name) == entity.Name &&
+		(strings.Contains(entity.Name, "_") || entity.Type == ast.EntityFunction) {
+		// This is likely a macro
 		return true
 	}
 
@@ -662,7 +808,7 @@ func generateComment(context, entityName, filePath string, config *OllamaConfig)
 	entityType := getEntityTypeFromName(entityName)
 
 	// Read additional context from .doxyllm file if it exists
-	additionalContext := readDoxyllmContext(filePath)
+	additionalContext, _ := readDoxyllmContext(filePath)
 	var contextSection string
 	if additionalContext != "" {
 		contextSection = fmt.Sprintf("ADDITIONAL PROJECT CONTEXT:\n%s\n", additionalContext)
