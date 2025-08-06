@@ -146,7 +146,6 @@ var (
 	timeout      int
 	maxEntities  int
 	dryRun       bool
-	inPlace      bool
 	backup       bool
 	formatOutput bool
 	excludeDirs  []string
@@ -166,7 +165,6 @@ func init() {
 	// Processing flags
 	ollamaCmd.Flags().IntVar(&maxEntities, "max-entities", 0, "Maximum entities to process per file (0 = unlimited)")
 	ollamaCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be processed without making changes")
-	ollamaCmd.Flags().BoolVarP(&inPlace, "in-place", "i", false, "Update files in place")
 	ollamaCmd.Flags().BoolVarP(&backup, "backup", "b", false, "Create backup files before updating")
 	ollamaCmd.Flags().BoolVarP(&formatOutput, "format", "f", false, "Format updated files with clang-format")
 	ollamaCmd.Flags().StringSliceVar(&excludeDirs, "exclude", []string{"build", "vendor", "third_party", ".git", "node_modules"}, "Directories to exclude")
@@ -859,10 +857,5 @@ func updateEntityComment(filepath, entityPath, comment string) error {
 	}
 
 	// Write updated content
-	if inPlace {
-		return os.WriteFile(filepath, []byte(updatedContent), 0644)
-	} else {
-		fmt.Println(updatedContent)
-		return nil
-	}
+	return os.WriteFile(filepath, []byte(updatedContent), 0644)
 }
