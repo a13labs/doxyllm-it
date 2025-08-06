@@ -26,16 +26,56 @@ DoxLLM-IT is a CLI tool that parses C++ header files and creates a tree structur
 
 ## Installation
 
-### Prerequisites
+### From Pre-built Binaries (Recommended)
+
+Download the latest release for your platform from the [GitHub releases page](../../releases):
+
+**Linux:**
+```bash
+# Download and install (replace URL with latest release)
+curl -L -o doxyllm-it https://github.com/username/doxyllm-it/releases/latest/download/doxyllm-it-linux-amd64
+chmod +x doxyllm-it
+sudo mv doxyllm-it /usr/local/bin/
+```
+
+**macOS:**
+```bash
+# Intel Macs
+curl -L -o doxyllm-it https://github.com/username/doxyllm-it/releases/latest/download/doxyllm-it-darwin-amd64
+# Apple Silicon Macs  
+curl -L -o doxyllm-it https://github.com/username/doxyllm-it/releases/latest/download/doxyllm-it-darwin-arm64
+
+chmod +x doxyllm-it
+sudo mv doxyllm-it /usr/local/bin/
+```
+
+**Windows:**
+```powershell
+# Download doxyllm-it-windows-amd64.exe from releases page
+# Add to PATH or use directly
+```
+
+### From Source
+
+#### Prerequisites
 
 - Go 1.21 or later
 - clang-format (optional, for code formatting)
 
-### Build
+#### Build
 
 ```bash
+git clone https://github.com/username/doxyllm-it.git
+cd doxyllm-it
 go mod tidy
 go build -o doxyllm-it .
+```
+
+### Docker
+
+```bash
+docker pull ghcr.io/username/doxyllm-it:latest
+docker run --rm -v $(pwd):/workspace ghcr.io/username/doxyllm-it:latest parse /workspace/header.hpp
 ```
 
 ## Usage

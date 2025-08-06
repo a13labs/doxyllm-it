@@ -1,0 +1,195 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on semantic version tags like v1.0.0, v2.1.3, etc.
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: linux-amd64
+          - goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            suffix: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            suffix: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            suffix: windows-amd64.exe
+          - goos: windows
+            goarch: arm64
+            suffix: windows-arm64.exe
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Get dependencies
+      run: go mod download
+
+    - name: Run tests
+      run: go test ./...
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        mkdir -p dist
+        COMMIT=$(git rev-parse --short HEAD)
+        DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        go build -ldflags="-s -w -X main.version=${{ github.ref_name }} -X main.commit=$COMMIT -X main.date=$DATE" -o dist/doxyllm-it-${{ matrix.suffix }} .
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: doxyllm-it-${{ matrix.suffix }}
+        path: dist/doxyllm-it-${{ matrix.suffix }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: dist
+
+    - name: Create release notes
+      run: |
+        echo "# DoxLLM-IT ${{ github.ref_name }}" > release_notes.md
+        echo "" >> release_notes.md
+        echo "## Features" >> release_notes.md
+        echo "- Enhanced C++ parser with modern construct support" >> release_notes.md
+        echo "- Built-in Ollama LLM integration" >> release_notes.md
+        echo "- Context-aware documentation with .doxyllm configuration files" >> release_notes.md
+        echo "- YAML configuration support with backward compatibility" >> release_notes.md
+        echo "- Comprehensive testing framework" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## Downloads" >> release_notes.md
+        echo "Choose the appropriate binary for your platform:" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Linux" >> release_notes.md
+        echo "- **AMD64**: \`doxyllm-it-linux-amd64\`" >> release_notes.md
+        echo "- **ARM64**: \`doxyllm-it-linux-arm64\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### macOS" >> release_notes.md
+        echo "- **Intel (AMD64)**: \`doxyllm-it-darwin-amd64\`" >> release_notes.md
+        echo "- **Apple Silicon (ARM64)**: \`doxyllm-it-darwin-arm64\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### Windows" >> release_notes.md
+        echo "- **AMD64**: \`doxyllm-it-windows-amd64.exe\`" >> release_notes.md
+        echo "- **ARM64**: \`doxyllm-it-windows-arm64.exe\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## Installation" >> release_notes.md
+        echo "\`\`\`bash" >> release_notes.md
+        echo "# Linux/macOS - make executable and move to PATH" >> release_notes.md
+        echo "chmod +x doxyllm-it-*" >> release_notes.md
+        echo "sudo mv doxyllm-it-* /usr/local/bin/doxyllm-it" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "# Windows - add to PATH or use directly" >> release_notes.md
+        echo "# Rename to doxyllm-it.exe for convenience" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## Quick Start" >> release_notes.md
+        echo "\`\`\`bash" >> release_notes.md
+        echo "# Parse a C++ header file" >> release_notes.md
+        echo "./doxyllm-it parse header.hpp" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "# Auto-generate documentation with Ollama" >> release_notes.md
+        echo "./doxyllm-it ollama --model codegemma:7b --backup header.hpp" >> release_notes.md
+        echo "\`\`\`" >> release_notes.md
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release_assets
+        find dist -name "doxyllm-it-*" -type f -exec cp {} release_assets/ \;
+        ls -la release_assets/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: "DoxLLM-IT ${{ github.ref_name }}"
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+        files: release_assets/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Optional: Create a Docker image
+  docker:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download Linux AMD64 artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: doxyllm-it-linux-amd64
+        path: .
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}
+        tags: |
+          type=ref,event=tag
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+
+    - name: Create Dockerfile
+      run: |
+        cat > Dockerfile << 'EOF'
+        FROM alpine:latest
+        RUN apk --no-cache add ca-certificates
+        WORKDIR /root/
+        COPY doxyllm-it-linux-amd64 /usr/local/bin/doxyllm-it
+        RUN chmod +x /usr/local/bin/doxyllm-it
+        ENTRYPOINT ["/usr/local/bin/doxyllm-it"]
+        EOF
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        platforms: linux/amd64

@@ -47,3 +47,8 @@ go.work
 output/
 doxyllm-it
 llm_workflow/
+
+# Release artifacts
+dist/
+release_assets/
+release_notes.md
