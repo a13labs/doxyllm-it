@@ -1,0 +1,39 @@
+# Enhanced .doxyllm configuration with group support
+global: |
+  This is a header-only implementation of C++20's std::span class, which provides a non-owning view over a contiguous sequence of elements.
+
+# File-specific contexts
+files:
+  span.hpp: |
+    Main span implementation file containing the core span template class.
+  platform.hpp: |
+    Platform detection and compatibility utilities.
+
+# Doxygen group configuration
+groups:
+  span_core:
+    name: "span_core"
+    title: "Core Span Implementation"
+    description: |
+      Core span functionality including the main span template class,
+      helper types, and essential operations for non-owning array views.
+    files:
+      - "span.hpp"
+      - "span_*.hpp"
+    generateDefgroup: true
+
+  span_utils:
+    name: "span_utils" 
+    title: "Span Utilities"
+    description: |
+      Utility functions and helper classes that support span operations,
+      including platform detection and compatibility layers.
+    files:
+      - "platform.hpp"
+      - "utils/*.hpp"
+    generateDefgroup: false
+
+# Files to ignore
+ignore:
+  - "test_*"
+  - "*_test.hpp"

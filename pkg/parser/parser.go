@@ -11,13 +11,14 @@ import (
 
 // Parser represents the C++ parser
 type Parser struct {
-	content     string
-	lines       []string
-	current     int
-	position    ast.Position
-	scopeStack  []*ast.Entity
-	tree        *ast.ScopeTree
-	accessStack []ast.AccessLevel // Track access levels for each scope
+	content        string
+	lines          []string
+	current        int
+	position       ast.Position
+	scopeStack     []*ast.Entity
+	tree           *ast.ScopeTree
+	accessStack    []ast.AccessLevel   // Track access levels for each scope
+	pendingComment *ast.DoxygenComment // Comment waiting to be associated with next entity
 }
 
 // New creates a new parser instance
@@ -42,8 +43,25 @@ func (p *Parser) Parse(filename, content string) (*ast.ScopeTree, error) {
 		line := p.lines[p.current]
 		trimmed := strings.TrimSpace(line)
 
-		// Skip empty lines and pure comments
-		if trimmed == "" || strings.HasPrefix(trimmed, "//") {
+		// Skip empty lines
+		if trimmed == "" {
+			p.nextLine()
+			continue
+		}
+
+		// Handle Doxygen comments
+		if strings.HasPrefix(trimmed, "/**") || strings.HasPrefix(trimmed, "///") || strings.HasPrefix(trimmed, "//!") {
+			comment, err := p.parseDoxygenComment()
+			if err != nil {
+				return nil, fmt.Errorf("error parsing doxygen comment at line %d: %w", p.current+1, err)
+			}
+			// Store comment to associate with next entity
+			p.pendingComment = comment
+			continue
+		}
+
+		// Skip other comments
+		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
 			p.nextLine()
 			continue
 		}
@@ -103,6 +121,62 @@ func (p *Parser) parseLine(line string) error {
 	}
 
 	return nil
+}
+
+// parseDoxygenComment parses a multi-line or single-line Doxygen comment
+func (p *Parser) parseDoxygenComment() (*ast.DoxygenComment, error) {
+	startLine := p.current
+	var commentLines []string
+
+	line := strings.TrimSpace(p.lines[p.current])
+
+	if strings.HasPrefix(line, "/**") {
+		// Multi-line comment starting with /**
+		commentLines = append(commentLines, p.lines[p.current])
+		p.nextLine()
+
+		// Continue until we find the closing */
+		for p.current < len(p.lines) {
+			line = p.lines[p.current]
+			commentLines = append(commentLines, line)
+
+			if strings.Contains(strings.TrimSpace(line), "*/") {
+				p.nextLine()
+				break
+			}
+			p.nextLine()
+		}
+	} else if strings.HasPrefix(line, "///") || strings.HasPrefix(line, "//!") {
+		// Single-line Doxygen comments - collect consecutive ones
+		for p.current < len(p.lines) {
+			line = strings.TrimSpace(p.lines[p.current])
+			if strings.HasPrefix(line, "///") || strings.HasPrefix(line, "//!") {
+				commentLines = append(commentLines, p.lines[p.current])
+				p.nextLine()
+			} else if line == "" {
+				// Allow empty lines within single-line comment blocks
+				commentLines = append(commentLines, p.lines[p.current])
+				p.nextLine()
+			} else {
+				break
+			}
+		}
+	}
+
+	if len(commentLines) == 0 {
+		return nil, nil
+	}
+
+	commentText := strings.Join(commentLines, "\n")
+	comment := ParseDoxygenComment(commentText)
+	if comment != nil {
+		comment.Range = ast.Range{
+			Start: ast.Position{Line: startLine + 1, Column: 1, Offset: 0},
+			End:   ast.Position{Line: p.current, Column: 1, Offset: 0},
+		}
+	}
+
+	return comment, nil
 }
 
 // Regular expressions for identifying C++ constructs
@@ -554,6 +628,12 @@ func (p *Parser) buildFullName(name string) string {
 
 // addEntity adds an entity to the current scope
 func (p *Parser) addEntity(entity *ast.Entity) {
+	// Associate pending comment with this entity
+	if p.pendingComment != nil {
+		entity.Comment = p.pendingComment
+		p.pendingComment = nil // Clear the pending comment
+	}
+
 	currentScope := p.getCurrentScope()
 	currentScope.AddChild(entity)
 	// Don't add nested entities to the flat tree list - they should only exist in the hierarchy
@@ -694,6 +774,20 @@ func setDoxygenTag(doc *ast.DoxygenComment, tag, content string) {
 		doc.Author = content
 	case "version":
 		doc.Version = content
+	// Group-related tags
+	case "defgroup":
+		doc.Defgroup = content
+	case "ingroup":
+		doc.Ingroup = append(doc.Ingroup, content)
+	case "addtogroup":
+		doc.Addtogroup = content
+	// Structural tags
+	case "file":
+		doc.File = content
+	case "namespace":
+		doc.Namespace = content
+	case "class":
+		doc.Class = content
 	default:
 		doc.CustomTags[tag] = content
 	}

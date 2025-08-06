@@ -1,16 +1,14 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"doxyllm-it/pkg/llm"
 	"doxyllm-it/pkg/parser"
 
 	"github.com/spf13/cobra"
@@ -70,23 +68,31 @@ func init() {
 func runInit(cmd *cobra.Command, args []string) {
 	targetDir := args[0]
 
-	// Create Ollama configuration
-	config := &OllamaConfig{
+	// Create LLM provider using factory
+	provider, err := llm.NewProvider(&llm.Config{
+		Provider:    "ollama",
 		URL:         initOllamaURL,
 		Model:       initOllamaModel,
 		Temperature: initTemperature,
 		TopP:        initTopP,
 		NumCtx:      initNumCtx,
 		Timeout:     time.Duration(initTimeout) * time.Second,
-	}
-
-	// Test Ollama connectivity
-	if !testOllamaConnection(config) {
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Failed to create Ollama provider: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("🤖 Connected to Ollama at: %s\n", config.URL)
-	fmt.Printf("📚 Using model: %s\n", config.Model)
+	// Test connectivity
+	ctx := context.Background()
+	if err := provider.TestConnection(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Cannot connect to Ollama: %v\n", err)
+		os.Exit(1)
+	}
+
+	modelInfo := provider.GetModelInfo()
+	fmt.Printf("🤖 Connected to %s\n", modelInfo.Provider)
+	fmt.Printf("📚 Using model: %s\n", modelInfo.Name)
 
 	// Check if .doxyllm already exists
 	doxyllmPath := filepath.Join(targetDir, ".doxyllm")
@@ -118,7 +124,7 @@ func runInit(cmd *cobra.Command, args []string) {
 		relPath, _ := filepath.Rel(targetDir, file)
 		fmt.Printf("  📄 (%d/%d) Analyzing: %s\n", i+1, len(files), relPath)
 
-		summary, err := generateFileSummary(file, config)
+		summary, err := generateFileSummary(file, provider)
 		if err != nil {
 			fmt.Printf("    ❌ Failed to generate summary: %v\n", err)
 			continue
@@ -136,7 +142,7 @@ func runInit(cmd *cobra.Command, args []string) {
 
 	// Generate global summary
 	fmt.Println("\n🌍 Generating global project summary...")
-	globalSummary, err := generateGlobalSummary(fileSummaries, config)
+	globalSummary, err := generateGlobalSummary(fileSummaries, provider)
 	if err != nil {
 		fmt.Printf("❌ Failed to generate global summary: %v\n", err)
 		os.Exit(1)
@@ -219,7 +225,7 @@ File summaries:
 
 Generate a comprehensive project overview based on these file summaries:`
 
-func generateFileSummary(filePath string, config *OllamaConfig) (string, error) {
+func generateFileSummary(filePath string, provider llm.Provider) (string, error) {
 	// Read the file
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -242,13 +248,22 @@ func generateFileSummary(filePath string, config *OllamaConfig) (string, error) 
 
 	prompt := fmt.Sprintf(fileSummaryPrompt, contentStr)
 
-	response, err := callOllama(prompt, config)
+	// Use the LLM provider to generate the summary
+	ctx := context.Background()
+	request := llm.CommentRequest{
+		EntityName:        filepath.Base(filePath),
+		EntityType:        "file",
+		Context:           contentStr,
+		AdditionalContext: prompt,
+	}
+
+	response, err := provider.GenerateComment(ctx, request)
 	if err != nil {
 		return "", err
 	}
 
 	// Clean and trim the response
-	summary := strings.TrimSpace(response)
+	summary := strings.TrimSpace(response.Description)
 
 	// Remove any markdown formatting
 	if strings.HasPrefix(summary, "```") {
@@ -265,7 +280,7 @@ func generateFileSummary(filePath string, config *OllamaConfig) (string, error) 
 	return summary, nil
 }
 
-func generateGlobalSummary(fileSummaries map[string]string, config *OllamaConfig) (string, error) {
+func generateGlobalSummary(fileSummaries map[string]string, provider llm.Provider) (string, error) {
 	// Build the summaries text
 	var summariesText strings.Builder
 	for filename, summary := range fileSummaries {
@@ -274,13 +289,22 @@ func generateGlobalSummary(fileSummaries map[string]string, config *OllamaConfig
 
 	prompt := fmt.Sprintf(globalSummaryPrompt, summariesText.String())
 
-	response, err := callOllama(prompt, config)
+	// Use the LLM provider to generate the global summary
+	ctx := context.Background()
+	request := llm.CommentRequest{
+		EntityName:        "project",
+		EntityType:        "global",
+		Context:           summariesText.String(),
+		AdditionalContext: prompt,
+	}
+
+	response, err := provider.GenerateComment(ctx, request)
 	if err != nil {
 		return "", err
 	}
 
 	// Clean and trim the response
-	summary := strings.TrimSpace(response)
+	summary := strings.TrimSpace(response.Description)
 
 	// Remove any markdown formatting
 	if strings.HasPrefix(summary, "```") {
@@ -295,43 +319,6 @@ func generateGlobalSummary(fileSummaries map[string]string, config *OllamaConfig
 	summary = strings.TrimSpace(summary)
 
 	return summary, nil
-}
-
-func callOllama(prompt string, config *OllamaConfig) (string, error) {
-	reqBody := OllamaRequest{
-		Model:  config.Model,
-		Prompt: prompt,
-		Stream: false,
-		Options: map[string]interface{}{
-			"temperature": config.Temperature,
-			"top_p":       config.TopP,
-			"num_ctx":     config.NumCtx,
-		},
-	}
-
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", err
-	}
-
-	client := &http.Client{Timeout: config.Timeout}
-	resp, err := client.Post(config.URL, "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
-	}
-
-	var ollamaResp OllamaResponse
-	if err := json.NewDecoder(resp.Body).Decode(&ollamaResp); err != nil {
-		return "", err
-	}
-
-	return ollamaResp.Response, nil
 }
 
 func writeDoxyllmConfig(filePath string, config *DoxyllmConfig) error {

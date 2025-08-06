@@ -1,0 +1,17 @@
+# Test configuration for simple file
+global: |
+  This is a test project for validating enhanced Doxygen tag management.
+
+groups:
+  test_group:
+    name: "test_group"
+    title: "Test Group"
+    description: |
+      A simple test group for validating functionality.
+    files:
+      - "test_simple.hpp"
+    generateDefgroup: true
+
+files:
+  test_simple.hpp: |
+    Simple test file with basic C++ constructs.

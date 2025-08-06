@@ -110,6 +110,14 @@ type DoxygenComment struct {
 	See        []string          // See also references
 	Author     string            // Author information
 	Version    string            // Version information
+	// Group-related tags
+	Defgroup   string   // @defgroup tag (for group definitions)
+	Ingroup    []string // @ingroup tags (group memberships)
+	Addtogroup string   // @addtogroup tag
+	// Structural tags
+	File       string            // @file tag
+	Namespace  string            // @namespace tag
+	Class      string            // @class tag
 	CustomTags map[string]string // Custom doxygen tags
 	Range      Range             // Position in source
 }
