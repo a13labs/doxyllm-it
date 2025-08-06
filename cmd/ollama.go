@@ -50,12 +50,18 @@ type DoxyllmConfig struct {
 	Ignore []string          `yaml:"ignore,omitempty"`
 }
 
-// readDoxyllmContext reads a .doxyllm file from the same directory as the file being processed
+// readDoxyllmContext reads a .doxyllm file from the root target directory
 // Returns the context content (global + file-specific), or empty string if no file is found
 // Also returns a boolean indicating if the file should be ignored
-func readDoxyllmContext(filePath string) (string, bool) {
-	dir := filepath.Dir(filePath)
-	doxyllmPath := filepath.Join(dir, ".doxyllm")
+func readDoxyllmContext(filePath, rootPath string) (string, bool) {
+	// Determine the root directory for .doxyllm file
+	var rootDir string
+	if info, err := os.Stat(rootPath); err == nil && info.IsDir() {
+		rootDir = rootPath
+	} else {
+		rootDir = filepath.Dir(rootPath)
+	}
+	doxyllmPath := filepath.Join(rootDir, ".doxyllm.yaml")
 
 	content, err := os.ReadFile(doxyllmPath)
 	if err != nil {
@@ -87,8 +93,26 @@ func readDoxyllmContext(filePath string) (string, bool) {
 	}
 
 	// Add file-specific context if present
-	if fileContext, exists := config.Files[fileName]; exists && fileContext != "" {
-		contextParts = append(contextParts, fmt.Sprintf("SPECIFIC TO %s:\n%s", fileName, fileContext))
+	// Try both relative path and just filename for backward compatibility
+	configDir := filepath.Dir(doxyllmPath)
+	relPath, _ := filepath.Rel(configDir, filePath)
+
+	var fileContext string
+	var exists bool
+
+	// First try relative path (new format)
+	if fileContext, exists = config.Files[relPath]; !exists {
+		// Fall back to filename only (backward compatibility)
+		fileContext, exists = config.Files[fileName]
+	}
+
+	if exists && fileContext != "" {
+		// Use the path that was found (either relPath or fileName)
+		contextIdentifier := relPath
+		if _, exists := config.Files[relPath]; !exists {
+			contextIdentifier = fileName
+		}
+		contextParts = append(contextParts, fmt.Sprintf("SPECIFIC TO %s:\n%s", contextIdentifier, fileContext))
 	}
 
 	return strings.Join(contextParts, "\n\n"), false
@@ -164,7 +188,7 @@ func init() {
 	rootCmd.AddCommand(ollamaCmd)
 
 	// Ollama configuration flags
-	ollamaCmd.Flags().StringVarP(&ollamaURL, "url", "u", getEnvOrDefault("OLLAMA_URL", "http://localhost:11434/api/generate"), "Ollama API URL")
+	ollamaCmd.Flags().StringVarP(&ollamaURL, "url", "u", getEnvOrDefault("OLLAMA_URL", "http://10.19.4.106:11434/api/generate"), "Ollama API URL")
 	ollamaCmd.Flags().StringVarP(&ollamaModel, "model", "m", getEnvOrDefault("MODEL_NAME", "codellama:13b"), "Ollama model name")
 	ollamaCmd.Flags().Float64Var(&temperature, "temperature", 0.1, "LLM temperature (0.0-1.0)")
 	ollamaCmd.Flags().Float64Var(&topP, "top-p", 0.9, "LLM top-p value (0.0-1.0)")
@@ -230,7 +254,7 @@ func runOllama(cmd *cobra.Command, args []string) {
 	updatedFiles := []string{}
 
 	for _, file := range files {
-		updates := processFileWithOllama(file, config)
+		updates := processFileWithOllama(file, config, target)
 		if updates > 0 {
 			totalUpdates += updates
 			updatedFiles = append(updatedFiles, file)
@@ -321,11 +345,11 @@ func isCppHeader(filename string) bool {
 	return ext == ".hpp" || ext == ".h" || ext == ".hxx"
 }
 
-func processFileWithOllama(filepath string, config *OllamaConfig) int {
+func processFileWithOllama(filepath string, config *OllamaConfig, rootPath string) int {
 	fmt.Printf("\n📁 Processing: %s\n", filepath)
 
 	// Check if file should be ignored
-	_, shouldIgnore := readDoxyllmContext(filepath)
+	_, shouldIgnore := readDoxyllmContext(filepath, rootPath)
 	if shouldIgnore {
 		fmt.Println("  ⏭️  File ignored per .doxyllm configuration")
 		return 0
@@ -372,7 +396,7 @@ func processFileWithOllama(filepath string, config *OllamaConfig) int {
 
 		// Generate comment using Ollama
 		fmt.Printf("    🤖 Generating comment with %s...\n", config.Model)
-		comment, err := generateComment(context, entityPath, filepath, config)
+		comment, err := generateComment(context, entityPath, filepath, config, rootPath)
 		if err != nil {
 			fmt.Printf("    ❌ Failed to generate comment: %v\n", err)
 			continue
@@ -803,12 +827,12 @@ func findEntityByPath(scopeTree *ast.ScopeTree, fullName string) *ast.Entity {
 	return find(scopeTree.Root)
 }
 
-func generateComment(context, entityName, filePath string, config *OllamaConfig) (string, error) {
+func generateComment(context, entityName, filePath string, config *OllamaConfig, rootPath string) (string, error) {
 	// Get entity type for better prompt context
 	entityType := getEntityTypeFromName(entityName)
 
 	// Read additional context from .doxyllm file if it exists
-	additionalContext, _ := readDoxyllmContext(filePath)
+	additionalContext, _ := readDoxyllmContext(filePath, rootPath)
 	var contextSection string
 	if additionalContext != "" {
 		contextSection = fmt.Sprintf("ADDITIONAL PROJECT CONTEXT:\n%s\n", additionalContext)
