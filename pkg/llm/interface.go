@@ -19,10 +19,10 @@ type Provider interface {
 
 // DocumentationRequest represents a request for generating documentation
 type DocumentationRequest struct {
-	EntityName        string                 // Name of the entity to document
-	EntityType        string                 // Type of entity (class, function, etc.)
-	Context           string                 // Code context around the entity
-	AdditionalContext string                 // Additional context from configuration
+	EntityName        string // Name of the entity to document
+	EntityType        string // Type of entity (class, function, etc.)
+	Context           string // Code context around the entity
+	AdditionalContext string // Additional context from configuration
 }
 type CommentRequest struct {
 	EntityName        string                 // Name of the entity to document

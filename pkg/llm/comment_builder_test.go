@@ -44,8 +44,8 @@ func TestCommentBuilder_BuildStructuredComment(t *testing.T) {
 			},
 			entityName: "TestClass",
 			entityType: "class",
-			groupInfo: nil, // GroupInfo is no longer used by CommentBuilder
-			context: "class TestClass {};",
+			groupInfo:  nil, // GroupInfo is no longer used by CommentBuilder
+			context:    "class TestClass {};",
 			checkFunc: func(t *testing.T, comment string) {
 				if !strings.Contains(comment, "@brief A test class") {
 					t.Errorf("comment should contain brief description")

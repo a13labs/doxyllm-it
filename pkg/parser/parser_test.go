@@ -633,3 +633,538 @@ func BenchmarkParseComplexFile(b *testing.B) {
 		}
 	}
 }
+
+func TestDefineParsing(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		expected map[string]string
+	}{
+		{
+			name:    "Simple define",
+			content: `#define MAX_SIZE 100`,
+			expected: map[string]string{
+				"MAX_SIZE": "100",
+			},
+		},
+		{
+			name:    "Define without value",
+			content: `#define FEATURE_ENABLED`,
+			expected: map[string]string{
+				"FEATURE_ENABLED": "",
+			},
+		},
+		{
+			name:    "Define with expression",
+			content: `#define BUFFER_SIZE (1024 * 1024)`,
+			expected: map[string]string{
+				"BUFFER_SIZE": "(1024 * 1024)",
+			},
+		},
+		{
+			name: "Multiline define",
+			content: `#define MULTILINE_MACRO(x, y) \
+    do { \
+        printf("x = %d\n", x); \
+        printf("y = %d\n", y); \
+    } while(0)`,
+			expected: map[string]string{
+				"MULTILINE_MACRO": "(x, y)  do {  printf(\"x = %d\\n\", x);  printf(\"y = %d\\n\", y);  } while(0)",
+			},
+		},
+		{
+			name:    "Define with spaces around hash",
+			content: `  #  define   SPACED_DEFINE   42  `,
+			expected: map[string]string{
+				"SPACED_DEFINE": "42",
+			},
+		},
+		{
+			name: "Multiple defines",
+			content: `#define FIRST 1
+#define SECOND 2
+#define THIRD "hello"`,
+			expected: map[string]string{
+				"FIRST":  "1",
+				"SECOND": "2",
+				"THIRD":  "\"hello\"",
+			},
+		},
+		{
+			name:    "Function-like macro",
+			content: `#define MIN(a, b) ((a) < (b) ? (a) : (b))`,
+			expected: map[string]string{
+				"MIN": "(a, b) ((a) < (b) ? (a) : (b))",
+			},
+		},
+		{
+			name: "Complex multiline define",
+			content: `#define COMPLEX_MACRO(type, name) \
+    type get##name() const { return name##_; } \
+    void set##name(const type& value) { name##_ = value; }`,
+			expected: map[string]string{
+				"COMPLEX_MACRO": "(type, name)  type get##name() const { return name##_; }  void set##name(const type& value) { name##_ = value; }",
+			},
+		},
+		{
+			name: "Mixed with other code",
+			content: `class TestClass {
+public:
+    #define CLASS_CONSTANT 42
+    void method();
+private:
+    #define PRIVATE_DEFINE "test"
+    int field;
+};`,
+			expected: map[string]string{
+				"CLASS_CONSTANT": "42",
+				"PRIVATE_DEFINE": "\"test\"",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := New()
+			_, err := parser.Parse("test.hpp", tt.content)
+			if err != nil {
+				t.Fatalf("Failed to parse: %v", err)
+			}
+
+			// Check that all expected defines are present
+			for expectedName, expectedValue := range tt.expected {
+				actualValue, exists := parser.defines[expectedName]
+				if !exists {
+					t.Errorf("Expected define %s not found", expectedName)
+					continue
+				}
+				if actualValue != expectedValue {
+					t.Errorf("Define %s: expected value %q, got %q", expectedName, expectedValue, actualValue)
+				}
+			}
+
+			// Check that no unexpected defines are present
+			for actualName := range parser.defines {
+				if _, expected := tt.expected[actualName]; !expected {
+					t.Errorf("Unexpected define found: %s = %q", actualName, parser.defines[actualName])
+				}
+			}
+		})
+	}
+}
+
+func TestDefineRegexMatching(t *testing.T) {
+	testCases := []struct {
+		line     string
+		expected bool
+		name     string
+		value    string
+	}{
+		{
+			line:     "#define MAX_SIZE 100",
+			expected: true,
+			name:     "MAX_SIZE",
+			value:    "100",
+		},
+		{
+			line:     "  #  define  SPACED  42  ",
+			expected: true,
+			name:     "SPACED",
+			value:    "42",
+		},
+		{
+			line:     "#define FEATURE_ENABLED",
+			expected: true,
+			name:     "FEATURE_ENABLED",
+			value:    "",
+		},
+		{
+			line:     "#define MIN(a, b) ((a) < (b) ? (a) : (b))",
+			expected: true,
+			name:     "MIN",
+			value:    "(a, b) ((a) < (b) ? (a) : (b))",
+		},
+		{
+			line:     "// #define COMMENTED_OUT",
+			expected: false,
+		},
+		{
+			line:     "#include <iostream>",
+			expected: false,
+		},
+		{
+			line:     "void function();",
+			expected: false,
+		},
+		{
+			line:     "#undef SOMETHING",
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.line, func(t *testing.T) {
+			parser := New()
+			isDefine := parser.isDefine(strings.TrimSpace(tc.line))
+
+			if isDefine != tc.expected {
+				t.Errorf("isDefine(%q) = %v, expected %v", tc.line, isDefine, tc.expected)
+			}
+
+			if tc.expected {
+				matches := defineRegex.FindStringSubmatch(strings.TrimSpace(tc.line))
+				if len(matches) < 2 {
+					t.Errorf("Expected regex to match %q but got no matches", tc.line)
+					return
+				}
+
+				actualName := matches[1]
+				if actualName != tc.name {
+					t.Errorf("Expected name %q, got %q", tc.name, actualName)
+				}
+
+				actualValue := ""
+				if len(matches) >= 3 {
+					actualValue = strings.TrimSpace(matches[2])
+				}
+				if actualValue != tc.value {
+					t.Errorf("Expected value %q, got %q", tc.value, actualValue)
+				}
+			}
+		})
+	}
+}
+
+func TestDefineAccessibility(t *testing.T) {
+	content := `#define GLOBAL_DEFINE 1
+
+namespace TestNamespace {
+    #define NAMESPACE_DEFINE 2
+    
+    class TestClass {
+    public:
+        #define PUBLIC_DEFINE 3
+    private:
+        #define PRIVATE_DEFINE 4
+    };
+}`
+
+	parser := New()
+	_, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Check that all defines are stored regardless of scope
+	expectedDefines := map[string]string{
+		"GLOBAL_DEFINE":    "1",
+		"NAMESPACE_DEFINE": "2",
+		"PUBLIC_DEFINE":    "3",
+		"PRIVATE_DEFINE":   "4",
+	}
+
+	for name, expectedValue := range expectedDefines {
+		actualValue, exists := parser.defines[name]
+		if !exists {
+			t.Errorf("Expected define %s not found", name)
+			continue
+		}
+		if actualValue != expectedValue {
+			t.Errorf("Define %s: expected value %q, got %q", name, expectedValue, actualValue)
+		}
+	}
+
+	// Verify we have exactly the expected number of defines
+	if len(parser.defines) != len(expectedDefines) {
+		t.Errorf("Expected %d defines, got %d", len(expectedDefines), len(parser.defines))
+	}
+}
+
+func TestDefineResolution(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		expected map[string]string // Map of entity name to resolved signature
+	}{
+		{
+			name: "API macro resolution",
+			content: `#define MYAPI __declspec(dllexport)
+MYAPI void exportedFunction();`,
+			expected: map[string]string{
+				"exportedFunction": "__declspec(dllexport) void exportedFunction();",
+			},
+		},
+		{
+			name: "Type alias resolution",
+			content: `#define HANDLE void*
+HANDLE createHandle();`,
+			expected: map[string]string{
+				"createHandle": "void* createHandle();",
+			},
+		},
+		{
+			name: "Attribute macro resolution",
+			content: `#define DEPRECATED [[deprecated]]
+DEPRECATED void oldFunction();`,
+			expected: map[string]string{
+				"oldFunction": "[[deprecated]] void oldFunction();",
+			},
+		},
+		{
+			name: "Multiple define resolution",
+			content: `#define MYAPI extern "C"
+#define HANDLE void*
+MYAPI HANDLE getValue();`,
+			expected: map[string]string{
+				"getValue": `extern "C" void* getValue();`,
+			},
+		},
+		{
+			name: "Class with macro resolution",
+			content: `#define EXPORT_CLASS __declspec(dllexport)
+EXPORT_CLASS class MyClass {
+public:
+    void method();
+};`,
+			expected: map[string]string{
+				"MyClass": "__declspec(dllexport) class MyClass {",
+			},
+		},
+		{
+			name: "Variable with macro resolution",
+			content: `#define EXTERN extern
+EXTERN int globalVar;`,
+			expected: map[string]string{
+				"globalVar": "extern int globalVar;",
+			},
+		},
+		{
+			name: "Nested defines",
+			content: `#define BASE_TYPE int
+#define MY_TYPE BASE_TYPE
+MY_TYPE getValue();`,
+			expected: map[string]string{
+				"getValue": "int getValue();",
+			},
+		},
+		{
+			name: "Partial word protection",
+			content: `#define MAX 100
+int MAX_SIZE = 200;
+void setMAX();`,
+			expected: map[string]string{
+				"MAX_SIZE": "int MAX_SIZE = 200;", // MAX should not be replaced in MAX_SIZE
+				"setMAX":   "void setMAX();",      // MAX should not be replaced in setMAX
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := New()
+			tree, err := parser.Parse("test.hpp", tt.content)
+			if err != nil {
+				t.Fatalf("Failed to parse: %v", err)
+			}
+
+			// Find entities and check their resolved signatures
+			entities := collectAllEntities(tree.Root)
+			for expectedName, expectedSignature := range tt.expected {
+				found := false
+				for _, entity := range entities {
+					if entity.Name == expectedName {
+						found = true
+						if entity.Signature != expectedSignature {
+							t.Errorf("Entity %s: expected signature %q, got %q",
+								expectedName, expectedSignature, entity.Signature)
+						}
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Expected entity %s not found", expectedName)
+				}
+			}
+		})
+	}
+}
+
+func TestDefineResolutionHelpers(t *testing.T) {
+	parser := New()
+	parser.defines = map[string]string{
+		"MAX_SIZE":  "100",
+		"API":       "__declspec(dllexport)",
+		"HANDLE":    "void*",
+		"MAX":       "42",
+		"MAX_LIMIT": "1000", // Should not interfere with MAX
+	}
+
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{
+			input:    "API void function();",
+			expected: "__declspec(dllexport) void function();",
+		},
+		{
+			input:    "HANDLE getValue();",
+			expected: "void* getValue();",
+		},
+		{
+			input:    "int size = MAX_SIZE;",
+			expected: "int size = 100;",
+		},
+		{
+			input:    "int max = MAX;",
+			expected: "int max = 42;",
+		},
+		{
+			input:    "int limit = MAX_LIMIT;",
+			expected: "int limit = 1000;",
+		},
+		{
+			input:    "int MAXIMUM = 999;", // Should not replace MAX in MAXIMUM
+			expected: "int MAXIMUM = 999;",
+		},
+		{
+			input:    "void setMAX_SIZE();", // Should not replace MAX_SIZE in setMAX_SIZE
+			expected: "void setMAX_SIZE();",
+		},
+		{
+			input:    "API HANDLE createHandle();",
+			expected: "__declspec(dllexport) void* createHandle();",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := parser.resolveDefines(tt.input)
+			if result != tt.expected {
+				t.Errorf("resolveDefines(%q) = %q, expected %q", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestConditionalCompilationIgnored(t *testing.T) {
+	content := `#define FEATURE_ENABLED 1
+
+#ifdef FEATURE_ENABLED
+void enabledFunction();
+#else
+void disabledFunction();
+#endif
+
+#if defined(DEBUG)
+void debugFunction();
+#elif defined(RELEASE)
+void releaseFunction();
+#else
+void defaultFunction();
+#endif
+
+#ifndef FEATURE_DISABLED
+void notDisabledFunction();
+#endif`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// All functions should be parsed regardless of conditional compilation
+	entities := collectAllEntities(tree.Root)
+	expectedFunctions := []string{
+		"enabledFunction",
+		"disabledFunction",
+		"debugFunction",
+		"releaseFunction",
+		"defaultFunction",
+		"notDisabledFunction",
+	}
+
+	functionCount := 0
+	for _, entity := range entities {
+		if entity.Type == ast.EntityFunction {
+			functionCount++
+			found := false
+			for _, expected := range expectedFunctions {
+				if entity.Name == expected {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("Unexpected function found: %s", entity.Name)
+			}
+		}
+	}
+
+	if functionCount != len(expectedFunctions) {
+		t.Errorf("Expected %d functions, got %d", len(expectedFunctions), functionCount)
+	}
+
+	// Check that the define was still captured
+	if value, exists := parser.defines["FEATURE_ENABLED"]; !exists || value != "1" {
+		t.Errorf("Expected define FEATURE_ENABLED = 1, got %v", value)
+	}
+}
+
+func TestComplexDefineResolution(t *testing.T) {
+	content := `#define CALLBACK __stdcall
+#define EXPORT __declspec(dllexport)
+#define HANDLE void*
+
+// Function with multiple macros
+EXPORT CALLBACK int processData(HANDLE data);
+
+// Class with macro
+EXPORT class DataProcessor {
+public:
+    CALLBACK int process(HANDLE input);
+};`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	entities := collectAllEntities(tree.Root)
+
+	// Check function resolution
+	for _, entity := range entities {
+		if entity.Name == "processData" {
+			expected := "__declspec(dllexport) __stdcall int processData(void* data);"
+			if entity.Signature != expected {
+				t.Errorf("Function processData: expected %q, got %q", expected, entity.Signature)
+			}
+		}
+		if entity.Name == "DataProcessor" {
+			expected := "__declspec(dllexport) class DataProcessor {"
+			if entity.Signature != expected {
+				t.Errorf("Class DataProcessor: expected %q, got %q", expected, entity.Signature)
+			}
+		}
+		if entity.Name == "process" {
+			expected := "__stdcall int process(void* input);"
+			if entity.Signature != expected {
+				t.Errorf("Method process: expected %q, got %q", expected, entity.Signature)
+			}
+		}
+	}
+}
+
+// Helper function to collect all entities recursively
+func collectAllEntities(entity *ast.Entity) []*ast.Entity {
+	var entities []*ast.Entity
+	if entity.Name != "" { // Skip root entity
+		entities = append(entities, entity)
+	}
+	for _, child := range entity.Children {
+		entities = append(entities, collectAllEntities(child)...)
+	}
+	return entities
+}

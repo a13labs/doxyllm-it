@@ -308,7 +308,7 @@ func processFileWithService(filePath string, service *llm.DocumentationService, 
 
 		// Check if entity is completely undocumented or just missing @ingroup
 		isUndocumented := isEntityUndocumented(filePath, entityPath)
-		
+
 		if isUndocumented {
 			// Generate new documentation for undocumented entity
 			if err := generateDocumentationForEntity(filePath, entityPath, service, rootPath, group); err != nil {
@@ -329,7 +329,7 @@ func processFileWithService(filePath string, service *llm.DocumentationService, 
 	}
 
 	fmt.Printf("  📊 Updated %d/%d entities\n", successfulUpdates, len(entitiesToUpdate))
-	
+
 	// Return total updates including defgroup if added
 	totalUpdates := successfulUpdates
 	if defgroupAdded {
@@ -683,13 +683,16 @@ func shouldSkipEntity(entity *ast.Entity) bool {
 			return true
 		}
 
-		if strings.Contains(entity.Signature, "std::string "+entity.Name) ||
+		// Skip function-like variable declarations (e.g., "std::string trim = getSomething();")
+		// but NOT actual function declarations (e.g., "std::string trim(args);")
+		if (strings.Contains(entity.Signature, "std::string "+entity.Name) ||
 			strings.Contains(entity.Signature, "auto "+entity.Name) ||
 			strings.Contains(entity.Signature, "const "+entity.Name) ||
 			strings.Contains(entity.Signature, "int "+entity.Name) ||
 			strings.Contains(entity.Signature, "float "+entity.Name) ||
 			strings.Contains(entity.Signature, "double "+entity.Name) ||
-			strings.Contains(entity.Signature, "bool "+entity.Name) {
+			strings.Contains(entity.Signature, "bool "+entity.Name)) &&
+			!strings.Contains(entity.Signature, entity.Name+"(") {
 			return true
 		}
 
@@ -954,7 +957,7 @@ func updateEntityComment(filepath, entityPath, comment string) error {
 }
 
 // getEntitiesNeedingUpdates finds entities that either:
-// 1. Are completely undocumented, OR 
+// 1. Are completely undocumented, OR
 // 2. Are documented but missing @ingroup tag (when group is specified)
 func getEntitiesNeedingUpdates(filePath string, group *GroupConfig) ([]string, error) {
 	content, err := os.ReadFile(filePath)
@@ -982,7 +985,7 @@ func getEntitiesNeedingUpdates(filePath string, group *GroupConfig) ([]string, e
 
 		// Check if entity needs updates
 		needsUpdate := false
-		
+
 		if !hasComment {
 			// Case 1: Completely undocumented
 			needsUpdate = true
@@ -1033,21 +1036,21 @@ func hasIngroupTag(lines []string, entity *ast.Entity, groupName string) bool {
 	maxLookback := 15
 	for i := entityLine - 2; i >= 0 && i >= entityLine-maxLookback; i-- {
 		line := strings.TrimSpace(lines[i])
-		
+
 		// Skip empty lines and non-comment lines that might be between comment and entity
-		if line == "" || 
-		   strings.HasPrefix(line, "template") ||
-		   strings.HasPrefix(line, "inline") ||
-		   strings.HasPrefix(line, "static") ||
-		   strings.HasPrefix(line, "const ") ||
-		   strings.HasPrefix(line, "constexpr") ||
-		   strings.HasPrefix(line, "[[") {
+		if line == "" ||
+			strings.HasPrefix(line, "template") ||
+			strings.HasPrefix(line, "inline") ||
+			strings.HasPrefix(line, "static") ||
+			strings.HasPrefix(line, "const ") ||
+			strings.HasPrefix(line, "constexpr") ||
+			strings.HasPrefix(line, "[[") {
 			continue
 		}
 
 		// If we found a comment line, check for @ingroup
-		if strings.Contains(line, "/**") || strings.Contains(line, "*/") || 
-		   strings.Contains(line, "*") || strings.HasPrefix(line, "///") {
+		if strings.Contains(line, "/**") || strings.Contains(line, "*/") ||
+			strings.Contains(line, "*") || strings.HasPrefix(line, "///") {
 			if strings.Contains(line, "@ingroup") && strings.Contains(line, groupName) {
 				return true
 			}
@@ -1075,7 +1078,7 @@ func postProcessComment(rawComment string, group *GroupConfig) string {
 
 	// Find the insertion point for @ingroup (before the closing */)
 	lines := strings.Split(rawComment, "\n")
-	
+
 	// Look for the last line with content before */
 	insertIndex := len(lines) - 1
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -1088,7 +1091,7 @@ func postProcessComment(rawComment string, group *GroupConfig) string {
 
 	// Insert @ingroup before the closing */
 	ingroupLine := fmt.Sprintf(" * @ingroup %s", group.Name)
-	
+
 	newLines := make([]string, len(lines)+1)
 	copy(newLines[:insertIndex], lines[:insertIndex])
 	newLines[insertIndex] = ingroupLine
@@ -1117,7 +1120,7 @@ func isEntityUndocumented(filePath, entityPath string) bool {
 
 	lines := strings.Split(string(content), "\n")
 	hasComment := entity.Comment != nil || hasCommentBefore(lines, entity.SourceRange.Start.Line)
-	
+
 	return !hasComment
 }
 
@@ -1181,7 +1184,7 @@ func addIngroupToExistingComment(filePath, entityPath string, group *GroupConfig
 	}
 
 	lines := strings.Split(string(content), "\n")
-	
+
 	// Find the existing comment
 	if entity.Comment != nil {
 		// Entity has a parsed comment - modify it directly
@@ -1203,7 +1206,7 @@ func addIngroupToComment(filePath, commentText, groupName string) error {
 
 	// Find and replace the comment in the file
 	updatedContent := strings.Replace(string(content), commentText, addIngroupToCommentText(commentText, groupName), 1)
-	
+
 	return os.WriteFile(filePath, []byte(updatedContent), 0644)
 }
 
@@ -1215,33 +1218,33 @@ func addIngroupToCommentBefore(filePath string, entityLine int, groupName string
 	}
 
 	lines := strings.Split(string(content), "\n")
-	
+
 	// Find the comment block before the entity
 	commentEnd := -1
 	commentStart := -1
-	
+
 	// Look backwards for comment end
 	for i := entityLine - 2; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
 		if line == "" {
 			continue
 		}
-		
+
 		if strings.HasSuffix(line, "*/") {
 			commentEnd = i
 			break
 		}
-		
+
 		// If we hit non-comment code, stop
 		if !strings.HasPrefix(line, "*") && !strings.HasPrefix(line, "//") {
 			break
 		}
 	}
-	
+
 	if commentEnd == -1 {
 		return fmt.Errorf("comment end not found")
 	}
-	
+
 	// Find comment start
 	for i := commentEnd; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
@@ -1250,19 +1253,19 @@ func addIngroupToCommentBefore(filePath string, entityLine int, groupName string
 			break
 		}
 	}
-	
+
 	if commentStart == -1 {
 		return fmt.Errorf("comment start not found")
 	}
-	
+
 	// Insert @ingroup before the closing */
 	ingroupLine := fmt.Sprintf(" * @ingroup %s", groupName)
-	
+
 	newLines := make([]string, len(lines)+1)
 	copy(newLines[:commentEnd], lines[:commentEnd])
 	newLines[commentEnd] = ingroupLine
 	copy(newLines[commentEnd+1:], lines[commentEnd:])
-	
+
 	updatedContent := strings.Join(newLines, "\n")
 	return os.WriteFile(filePath, []byte(updatedContent), 0644)
 }
@@ -1274,7 +1277,7 @@ func addIngroupToCommentText(commentText, groupName string) string {
 	}
 
 	lines := strings.Split(commentText, "\n")
-	
+
 	// Find insertion point (before closing */)
 	insertIndex := len(lines) - 1
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -1287,7 +1290,7 @@ func addIngroupToCommentText(commentText, groupName string) string {
 
 	// Insert @ingroup
 	ingroupLine := fmt.Sprintf(" * @ingroup %s", groupName)
-	
+
 	newLines := make([]string, len(lines)+1)
 	copy(newLines[:insertIndex], lines[:insertIndex])
 	newLines[insertIndex] = ingroupLine
