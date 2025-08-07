@@ -11,13 +11,15 @@ import (
 
 // Parser represents the C++ parser
 type Parser struct {
-	content     string
-	lines       []string
-	current     int
-	position    ast.Position
-	scopeStack  []*ast.Entity
-	tree        *ast.ScopeTree
-	accessStack []ast.AccessLevel // Track access levels for each scope
+	content        string
+	lines          []string
+	current        int
+	position       ast.Position
+	scopeStack     []*ast.Entity
+	tree           *ast.ScopeTree
+	accessStack    []ast.AccessLevel   // Track access levels for each scope
+	pendingComment *ast.DoxygenComment // Comment waiting to be associated with next entity
+	defines        map[string]string   // Preprocessor defines
 }
 
 // New creates a new parser instance
@@ -25,6 +27,7 @@ func New() *Parser {
 	return &Parser{
 		scopeStack:  make([]*ast.Entity, 0),
 		accessStack: make([]ast.AccessLevel, 0),
+		defines:     make(map[string]string),
 	}
 }
 
@@ -42,8 +45,25 @@ func (p *Parser) Parse(filename, content string) (*ast.ScopeTree, error) {
 		line := p.lines[p.current]
 		trimmed := strings.TrimSpace(line)
 
-		// Skip empty lines and pure comments
-		if trimmed == "" || strings.HasPrefix(trimmed, "//") {
+		// Skip empty lines
+		if trimmed == "" {
+			p.nextLine()
+			continue
+		}
+
+		// Handle Doxygen comments
+		if strings.HasPrefix(trimmed, "/**") || strings.HasPrefix(trimmed, "///") || strings.HasPrefix(trimmed, "//!") {
+			comment, err := p.parseDoxygenComment()
+			if err != nil {
+				return nil, fmt.Errorf("error parsing doxygen comment at line %d: %w", p.current+1, err)
+			}
+			// Store comment to associate with next entity
+			p.pendingComment = comment
+			continue
+		}
+
+		// Skip other comments
+		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
 			p.nextLine()
 			continue
 		}
@@ -63,43 +83,156 @@ func (p *Parser) Parse(filename, content string) (*ast.ScopeTree, error) {
 func (p *Parser) parseLine(line string) error {
 	trimmed := strings.TrimSpace(line)
 
-	// Skip preprocessor directives and comments
+	// Handle #define directives first (before resolution)
+	if p.isDefine(trimmed) {
+		return p.parseDefine(line)
+	}
+
+	// Skip conditional compilation directives but continue parsing content
+	if strings.HasPrefix(trimmed, "#if") || strings.HasPrefix(trimmed, "#else") ||
+		strings.HasPrefix(trimmed, "#endif") || strings.HasPrefix(trimmed, "#elif") {
+		return nil // Ignore conditionals, parse everything for documentation
+	}
+
+	// Skip other preprocessor directives and comments
 	if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
 		return nil
 	}
 
-	// Parse different constructs
-	if p.isAccessSpecifier(trimmed) {
-		return p.parseAccessSpecifier(trimmed)
+	// Resolve defines in the line before parsing
+	resolvedLine := p.resolveDefines(line)
+	resolvedTrimmed := strings.TrimSpace(resolvedLine)
+
+	// Parse different constructs with resolved content
+	if p.isAccessSpecifier(resolvedTrimmed) {
+		return p.parseAccessSpecifier(resolvedTrimmed)
 	}
-	if p.isNamespace(trimmed) {
-		return p.parseNamespace(line)
+	if p.isNamespace(resolvedTrimmed) {
+		return p.parseNamespace(resolvedLine)
 	}
-	if p.isClass(trimmed) {
-		return p.parseClass(line)
+	if p.isEnum(resolvedTrimmed) {
+		return p.parseEnum(resolvedLine)
 	}
-	if p.isStruct(trimmed) {
-		return p.parseStruct(line)
+	if p.isClass(resolvedTrimmed) {
+		return p.parseClass(resolvedLine)
 	}
-	if p.isEnum(trimmed) {
-		return p.parseEnum(line)
+	if p.isStruct(resolvedTrimmed) {
+		return p.parseStruct(resolvedLine)
 	}
-	if p.isFunction(trimmed) {
-		return p.parseFunction(line)
+	if p.isFunction(resolvedTrimmed) {
+		return p.parseFunction(resolvedLine)
 	}
-	if p.isVariable(trimmed) {
-		return p.parseVariable(line)
+	if p.isVariable(resolvedTrimmed) {
+		return p.parseVariable(resolvedLine)
 	}
-	if p.isTypedef(trimmed) {
-		return p.parseTypedef(line)
+	if p.isTypedef(resolvedTrimmed) {
+		return p.parseTypedef(resolvedLine)
 	}
-	if p.isUsing(trimmed) {
-		return p.parseUsing(line)
+	if p.isUsing(resolvedTrimmed) {
+		return p.parseUsing(resolvedLine)
 	}
 
 	// Handle scope closers
-	if trimmed == "}" || strings.HasPrefix(trimmed, "}") {
+	if resolvedTrimmed == "}" || strings.HasPrefix(resolvedTrimmed, "}") {
 		return p.closeScope()
+	}
+
+	return nil
+}
+
+// parseDoxygenComment parses a multi-line or single-line Doxygen comment
+func (p *Parser) parseDoxygenComment() (*ast.DoxygenComment, error) {
+	startLine := p.current
+	var commentLines []string
+
+	line := strings.TrimSpace(p.lines[p.current])
+
+	if strings.HasPrefix(line, "/**") {
+		// Multi-line comment starting with /**
+		commentLines = append(commentLines, p.lines[p.current])
+		p.nextLine()
+
+		// Continue until we find the closing */
+		for p.current < len(p.lines) {
+			line = p.lines[p.current]
+			commentLines = append(commentLines, line)
+
+			if strings.Contains(strings.TrimSpace(line), "*/") {
+				p.nextLine()
+				break
+			}
+			p.nextLine()
+		}
+	} else if strings.HasPrefix(line, "///") || strings.HasPrefix(line, "//!") {
+		// Single-line Doxygen comments - collect consecutive ones
+		for p.current < len(p.lines) {
+			line = strings.TrimSpace(p.lines[p.current])
+			if strings.HasPrefix(line, "///") || strings.HasPrefix(line, "//!") {
+				commentLines = append(commentLines, p.lines[p.current])
+				p.nextLine()
+			} else if line == "" {
+				// Allow empty lines within single-line comment blocks
+				commentLines = append(commentLines, p.lines[p.current])
+				p.nextLine()
+			} else {
+				break
+			}
+		}
+	}
+
+	if len(commentLines) == 0 {
+		return nil, nil
+	}
+
+	commentText := strings.Join(commentLines, "\n")
+	comment := ParseDoxygenComment(commentText)
+	if comment != nil {
+		comment.Range = ast.Range{
+			Start: ast.Position{Line: startLine + 1, Column: 1, Offset: 0},
+			End:   ast.Position{Line: p.current, Column: 1, Offset: 0},
+		}
+	}
+
+	return comment, nil
+}
+
+// parseDefine parses a #define directive (including multiline defines)
+func (p *Parser) parseDefine(line string) error {
+	var defineContent strings.Builder
+
+	// Start with the first line, removing trailing backslash if present
+	current := strings.TrimSpace(line)
+	current = strings.TrimSuffix(current, "\\")
+	defineContent.WriteString(current)
+
+	// Check if this is a multiline define (original line ends with backslash)
+	for strings.HasSuffix(strings.TrimSpace(line), "\\") {
+		// Move to next line
+		p.nextLine()
+		if p.current >= len(p.lines) {
+			break
+		}
+
+		line = p.lines[p.current]
+		trimmed := strings.TrimSpace(line)
+
+		// Add the continuation line
+		defineContent.WriteString(" ")
+		defineContent.WriteString(strings.TrimSuffix(trimmed, "\\"))
+	}
+
+	// Parse the complete define
+	fullDefine := defineContent.String()
+	matches := defineRegex.FindStringSubmatch(fullDefine)
+	if len(matches) >= 2 {
+		name := matches[1]
+		value := ""
+		if len(matches) >= 3 {
+			value = strings.TrimSpace(matches[2])
+		}
+
+		// Store in defines map
+		p.defines[name] = value
 	}
 
 	return nil
@@ -107,16 +240,22 @@ func (p *Parser) parseLine(line string) error {
 
 // Regular expressions for identifying C++ constructs
 var (
+	defineRegex         = regexp.MustCompile(`^\s*#\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(.*)$`)
 	namespaceRegex      = regexp.MustCompile(`^\s*namespace\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{?`)
-	classRegex          = regexp.MustCompile(`^\s*(?:template\s*<[^>]*>\s*)?class\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
-	structRegex         = regexp.MustCompile(`^\s*(?:template\s*<[^>]*>\s*)?struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
-	enumRegex           = regexp.MustCompile(`^\s*enum\s+(?:class\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
-	functionRegex       = regexp.MustCompile(`^\s*(?:(?:template\s*<[^>]*>\s*)?(?:inline|static|virtual|explicit|constexpr|friend|TCB_SPAN_CONSTEXPR11|TCB_SPAN_ARRAY_CONSTEXPR|TCB_SPAN_NODISCARD)\s+)*(?:(?:[a-zA-Z_][a-zA-Z0-9_:<>*&\s]*\s+)+)?([a-zA-Z_~][a-zA-Z0-9_]*)\s*\([^{]*\)\s*(?:const\s*)?(?:override\s*)?(?:final\s*)?(?:noexcept\s*)?(?:\{|;)`)
+	classRegex          = regexp.MustCompile(`^\s*(?:template\s*<[^>]*>\s*)?.*?class\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
+	structRegex         = regexp.MustCompile(`^\s*(?:template\s*<[^>]*>\s*)?.*?struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
+	enumRegex           = regexp.MustCompile(`^\s*.*?enum\s+(?:class\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
+	functionRegex       = regexp.MustCompile(`^\s*(?:.*\s+)?([a-zA-Z_~][a-zA-Z0-9_]*)\s*\([^{]*\)\s*(?:const\s*)?(?:override\s*)?(?:final\s*)?(?:noexcept\s*)?(?:\{|;)`)
 	variableRegex       = regexp.MustCompile(`^\s*(?:(?:static|const|constexpr|mutable|extern)\s+)*[a-zA-Z_][a-zA-Z0-9_:<>*&\s]+\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=.*?)?;`)
 	typedefRegex        = regexp.MustCompile(`^\s*typedef\s+.*?\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;`)
 	usingRegex          = regexp.MustCompile(`^\s*using\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=`)
 	usingNamespaceRegex = regexp.MustCompile(`^\s*using\s+namespace\s+([a-zA-Z_][a-zA-Z0-9_:]*)\s*;`)
 )
+
+// isDefine checks if line contains a #define directive
+func (p *Parser) isDefine(line string) bool {
+	return defineRegex.MatchString(line)
+}
 
 // isNamespace checks if line contains a namespace declaration
 func (p *Parser) isNamespace(line string) bool {
@@ -224,7 +363,9 @@ func (p *Parser) parseNamespace(line string) error {
 
 // parseClass parses a class declaration
 func (p *Parser) parseClass(line string) error {
-	matches := classRegex.FindStringSubmatch(line)
+	// Use resolved line for matching but preserve original for OriginalText
+	resolvedLine := p.resolveDefines(line)
+	matches := classRegex.FindStringSubmatch(resolvedLine)
 	if len(matches) < 2 {
 		return fmt.Errorf("failed to parse class: %s", line)
 	}
@@ -234,7 +375,7 @@ func (p *Parser) parseClass(line string) error {
 		Type:         ast.EntityClass,
 		Name:         name,
 		FullName:     p.buildFullName(name),
-		Signature:    strings.TrimSpace(line),
+		Signature:    strings.TrimSpace(resolvedLine),
 		AccessLevel:  ast.AccessPrivate, // Default for class
 		SourceRange:  p.getCurrentRange(),
 		HeaderRange:  p.getCurrentRange(),
@@ -244,8 +385,8 @@ func (p *Parser) parseClass(line string) error {
 
 	p.addEntity(entity)
 
-	// If line contains opening brace, enter scope
-	if strings.Contains(line, "{") {
+	// If resolved line contains opening brace, enter scope
+	if strings.Contains(resolvedLine, "{") {
 		p.enterScope(entity)
 	}
 
@@ -313,7 +454,9 @@ func (p *Parser) parseEnum(line string) error {
 
 // parseFunction parses a function declaration
 func (p *Parser) parseFunction(line string) error {
-	matches := functionRegex.FindStringSubmatch(line)
+	// Use resolved line for matching but preserve original for OriginalText
+	resolvedLine := p.resolveDefines(line)
+	matches := functionRegex.FindStringSubmatch(resolvedLine)
 	if len(matches) < 2 {
 		return fmt.Errorf("failed to parse function: %s", line)
 	}
@@ -338,11 +481,11 @@ func (p *Parser) parseFunction(line string) error {
 		Type:         entityType,
 		Name:         name,
 		FullName:     p.buildFullName(name),
-		Signature:    strings.TrimSpace(line),
-		IsStatic:     strings.Contains(line, "static"),
-		IsVirtual:    strings.Contains(line, "virtual"),
-		IsInline:     strings.Contains(line, "inline"),
-		IsConst:      strings.Contains(line, ") const"),
+		Signature:    strings.TrimSpace(resolvedLine),
+		IsStatic:     strings.Contains(resolvedLine, "static"),
+		IsVirtual:    strings.Contains(resolvedLine, "virtual"),
+		IsInline:     strings.Contains(resolvedLine, "inline"),
+		IsConst:      strings.Contains(resolvedLine, ") const"),
 		SourceRange:  p.getCurrentRange(),
 		HeaderRange:  p.getCurrentRange(),
 		OriginalText: line,
@@ -486,6 +629,101 @@ func (p *Parser) parseAccessSpecifier(line string) error {
 	return nil
 }
 
+// Define resolution methods
+
+// resolveDefines resolves all defines in a line
+func (p *Parser) resolveDefines(line string) string {
+	resolved := line
+
+	// Sort defines by length (longest first) to avoid partial replacements
+	// e.g., if we have MAX_SIZE and MAX_SIZE_LIMIT, we want to replace MAX_SIZE_LIMIT first
+	var defineNames []string
+	for name := range p.defines {
+		defineNames = append(defineNames, name)
+	}
+
+	// Sort by length descending
+	for i := 0; i < len(defineNames)-1; i++ {
+		for j := i + 1; j < len(defineNames); j++ {
+			if len(defineNames[i]) < len(defineNames[j]) {
+				defineNames[i], defineNames[j] = defineNames[j], defineNames[i]
+			}
+		}
+	}
+
+	// Replace defines in order of length (longest first)
+	for _, name := range defineNames {
+		value := p.defines[name]
+		// Only replace whole words, not partial matches
+		resolved = p.replaceWholeWord(resolved, name, value)
+	}
+
+	return resolved
+}
+
+// replaceWholeWord replaces whole word occurrences only
+func (p *Parser) replaceWholeWord(text, oldWord, newWord string) string {
+	if oldWord == "" {
+		return text
+	}
+
+	result := ""
+	i := 0
+	oldLen := len(oldWord)
+
+	for i < len(text) {
+		// Find the next occurrence of oldWord
+		index := strings.Index(text[i:], oldWord)
+		if index == -1 {
+			// No more occurrences, append the rest
+			result += text[i:]
+			break
+		}
+
+		// Adjust index to absolute position
+		index += i
+
+		// Check if it's a whole word (not part of another identifier)
+		isWholeWord := true
+
+		// Check character before
+		if index > 0 {
+			prevChar := text[index-1]
+			if isAlphaNumericOrUnderscore(prevChar) {
+				isWholeWord = false
+			}
+		}
+
+		// Check character after
+		if index+oldLen < len(text) {
+			nextChar := text[index+oldLen]
+			if isAlphaNumericOrUnderscore(nextChar) {
+				isWholeWord = false
+			}
+		}
+
+		if isWholeWord {
+			// Add text before the match
+			result += text[i:index]
+			// Add the replacement
+			result += newWord
+			// Move past the replaced word
+			i = index + oldLen
+		} else {
+			// Not a whole word, add the character and continue
+			result += text[i : index+1]
+			i = index + 1
+		}
+	}
+
+	return result
+}
+
+// isAlphaNumericOrUnderscore checks if character is alphanumeric or underscore
+func isAlphaNumericOrUnderscore(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+}
+
 // Helper methods
 
 // nextLine advances to the next line
@@ -554,6 +792,18 @@ func (p *Parser) buildFullName(name string) string {
 
 // addEntity adds an entity to the current scope
 func (p *Parser) addEntity(entity *ast.Entity) {
+	// Associate pending comment with this entity
+	if p.pendingComment != nil {
+		entity.Comment = p.pendingComment
+		p.pendingComment = nil // Clear the pending comment
+	}
+
+	// If the signature was resolved from defines, store both versions
+	if entity.Signature != entity.OriginalText {
+		// Store the resolved signature in the main signature field
+		// The original text is already stored in OriginalText
+	}
+
 	currentScope := p.getCurrentScope()
 	currentScope.AddChild(entity)
 	// Don't add nested entities to the flat tree list - they should only exist in the hierarchy
@@ -694,6 +944,20 @@ func setDoxygenTag(doc *ast.DoxygenComment, tag, content string) {
 		doc.Author = content
 	case "version":
 		doc.Version = content
+	// Group-related tags
+	case "defgroup":
+		doc.Defgroup = content
+	case "ingroup":
+		doc.Ingroup = append(doc.Ingroup, content)
+	case "addtogroup":
+		doc.Addtogroup = content
+	// Structural tags
+	case "file":
+		doc.File = content
+	case "namespace":
+		doc.Namespace = content
+	case "class":
+		doc.Class = content
 	default:
 		doc.CustomTags[tag] = content
 	}

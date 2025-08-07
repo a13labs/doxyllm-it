@@ -15,7 +15,7 @@ DoxLLM-IT is a CLI tool that parses C++ header files and creates a tree structur
 - **Code reconstruction**: Reconstruct original code from parsed tree
 - **Update entities**: Add or update Doxygen comments for specific entities
 - **Batch processing**: Update multiple entities using JSON configuration
-- **Ollama integration**: Built-in command for automatic documentation with Ollama LLM
+- **LLM integration**: Built-in command for automatic documentation with Ollama (OpenAI, Anthropic support planned)
 - **Context-aware documentation**: Support for `.doxyllm` configuration files with global and file-specific contexts
 - **YAML configuration**: Structured context files for multi-file projects
 - **Backward compatibility**: Plain text `.doxyllm` files still supported
@@ -132,23 +132,23 @@ echo "/** @brief My function description */" | ./doxyllm-it update header.hpp "M
 ./doxyllm-it batch-update updates.json -i -f
 ```
 
-### Ollama Integration (Built-in)
+### LLM Integration (Built-in)
 
 ```bash
-# Auto-generate documentation with Ollama LLM
-./doxyllm-it ollama --in-place --backup examples/example.hpp
+# Auto-generate documentation with Ollama
+./doxyllm-it llm --backup examples/example.hpp
 
 # Process entire directory with custom model
-./doxyllm-it ollama --model deepseek-coder:6.7b --in-place --format src/
+./doxyllm-it llm --model deepseek-coder:6.7b --format src/
 
 # Dry run to see what would be processed
-./doxyllm-it ollama --dry-run --max-entities 3 .
+./doxyllm-it llm --dry-run --max-entities 3 .
 
 # Use remote Ollama server
-./doxyllm-it ollama --url http://remote:11434/api/generate --model codellama:34b src/
+./doxyllm-it llm --url http://remote:11434/api/generate --model codellama:34b src/
 
 # Custom temperature and context settings
-./doxyllm-it ollama --temperature 0.1 --context 8192 --model codegemma:7b header.hpp
+./doxyllm-it llm --temperature 0.1 --context 8192 --model codegemma:7b header.hpp
 ```
 
 ### Context Configuration with .doxyllm Files
@@ -183,6 +183,27 @@ Simple context that applies to all files in this directory.
 This format is automatically detected when YAML parsing fails.
 ```
 
+### LLM Provider Configuration
+
+The `llm` command currently supports Ollama with planned support for additional providers:
+
+#### Ollama (Current)
+```bash
+# Local Ollama instance (default)
+./doxyllm-it llm --model deepseek-coder:6.7b src/
+
+# Remote Ollama instance
+./doxyllm-it llm --url http://remote:11434/api/generate src/
+
+# Environment variables
+export LLM_URL="http://localhost:11434/api/generate"
+export LLM_MODEL="codellama:13b"
+./doxyllm-it llm src/
+```
+
+#### Future Provider Support
+OpenAI and Anthropic providers are planned for future releases. The architecture is designed to support multiple providers through a common interface.
+
 ## Architecture
 
 ### Core Components
@@ -190,7 +211,7 @@ This format is automatically detected when YAML parsing fails.
 1. **Parser** (`pkg/parser`): Enhanced C++ parser with improved regex patterns for modern C++ constructs
 2. **AST** (`pkg/ast`): Defines data structures for the abstract syntax tree with access level tracking
 3. **Formatter** (`pkg/formatter`): Handles code reconstruction and formatting with context extraction
-4. **CLI** (`cmd/`): Command-line interface with comprehensive Ollama integration
+4. **CLI** (`cmd/`): Command-line interface with comprehensive LLM integration supporting multiple providers
 5. **Testing** (`pkg/parser/*_test.go`): Comprehensive unit tests for parser components
 
 ### Enhanced Parser Features
@@ -227,7 +248,7 @@ This format is automatically detected when YAML parsing fails.
 5. **Update**: Apply LLM-generated comments back to the original code
 6. **Format**: Use clang-format to ensure consistent formatting
 
-## Ollama Integration Workflow
+## LLM Integration Workflow
 
 ```bash
 # 1. Create context configuration
@@ -243,10 +264,11 @@ files:
 EOF
 
 # 2. Auto-generate documentation with context
-./doxyllm-it ollama --model codegemma:7b --backup --in-place span.hpp
+./doxyllm-it llm --model codegemma:7b --backup span.hpp
 
-# 3. Process multiple files with different contexts
-./doxyllm-it ollama --model deepseek-coder:6.7b --max-entities 5 src/
+# 3. Process multiple files with different providers
+./doxyllm-it llm --provider ollama --model deepseek-coder:6.7b --max-entities 5 src/
+./doxyllm-it llm --provider openai --model gpt-4 --api-key YOUR_KEY --max-entities 3 include/
 
 # 4. Review changes and format
 ./doxyllm-it format -c span.hpp
@@ -269,10 +291,14 @@ EOF
 # 2. Parse and identify undocumented entities
 ./doxyllm-it parse -f json header.hpp | jq '.entities[] | select(.hasComment == false)'
 
-# 3. Auto-generate with Ollama (recommended)
-./doxyllm-it ollama --model codegemma:7b --backup header.hpp
+# 3. Auto-generate with LLM (recommended)
+./doxyllm-it llm --model codegemma:7b --backup header.hpp
 
-# 4. Manual workflow (for custom LLMs)
+# 4. Alternative providers
+./doxyllm-it llm --provider openai --model gpt-4 --api-key YOUR_KEY header.hpp
+./doxyllm-it llm --provider anthropic --model claude-3-sonnet --api-key YOUR_KEY header.hpp
+
+# 5. Manual workflow (for custom workflows)
 ./doxyllm-it extract -p -s header.hpp "MyClass::myMethod" > context.txt
 llm_response=$(send_to_llm "Generate doxygen comment for: $(cat context.txt)")
 echo "$llm_response" | ./doxyllm-it update -i -b header.hpp "MyClass::myMethod"

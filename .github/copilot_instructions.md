@@ -19,23 +19,30 @@ DoxLLM-IT is a CLI tool written in Go that parses C++ header files and creates a
    - Preserves original text and formatting
    - Tracks source positions and ranges
 
-3. **`pkg/formatter/`** - Code reconstruction and formatting
+3. **`pkg/document/`** - High-level document abstraction
+   - Provides intuitive API for manipulating C++ header files
+   - Encapsulates parser and AST complexity behind simple methods
+   - Supports batch operations and modification tracking
+   - Built-in validation and documentation analysis
+   - Entity caching for fast lookup operations
+
+4. **`pkg/formatter/`** - Code reconstruction and formatting
    - Reconstructs original code from parsed tree
    - Handles Doxygen comment formatting
    - Integrates with clang-format for consistency
 
-4. **`pkg/utils/`** - Utility functions
+5. **`pkg/utils/`** - Utility functions
    - Doxygen comment parsing helpers
    - Path manipulation utilities
    - C++ identifier validation
 
-5. **`cmd/`** - CLI commands using Cobra framework
+6. **`cmd/`** - CLI commands using Cobra framework
    - `parse` - Parse files and output entity structure
    - `extract` - Extract context for specific entities
    - `format` - Reconstruct and format code
    - `update` - Update files with LLM-generated comments
    - `batch-update` - Batch update multiple entities
-   - `ollama` - Built-in Ollama LLM integration with context-aware documentation
+   - `llm` - Built-in LLM integration with context-aware documentation (supports Ollama, OpenAI, Anthropic)
 
 ### Key Design Principles
 
@@ -88,19 +95,48 @@ type Entity struct {
 
 ### Common Patterns
 
-1. **Tree Navigation**:
+1. **Document Creation and Manipulation** (High-level API):
+```go
+// Create document from file or content
+doc, err := document.NewFromFile("header.hpp")
+doc, err := document.NewFromContent("header.hpp", content)
+
+// Find entities
+entity := doc.FindEntity("Namespace::Class::method")
+undocumented := doc.GetUndocumentedEntities()
+classes := doc.FindEntitiesByType(ast.EntityClass)
+
+// Add documentation
+err := doc.SetEntityBrief("Class::method", "Brief description")
+err := doc.AddEntityParam("Class::method", "param", "Parameter description")
+err := doc.SetEntityReturn("Class::method", "Return description")
+
+// Batch operations
+updates := []document.BatchUpdate{{
+    EntityPath: "Class::method",
+    Brief:      &brief,
+    Params:     map[string]string{"param": "description"},
+}}
+err := doc.ApplyBatchUpdates(updates)
+
+// Analysis and validation
+stats := doc.GetDocumentationStats()
+issues := doc.Validate()
+```
+
+2. **Tree Navigation** (Low-level AST):
 ```go
 func (e *Entity) GetPath() []string
 func (e *Entity) FindByPath(path []string) *Entity
 func (tree *ScopeTree) FindEntity(path string) *Entity
 ```
 
-2. **Context Extraction**:
+3. **Context Extraction**:
 ```go
 func (f *Formatter) ExtractEntityContext(entity *Entity, includeParent, includeSiblings bool) string
 ```
 
-3. **Context Configuration**:
+4. **Context Configuration**:
 ```go
 type DoxyllmConfig struct {
     Global string            `yaml:"global,omitempty"`
@@ -109,7 +145,7 @@ type DoxyllmConfig struct {
 func readDoxyllmContext(filePath string) string
 ```
 
-4. **Enhanced Parser Patterns**:
+5. **Enhanced Parser Patterns**:
 ```go
 // Access level tracking with stack
 type accessStackItem struct {
@@ -122,12 +158,29 @@ var accessStack []accessStackItem
 functionRegex = regexp.MustCompile(`^\s*(?:TCB_SPAN_CONSTEXPR11|TCB_SPAN_NODISCARD|TCB_SPAN_ARRAY_CONSTEXPR|\w+\s+)*(\w+)\s*\([^)]*\)\s*(?:const\s*)?(?:noexcept\s*)?(?:=\s*(?:default|delete)\s*)?;?\s*$`)
 ```
 
-5. **Safe Name Conversion** for file paths:
+6. **Safe Name Conversion** for file paths:
 ```bash
 safe_name=$(echo "$entity" | tr ':' '_' | tr ' ' '_')
 ```
 
 ## Development Guidelines
+
+### When Using Document Abstraction (Recommended)
+1. Use `document.NewFromFile()` or `document.NewFromContent()` for high-level operations
+2. Prefer batch operations with `ApplyBatchUpdates()` for multiple changes
+3. Use `GetUndocumentedEntities()` to find documentation gaps
+4. Call `GetDocumentationStats()` to track progress
+5. Use `Validate()` to check documentation quality
+6. Always check `IsModified()` before saving
+7. Handle errors gracefully with meaningful messages
+
+### When Working with Document Package
+- Use entity caching through `FindEntity()` for fast lookups
+- Leverage built-in validation with `Validate()` for quality checks
+- Use `GetEntitySummary()` for detailed entity analysis
+- Set the `Raw` field when creating comments programmatically
+- Use type-specific methods like `AddEntityParam()` for functions
+- Combine related updates in batch operations for efficiency
 
 ### When Adding New Entity Types
 1. Add to `EntityType` enum in `ast/ast.go`
@@ -135,6 +188,7 @@ safe_name=$(echo "$entity" | tr ':' '_' | tr ' ' '_')
 3. Add parsing logic in `parser/parser.go`
 4. Update regex patterns if needed
 5. Add to `GetDocumentableEntities()` if documentable
+6. Update document package methods if specific handling needed
 
 ### When Adding New Commands
 1. Create new file in `cmd/` directory
@@ -142,6 +196,15 @@ safe_name=$(echo "$entity" | tr ':' '_' | tr ' ' '_')
 3. Add command to `root.go` init function
 4. Include proper flag handling and validation
 5. Add comprehensive help text
+6. Consider using document abstraction for complex operations
+
+### When Adding New LLM Providers
+1. Implement the `llm.Provider` interface in `pkg/llm/`
+2. Add provider initialization in `llm.NewProvider()`
+3. Update command flags and help text in `cmd/llm.go`
+4. Add comprehensive tests with mock providers
+5. Update documentation with provider-specific examples
+6. Ensure proper error handling and connection testing
 
 ### When Modifying Parser
 - Always preserve `OriginalText` and formatting
@@ -178,8 +241,10 @@ safe_name=$(echo "$entity" | tr ':' '_' | tr ' ' '_')
 - `examples/example.hpp` - Comprehensive test case
 - `examples/span.hpp` - Real-world complex C++ with templates and macros
 - `examples/.doxyllm` - YAML context configuration for testing
+- `examples/document_demo/` - Document abstraction usage examples
 - `pkg/parser/parser_test.go` - Core parser functionality testing
 - `pkg/parser/regex_test.go` - Regex pattern validation tests
+- `pkg/document/document_test.go` - Document abstraction layer tests
 - `workflow.sh` - Basic workflow demonstration
 - `llm_workflow.sh` - Complete LLM integration example
 
@@ -192,20 +257,26 @@ safe_name=$(echo "$entity" | tr ':' '_' | tr ' ' '_')
 6. **Context Configuration**: YAML parsing, fallback, and context combination
 7. **Regex Patterns**: Modern C++ constructs like constexpr macros
 8. **Access Level Tracking**: Public/private/protected section management
+9. **Document Operations**: High-level API functionality and batch updates
+10. **Validation and Analysis**: Documentation quality checks and statistics
 
 ## LLM Integration Patterns
 
-### Ollama Integration (Built-in)
+### LLM Integration (Built-in)
 ```bash
-# Basic usage with context
-./doxyllm-it ollama --model codegemma:7b --backup header.hpp
+# Basic usage with default provider (Ollama)
+./doxyllm-it llm --model codegemma:7b --backup header.hpp
 
-# Advanced configuration
-./doxyllm-it ollama --url http://remote:11434 --model deepseek-coder:6.7b \
+# Advanced configuration with Ollama
+./doxyllm-it llm --provider ollama --url http://remote:11434 --model deepseek-coder:6.7b \
   --temperature 0.1 --context 8192 --max-entities 5 --dry-run src/
 
+# Use different LLM providers
+./doxyllm-it llm --provider openai --model gpt-4 --api-key YOUR_KEY src/
+./doxyllm-it llm --provider anthropic --model claude-3-sonnet --api-key YOUR_KEY src/
+
 # Process directories with context files
-./doxyllm-it ollama --in-place --format --exclude build,vendor .
+./doxyllm-it llm --format --exclude build,vendor .
 ```
 
 ### Context Configuration
@@ -237,6 +308,25 @@ files:
 
 # Batch update from JSON
 ./doxyllm-it batch-update config.json -i -f
+```
+
+### LLM Documentation Patterns
+```bash
+# Basic LLM documentation with default provider (Ollama)
+./doxyllm-it llm --backup header.hpp
+
+# Dry run to preview changes
+./doxyllm-it llm --dry-run --max-entities 3 src/
+
+# Use specific providers
+./doxyllm-it llm --provider ollama --model deepseek-coder:6.7b src/
+./doxyllm-it llm --provider openai --model gpt-4 --api-key YOUR_KEY src/
+./doxyllm-it llm --provider anthropic --model claude-3-sonnet --api-key YOUR_KEY src/
+
+# Advanced configuration
+./doxyllm-it llm --temperature 0.1 --context 8192 --max-entities 5 \
+  --backup --format --exclude build,vendor src/
+```
 ```
 
 ### JSON Structure for Batch Updates
@@ -289,8 +379,15 @@ doxyllm-it/
 ├── main.go                 # Entry point
 ├── go.mod                  # Dependencies
 ├── cmd/                    # CLI commands
+├── tmp/                    # Temporary files used during test and developement
 ├── pkg/                    # Core packages
-├── examples/               # Test files
+│   ├── ast/               # AST definitions and structures
+│   ├── parser/            # C++ parsing engine
+│   ├── document/          # High-level document abstraction
+│   ├── formatter/         # Code reconstruction
+│   └── utils/             # Utility functions
+├── examples/               # Test files and demos
+│   └── document_demo/     # Document abstraction examples
 └── .github/               # Project metadata
 ```
 
@@ -316,7 +413,7 @@ doxyllm-it/
 
 ## Integration Examples
 
-### Ollama Integration (Recommended)
+### LLM Integration (Recommended)
 ```bash
 # Create project context
 cat > .doxyllm << 'EOF'
@@ -329,8 +426,12 @@ files:
     Extensive use of feature detection macros.
 EOF
 
-# Auto-generate documentation
-./doxyllm-it ollama --model codegemma:7b --backup --in-place span.hpp
+# Auto-generate documentation with default provider (Ollama)
+./doxyllm-it llm --model codegemma:7b --backup span.hpp
+
+# Use different providers
+./doxyllm-it llm --provider openai --model gpt-4 --api-key YOUR_KEY span.hpp
+./doxyllm-it llm --provider anthropic --model claude-3-sonnet --api-key YOUR_KEY span.hpp
 ```
 
 ### Python API Wrapper
@@ -348,8 +449,8 @@ class DoxLLM:
         result = subprocess.run(['./doxyllm-it', 'extract', '-p', '-s', header_file, entity_path])
         return result.stdout
     
-    def generate_docs(self, header_file, model='codegemma:7b'):
-        subprocess.run(['./doxyllm-it', 'ollama', '--model', model, '--backup', header_file])
+    def generate_docs(self, header_file, model='codegemma:7b', provider='ollama'):
+        subprocess.run(['./doxyllm-it', 'llm', '--provider', provider, '--model', model, '--backup', header_file])
     
     def create_context(self, directory, global_context, file_contexts=None):
         config = {'global': global_context}
@@ -360,4 +461,44 @@ class DoxLLM:
             yaml.dump(config, f, default_flow_style=False)
 ```
 
-This tool bridges C++ code analysis with modern LLM-powered documentation generation, maintaining code integrity while enabling automated documentation workflows. The enhanced context system and Ollama integration provide production-ready documentation automation for complex C++ projects.
+### Go API Usage (Document Abstraction)
+```go
+package main
+
+import (
+    "fmt"
+    "doxyllm-it/pkg/document"
+)
+
+func documentHeader(filename string) error {
+    // Create document
+    doc, err := document.NewFromFile(filename)
+    if err != nil {
+        return err
+    }
+    
+    // Find undocumented entities
+    undocumented := doc.GetUndocumentedEntities()
+    fmt.Printf("Found %d undocumented entities\n", len(undocumented))
+    
+    // Document systematically
+    for _, entity := range undocumented {
+        path := entity.GetFullPath()
+        switch entity.Type {
+        case ast.EntityClass:
+            doc.SetEntityBrief(path, "TODO: Add class description")
+        case ast.EntityMethod, ast.EntityFunction:
+            doc.SetEntityBrief(path, "TODO: Add function description")
+            doc.SetEntityReturn(path, "TODO: Add return description")
+        }
+    }
+    
+    // Get final statistics
+    stats := doc.GetDocumentationStats()
+    fmt.Printf("Coverage: %.1f%%\n", stats.DocumentationCoverage)
+    
+    return nil
+}
+```
+
+This tool bridges C++ code analysis with modern LLM-powered documentation generation, maintaining code integrity while enabling automated documentation workflows. The enhanced context system and multi-provider LLM integration (Ollama, OpenAI, Anthropic) provide production-ready documentation automation for complex C++ projects.
