@@ -3,6 +3,7 @@ package llm
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // NewProvider creates a new LLM provider based on the configuration
@@ -31,6 +32,6 @@ func DefaultConfig() *Config {
 		Temperature: 0.1,
 		TopP:        0.9,
 		NumCtx:      4096,
-		Timeout:     120000000000, // 120 seconds in nanoseconds
+		Timeout:     120 * time.Second, // 120 seconds
 	}
 }

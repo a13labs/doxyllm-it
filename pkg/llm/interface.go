@@ -55,14 +55,15 @@ type ModelInfo struct {
 
 // Config represents configuration for LLM providers
 type Config struct {
-	Provider    string                 `yaml:"provider"`    // Provider type (ollama, openai, etc.)
-	URL         string                 `yaml:"url"`         // Provider URL
-	Model       string                 `yaml:"model"`       // Model name
-	Temperature float64                `yaml:"temperature"` // Generation temperature
-	TopP        float64                `yaml:"top_p"`       // Top-p sampling
-	NumCtx      int                    `yaml:"num_ctx"`     // Context window size
-	Timeout     time.Duration          `yaml:"timeout"`     // Request timeout
-	Options     map[string]interface{} `yaml:"options"`     // Provider-specific options
+	Provider       string                 `yaml:"provider"`        // Provider type (ollama, openai, etc.)
+	URL            string                 `yaml:"url"`             // Provider URL
+	Model          string                 `yaml:"model"`           // Model name
+	Temperature    float64                `yaml:"temperature"`     // Generation temperature
+	TopP           float64                `yaml:"top_p"`           // Top-p sampling
+	NumCtx         int                    `yaml:"num_ctx"`         // Context window size
+	Timeout        time.Duration          `yaml:"timeout"`         // Request timeout
+	Options        map[string]interface{} `yaml:"options"`         // Provider-specific options
+	PromptTemplate string                 `yaml:"prompt_template"` // Custom prompt template
 }
 
 // Error types for better error handling

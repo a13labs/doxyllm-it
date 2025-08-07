@@ -16,6 +16,28 @@ type OllamaProvider struct {
 	client *http.Client
 }
 
+const defaultOllamaPromptTemplate = `You are a C++ documentation expert. Generate ONLY the descriptive content for a Doxygen comment for the specific entity requested.
+
+CRITICAL INSTRUCTIONS:
+- Generate ONLY the descriptive text content (brief and detailed descriptions)
+- Do NOT include Doxygen tags (@brief, @param, @return, etc.) - the system will add these automatically
+- Do NOT include comment markers (/** */) - the system will format these
+- Document ONLY the target entity: %s
+- Focus on describing the purpose, behavior, and usage
+- For functions: Describe what it does, not parameters/return (those will be handled separately)
+- For classes: Describe the class responsibility and main purpose
+- For namespaces: Describe the purpose and scope
+
+%s
+
+Context for understanding:
+` + "```cpp\n%s\n```" + `
+
+TARGET ENTITY TO DOCUMENT: %s
+Type: %s
+
+Generate focused descriptive content for this entity (description only, no tags).`
+
 // NewOllamaProvider creates a new Ollama provider instance
 func NewOllamaProvider(config *Config) *OllamaProvider {
 	return &OllamaProvider{
@@ -40,28 +62,6 @@ type OllamaResponse struct {
 	Done     bool   `json:"done"`
 }
 
-const ollamaPromptTemplate = `You are a C++ documentation expert. Generate ONLY the descriptive content for a Doxygen comment for the specific entity requested.
-
-CRITICAL INSTRUCTIONS:
-- Generate ONLY the descriptive text content (brief and detailed descriptions)
-- Do NOT include Doxygen tags (@brief, @param, @return, etc.) - the system will add these automatically
-- Do NOT include comment markers (/** */) - the system will format these
-- Document ONLY the target entity: %s
-- Focus on describing the purpose, behavior, and usage
-- For functions: Describe what it does, not parameters/return (those will be handled separately)
-- For classes: Describe the class responsibility and main purpose
-- For namespaces: Describe the purpose and scope
-
-%s
-
-Context for understanding:
-` + "```cpp\n%s\n```" + `
-
-TARGET ENTITY TO DOCUMENT: %s
-Type: %s
-
-Generate focused descriptive content for this entity (description only, no tags).`
-
 // GenerateComment generates a documentation comment using Ollama
 func (p *OllamaProvider) GenerateComment(ctx context.Context, request CommentRequest) (*CommentResponse, error) {
 	// Build additional context section
@@ -70,9 +70,15 @@ func (p *OllamaProvider) GenerateComment(ctx context.Context, request CommentReq
 		contextSection = fmt.Sprintf("ADDITIONAL PROJECT CONTEXT:\n%s\n", request.AdditionalContext)
 	}
 
+	// Determine which prompt template to use
+	promptTemplate := defaultOllamaPromptTemplate
+	if p.config.PromptTemplate != "" {
+		promptTemplate = p.config.PromptTemplate
+	}
+
 	// Create the prompt
 	prompt := fmt.Sprintf(
-		ollamaPromptTemplate,
+		promptTemplate,
 		request.EntityName,
 		contextSection,
 		request.Context,

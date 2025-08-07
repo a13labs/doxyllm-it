@@ -195,7 +195,14 @@ func (d *Document) updateCommentRaw(comment *ast.DoxygenComment) {
 		if len(commentLines) > 0 {
 			comment.Raw = strings.Join(commentLines, "\n")
 		} else {
-			comment.Raw = "/** Programmatically generated comment */"
+			// Generate a more meaningful placeholder based on entity type and name
+			entityType := "entity"
+			entityName := ""
+			if entityName != "" {
+				comment.Raw = fmt.Sprintf("/** TODO: Add Doxygen comment for %s '%s' */", entityType, entityName)
+			} else {
+				comment.Raw = fmt.Sprintf("/** TODO: Add Doxygen comment for %s */", entityType)
+			}
 		}
 	}
 }
