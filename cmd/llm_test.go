@@ -373,7 +373,7 @@ namespace TestNamespace {
 		llmDryRun = originalDryRun
 		llmMaxEntities = originalMaxEntities
 	}()
-	
+
 	llmDryRun = true // Use dry run to avoid file modification in tests
 	llmMaxEntities = 0
 
@@ -469,7 +469,7 @@ func BenchmarkProcessFile(b *testing.B) {
 		llmDryRun = originalDryRun
 		llmMaxEntities = originalMaxEntities
 	}()
-	
+
 	llmDryRun = true
 	llmMaxEntities = 10 // Limit for faster benchmarks
 
