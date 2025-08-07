@@ -11,15 +11,16 @@ import (
 
 // Parser represents the C++ parser
 type Parser struct {
-	content        string
-	lines          []string
-	current        int
-	position       ast.Position
-	scopeStack     []*ast.Entity
-	tree           *ast.ScopeTree
-	accessStack    []ast.AccessLevel   // Track access levels for each scope
-	pendingComment *ast.DoxygenComment // Comment waiting to be associated with next entity
-	defines        map[string]string   // Preprocessor defines
+	content         string
+	lines           []string
+	current         int
+	position        ast.Position
+	scopeStack      []*ast.Entity
+	tree            *ast.ScopeTree
+	accessStack     []ast.AccessLevel   // Track access levels for each scope
+	pendingComment  *ast.DoxygenComment // Comment waiting to be associated with next entity
+	defines         map[string]string   // Preprocessor defines
+	pendingTemplate string              // Template declaration waiting for next entity
 }
 
 // New creates a new parser instance
@@ -62,8 +63,11 @@ func (p *Parser) Parse(filename, content string) (*ast.ScopeTree, error) {
 			continue
 		}
 
-		// Skip other comments
+		// Handle regular comments as entities
 		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
+			if err := p.parseComment(line); err != nil {
+				return nil, fmt.Errorf("error parsing comment at line %d: %w", p.current+1, err)
+			}
 			p.nextLine()
 			continue
 		}
@@ -74,6 +78,23 @@ func (p *Parser) Parse(filename, content string) (*ast.ScopeTree, error) {
 		}
 
 		p.nextLine()
+	}
+
+	// Handle any remaining pending comment as a file-level comment
+	if p.pendingComment != nil {
+		entity := &ast.Entity{
+			Type:         ast.EntityComment, // Use comment type for file-level comments
+			Name:         "file-comment",
+			FullName:     "file-comment",
+			Signature:    "",
+			SourceRange:  p.pendingComment.Range,
+			HeaderRange:  p.pendingComment.Range,
+			OriginalText: p.pendingComment.Raw,
+			Children:     make([]*ast.Entity, 0),
+			Comment:      p.pendingComment,
+		}
+		p.tree.Root.AddChild(entity)
+		p.pendingComment = nil
 	}
 
 	return p.tree, nil
@@ -88,15 +109,14 @@ func (p *Parser) parseLine(line string) error {
 		return p.parseDefine(line)
 	}
 
-	// Skip conditional compilation directives but continue parsing content
-	if strings.HasPrefix(trimmed, "#if") || strings.HasPrefix(trimmed, "#else") ||
-		strings.HasPrefix(trimmed, "#endif") || strings.HasPrefix(trimmed, "#elif") {
-		return nil // Ignore conditionals, parse everything for documentation
+	// Handle other preprocessor directives
+	if p.isPreprocessor(trimmed) {
+		return p.parsePreprocessor(line)
 	}
 
-	// Skip other preprocessor directives and comments
-	if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
-		return nil
+	// Parse file-level comments as entities
+	if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
+		return p.parseComment(line)
 	}
 
 	// Resolve defines in the line before parsing
@@ -106,6 +126,9 @@ func (p *Parser) parseLine(line string) error {
 	// Parse different constructs with resolved content
 	if p.isAccessSpecifier(resolvedTrimmed) {
 		return p.parseAccessSpecifier(resolvedTrimmed)
+	}
+	if p.isTemplate(resolvedTrimmed) {
+		return p.handleTemplate(resolvedLine)
 	}
 	if p.isNamespace(resolvedTrimmed) {
 		return p.parseNamespace(resolvedLine)
@@ -231,21 +254,113 @@ func (p *Parser) parseDefine(line string) error {
 			value = strings.TrimSpace(matches[2])
 		}
 
-		// Store in defines map
+		// Store in defines map for resolution
 		p.defines[name] = value
+
+		// Create an entity for the define to preserve it in reconstruction
+		entity := &ast.Entity{
+			Type:         ast.EntityPreprocessor,
+			Name:         name,
+			FullName:     name,
+			Signature:    fullDefine,
+			SourceRange:  p.getCurrentRange(),
+			HeaderRange:  p.getCurrentRange(),
+			OriginalText: line,
+			Children:     make([]*ast.Entity, 0),
+		}
+
+		p.addEntity(entity)
 	}
 
 	return nil
 }
 
+// parseComment parses a file-level comment
+func (p *Parser) parseComment(line string) error {
+	trimmed := strings.TrimSpace(line)
+
+	// Extract a meaningful name for the comment
+	name := "comment"
+
+	// Try to extract first meaningful words from comment content
+	content := ""
+	if strings.HasPrefix(trimmed, "//") {
+		content = strings.TrimSpace(strings.TrimPrefix(trimmed, "//"))
+	} else if strings.HasPrefix(trimmed, "/*") {
+		content = strings.TrimSpace(strings.TrimPrefix(strings.TrimSuffix(trimmed, "*/"), "/*"))
+	}
+
+	// Use first few words as name if available
+	if content != "" {
+		words := strings.Fields(content)
+		if len(words) > 0 {
+			if len(words) == 1 {
+				name = words[0]
+			} else {
+				name = strings.Join(words[:min(3, len(words))], "_")
+			}
+			// Clean up name to be a valid identifier
+			name = strings.ReplaceAll(name, " ", "_")
+			name = strings.ReplaceAll(name, ".", "")
+			name = strings.ReplaceAll(name, ",", "")
+			if name == "" {
+				name = "comment"
+			}
+		}
+	}
+
+	entity := &ast.Entity{
+		Type:         ast.EntityComment,
+		Name:         name,
+		FullName:     name, // Comments are global
+		Signature:    trimmed,
+		SourceRange:  p.getCurrentRange(),
+		HeaderRange:  p.getCurrentRange(),
+		OriginalText: line,
+		Children:     make([]*ast.Entity, 0),
+	}
+
+	p.addEntity(entity)
+	return nil
+}
+
+// parsePreprocessor parses a preprocessor directive (except #define)
+func (p *Parser) parsePreprocessor(line string) error {
+	trimmed := strings.TrimSpace(line)
+
+	// Extract directive name for entity naming
+	parts := strings.Fields(trimmed)
+	name := trimmed // Default to full line
+	if len(parts) > 0 {
+		name = parts[0] // Use the directive name (e.g., "#pragma", "#include")
+	}
+
+	entity := &ast.Entity{
+		Type:         ast.EntityPreprocessor,
+		Name:         name,
+		FullName:     name, // Preprocessor directives are global
+		Signature:    trimmed,
+		SourceRange:  p.getCurrentRange(),
+		HeaderRange:  p.getCurrentRange(),
+		OriginalText: line,
+		Children:     make([]*ast.Entity, 0),
+	}
+
+	p.addEntity(entity)
+	return nil
+}
+
 // Regular expressions for identifying C++ constructs
 var (
-	defineRegex         = regexp.MustCompile(`^\s*#\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(.*)$`)
-	namespaceRegex      = regexp.MustCompile(`^\s*namespace\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{?`)
-	classRegex          = regexp.MustCompile(`^\s*(?:template\s*<[^>]*>\s*)?.*?class\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
-	structRegex         = regexp.MustCompile(`^\s*(?:template\s*<[^>]*>\s*)?.*?struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
-	enumRegex           = regexp.MustCompile(`^\s*.*?enum\s+(?:class\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
-	functionRegex       = regexp.MustCompile(`^\s*(?:.*\s+)?([a-zA-Z_~][a-zA-Z0-9_]*)\s*\([^{]*\)\s*(?:const\s*)?(?:override\s*)?(?:final\s*)?(?:noexcept\s*)?(?:\{|;)`)
+	defineRegex       = regexp.MustCompile(`^\s*#\s*define\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(.*)$`)
+	preprocessorRegex = regexp.MustCompile(`^\s*#\s*(pragma|include|ifndef|ifdef|if|else|elif|endif|define|undef).*$`)
+	templateRegex     = regexp.MustCompile(`^\s*template\s*<.*`)
+	namespaceRegex    = regexp.MustCompile(`^\s*namespace\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\{?`)
+	classRegex        = regexp.MustCompile(`^\s*.*?class\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
+	structRegex       = regexp.MustCompile(`^\s*.*?struct\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
+	enumRegex         = regexp.MustCompile(`^\s*.*?enum\s+(?:class\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::\s*[^{]*?)?\s*\{?`)
+	// Function regex that captures the function name including template specializations
+	functionRegex       = regexp.MustCompile(`(~?[a-zA-Z_][a-zA-Z0-9_]*(?:<[^>]*>)?)\s*\([^)]*\)\s*(?:->\s*[^{;]*)?(?:const\s*)?(?:override\s*)?(?:final\s*)?(?:noexcept\s*)?(?:\{|;)`)
 	variableRegex       = regexp.MustCompile(`^\s*(?:(?:static|const|constexpr|mutable|extern)\s+)*[a-zA-Z_][a-zA-Z0-9_:<>*&\s]+\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=.*?)?;`)
 	typedefRegex        = regexp.MustCompile(`^\s*typedef\s+.*?\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*;`)
 	usingRegex          = regexp.MustCompile(`^\s*using\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=`)
@@ -255,6 +370,47 @@ var (
 // isDefine checks if line contains a #define directive
 func (p *Parser) isDefine(line string) bool {
 	return defineRegex.MatchString(line)
+}
+
+// isPreprocessor checks if line contains a preprocessor directive (except #define)
+func (p *Parser) isPreprocessor(line string) bool {
+	return preprocessorRegex.MatchString(line)
+}
+
+// isTemplate checks if line contains a template declaration
+func (p *Parser) isTemplate(line string) bool {
+	return templateRegex.MatchString(line)
+}
+
+// handleTemplate handles multi-line template declarations
+func (p *Parser) handleTemplate(line string) error {
+	templateLine := strings.TrimSpace(line)
+
+	// Check if this is already a complete template (single line)
+	openCount := strings.Count(templateLine, "<")
+	closeCount := strings.Count(templateLine, ">")
+
+	if openCount <= closeCount {
+		// Template is complete on this line
+		p.pendingTemplate = templateLine
+		return nil
+	}
+
+	// Template spans multiple lines, collect until complete
+	for p.current+1 < len(p.lines) {
+		p.nextLine()
+		nextLine := strings.TrimSpace(p.lines[p.current])
+		templateLine += " " + nextLine
+		closeCount += strings.Count(nextLine, ">")
+
+		// Stop once we have balanced brackets
+		if openCount <= closeCount {
+			break
+		}
+	}
+
+	p.pendingTemplate = templateLine
+	return nil
 }
 
 // isNamespace checks if line contains a namespace declaration
@@ -340,11 +496,25 @@ func (p *Parser) parseNamespace(line string) error {
 	}
 
 	name := matches[1]
+
+	// Build complete signature, looking ahead for opening brace if needed
+	signature := strings.TrimSpace(line)
+	hasOpeningBrace := strings.Contains(line, "{")
+
+	// If no opening brace on current line, check next line
+	if !hasOpeningBrace && p.current+1 < len(p.lines) {
+		nextLine := strings.TrimSpace(p.lines[p.current+1])
+		if nextLine == "{" {
+			signature += "\n{"
+			hasOpeningBrace = true
+		}
+	}
+
 	entity := &ast.Entity{
 		Type:         ast.EntityNamespace,
 		Name:         name,
 		FullName:     p.buildFullName(name),
-		Signature:    strings.TrimSpace(line),
+		Signature:    signature,
 		SourceRange:  p.getCurrentRange(),
 		HeaderRange:  p.getCurrentRange(),
 		OriginalText: line,
@@ -353,9 +523,13 @@ func (p *Parser) parseNamespace(line string) error {
 
 	p.addEntity(entity)
 
-	// If line contains opening brace, enter scope
-	if strings.Contains(line, "{") {
+	// If opening brace was found, enter scope
+	if hasOpeningBrace {
 		p.enterScope(entity)
+		// If brace was on next line, skip it during parsing
+		if !strings.Contains(line, "{") && p.current+1 < len(p.lines) && strings.TrimSpace(p.lines[p.current+1]) == "{" {
+			p.nextLine() // Skip the brace line
+		}
 	}
 
 	return nil
@@ -371,11 +545,20 @@ func (p *Parser) parseClass(line string) error {
 	}
 
 	name := matches[1]
+
+	// Build complete signature including any pending template
+	signature := strings.TrimSpace(resolvedLine)
+	if p.pendingTemplate != "" {
+		// Trim the template line to remove any existing indentation
+		templateLine := strings.TrimSpace(p.pendingTemplate)
+		signature = templateLine + "\n" + signature
+	}
+
 	entity := &ast.Entity{
 		Type:         ast.EntityClass,
 		Name:         name,
 		FullName:     p.buildFullName(name),
-		Signature:    strings.TrimSpace(resolvedLine),
+		Signature:    signature,
 		AccessLevel:  ast.AccessPrivate, // Default for class
 		SourceRange:  p.getCurrentRange(),
 		HeaderRange:  p.getCurrentRange(),
@@ -384,6 +567,7 @@ func (p *Parser) parseClass(line string) error {
 	}
 
 	p.addEntity(entity)
+	p.pendingTemplate = "" // Clear the pending template
 
 	// If resolved line contains opening brace, enter scope
 	if strings.Contains(resolvedLine, "{") {
@@ -401,11 +585,20 @@ func (p *Parser) parseStruct(line string) error {
 	}
 
 	name := matches[1]
+
+	// Build complete signature including any pending template
+	signature := strings.TrimSpace(line)
+	if p.pendingTemplate != "" {
+		// Trim the template line to remove any existing indentation
+		templateLine := strings.TrimSpace(p.pendingTemplate)
+		signature = templateLine + "\n" + signature
+	}
+
 	entity := &ast.Entity{
 		Type:         ast.EntityStruct,
 		Name:         name,
 		FullName:     p.buildFullName(name),
-		Signature:    strings.TrimSpace(line),
+		Signature:    signature,
 		AccessLevel:  ast.AccessPublic, // Default for struct
 		SourceRange:  p.getCurrentRange(),
 		HeaderRange:  p.getCurrentRange(),
@@ -414,6 +607,7 @@ func (p *Parser) parseStruct(line string) error {
 	}
 
 	p.addEntity(entity)
+	p.pendingTemplate = "" // Clear the pending template
 
 	// If line contains opening brace, enter scope
 	if strings.Contains(line, "{") {
@@ -462,26 +656,49 @@ func (p *Parser) parseFunction(line string) error {
 	}
 
 	name := matches[1]
+	originalName := name // Keep original for destructor check
+
+	// For template specializations, extract just the base function name
+	if strings.Contains(name, "<") {
+		if idx := strings.Index(name, "<"); idx > 0 {
+			name = name[:idx]
+		}
+	}
+
 	entityType := ast.EntityFunction
 
 	// Determine if it's a method (inside a class/struct)
 	if p.getCurrentScope().Type == ast.EntityClass || p.getCurrentScope().Type == ast.EntityStruct {
 		entityType = ast.EntityMethod
 
-		// Check if it's a constructor or destructor
-		if name == p.getCurrentScope().Name {
-			entityType = ast.EntityConstructor
-		} else if strings.HasPrefix(name, "~") {
+		// Check if it's a destructor first (check original name with ~)
+		if strings.HasPrefix(originalName, "~") {
 			entityType = ast.EntityDestructor
-			name = strings.TrimPrefix(name, "~")
+			name = strings.TrimPrefix(originalName, "~")
+			// Also strip template args from destructor name if any
+			if strings.Contains(name, "<") {
+				if idx := strings.Index(name, "<"); idx > 0 {
+					name = name[:idx]
+				}
+			}
+		} else if name == p.getCurrentScope().Name {
+			entityType = ast.EntityConstructor
 		}
+	}
+
+	// Build complete signature including any pending template
+	signature := strings.TrimSpace(resolvedLine)
+	if p.pendingTemplate != "" {
+		// Trim the template line to remove any existing indentation
+		templateLine := strings.TrimSpace(p.pendingTemplate)
+		signature = templateLine + "\n" + signature
 	}
 
 	entity := &ast.Entity{
 		Type:         entityType,
 		Name:         name,
 		FullName:     p.buildFullName(name),
-		Signature:    strings.TrimSpace(resolvedLine),
+		Signature:    signature,
 		IsStatic:     strings.Contains(resolvedLine, "static"),
 		IsVirtual:    strings.Contains(resolvedLine, "virtual"),
 		IsInline:     strings.Contains(resolvedLine, "inline"),
@@ -498,6 +715,7 @@ func (p *Parser) parseFunction(line string) error {
 	}
 
 	p.addEntity(entity)
+	p.pendingTemplate = "" // Clear the pending template
 
 	return nil
 }
@@ -566,6 +784,14 @@ func (p *Parser) parseTypedef(line string) error {
 
 // parseUsing parses a using declaration
 func (p *Parser) parseUsing(line string) error {
+	// Build complete signature including any pending template
+	signature := strings.TrimSpace(line)
+	if p.pendingTemplate != "" {
+		// Trim the template line to remove any existing indentation
+		templateLine := strings.TrimSpace(p.pendingTemplate)
+		signature = templateLine + "\n" + signature
+	}
+
 	// Try regular using declaration first
 	matches := usingRegex.FindStringSubmatch(line)
 	if len(matches) >= 2 {
@@ -574,7 +800,7 @@ func (p *Parser) parseUsing(line string) error {
 			Type:         ast.EntityUsing,
 			Name:         name,
 			FullName:     p.buildFullName(name),
-			Signature:    strings.TrimSpace(line),
+			Signature:    signature,
 			SourceRange:  p.getCurrentRange(),
 			HeaderRange:  p.getCurrentRange(),
 			OriginalText: line,
@@ -582,6 +808,7 @@ func (p *Parser) parseUsing(line string) error {
 		}
 
 		p.addEntity(entity)
+		p.pendingTemplate = "" // Clear the pending template
 		return nil
 	}
 
@@ -593,7 +820,7 @@ func (p *Parser) parseUsing(line string) error {
 			Type:         ast.EntityUsing,
 			Name:         name,
 			FullName:     p.buildFullName(name),
-			Signature:    strings.TrimSpace(line),
+			Signature:    signature,
 			SourceRange:  p.getCurrentRange(),
 			HeaderRange:  p.getCurrentRange(),
 			OriginalText: line,
@@ -601,6 +828,7 @@ func (p *Parser) parseUsing(line string) error {
 		}
 
 		p.addEntity(entity)
+		p.pendingTemplate = "" // Clear the pending template
 		return nil
 	}
 
@@ -625,6 +853,21 @@ func (p *Parser) parseAccessSpecifier(line string) error {
 	if len(p.accessStack) > 0 {
 		p.accessStack[len(p.accessStack)-1] = accessLevel
 	}
+
+	// Create an entity for the access specifier to preserve it in reconstruction
+	entity := &ast.Entity{
+		Type:         ast.EntityAccessSpecifier,
+		Name:         strings.TrimSuffix(line, ":"), // Remove the colon for the name
+		FullName:     line,
+		Signature:    line,
+		AccessLevel:  accessLevel,
+		SourceRange:  p.getCurrentRange(),
+		HeaderRange:  p.getCurrentRange(),
+		OriginalText: line,
+		Children:     make([]*ast.Entity, 0),
+	}
+
+	p.addEntity(entity)
 
 	return nil
 }
@@ -717,6 +960,16 @@ func (p *Parser) replaceWholeWord(text, oldWord, newWord string) string {
 	}
 
 	return result
+}
+
+// Helper functions
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // isAlphaNumericOrUnderscore checks if character is alphanumeric or underscore

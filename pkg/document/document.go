@@ -510,6 +510,50 @@ func (d *Document) ApplyBatchUpdates(updates []BatchUpdate) error {
 
 // File Operations
 
+// validateReconstructedCode performs basic validation on reconstructed code
+func (d *Document) validateReconstructedCode(code string) error {
+	lines := strings.Split(code, "\n")
+
+	// Basic validation checks
+	openBraces := 0
+	closeBraces := 0
+	hasIncludes := strings.Contains(d.content, "#include") // Check if original had includes
+	hasIncludesInReconstructed := strings.Contains(code, "#include")
+
+	for _, line := range lines {
+		// Count braces
+		openBraces += strings.Count(line, "{")
+		closeBraces += strings.Count(line, "}")
+	}
+
+	// Validate brace matching
+	if openBraces != closeBraces {
+		return fmt.Errorf("brace mismatch: %d opening braces, %d closing braces", openBraces, closeBraces)
+	}
+
+	// Check if includes were lost
+	if hasIncludes && !hasIncludesInReconstructed {
+		return fmt.Errorf("include statements missing from reconstructed code")
+	}
+
+	// Check if code is too short (possible content loss)
+	if len(code) < len(d.content)/3 {
+		return fmt.Errorf("reconstructed code appears too short (possible content loss)")
+	}
+
+	// Check for significant content differences (use semicolon counting as better heuristic)
+	// Each method/function declaration typically ends with a semicolon
+	originalStatements := strings.Count(d.content, ";")
+	reconstructedStatements := strings.Count(code, ";")
+
+	// If we lost any statements and it's a significant difference, it's likely content loss
+	if originalStatements > 2 && reconstructedStatements < originalStatements {
+		return fmt.Errorf("significant content differences detected (possible content loss): %d vs %d statements", originalStatements, reconstructedStatements)
+	}
+
+	return nil
+}
+
 // Save saves the document back to its original file (if loaded from file)
 func (d *Document) Save() error {
 	if d.filename == "" {
@@ -522,6 +566,11 @@ func (d *Document) Save() error {
 func (d *Document) SaveAs(filename string) error {
 	// Reconstruct the code with updated comments using the formatter
 	reconstructedCode := d.formatter.ReconstructCode(d.tree)
+
+	// Validate reconstruction
+	if err := d.validateReconstructedCode(reconstructedCode); err != nil {
+		return fmt.Errorf("reconstruction validation failed: %w", err)
+	}
 
 	// Write the reconstructed code to the file
 	err := os.WriteFile(filename, []byte(reconstructedCode), 0644)

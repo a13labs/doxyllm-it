@@ -57,16 +57,72 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 		result.WriteString("\n")
 	}
 
-	// Add the entity declaration
+	// For comment entities, only output the comment, skip signature and other handling
+	if entity.Type == ast.EntityComment {
+		return result.String()
+	}
+
+	// Add the entity declaration with proper multi-line indentation
 	indent := f.getIndent(depth)
-	result.WriteString(indent + entity.Signature)
+	signature := entity.Signature
+
+	// Handle multi-line signatures by indenting each line properly
+	if strings.Contains(signature, "\n") {
+		lines := strings.Split(signature, "\n")
+		for i, line := range lines {
+			if i == 0 {
+				result.WriteString(indent + line)
+			} else {
+				result.WriteString("\n" + indent + line)
+			}
+		}
+	} else {
+		result.WriteString(indent + signature)
+	}
 
 	// Handle different entity types
 	switch entity.Type {
-	case ast.EntityNamespace, ast.EntityClass, ast.EntityStruct, ast.EntityEnum:
+	case ast.EntityNamespace:
+		// Handle namespace specifically to add proper closing
+		if len(entity.Children) > 0 {
+			// Check if signature already contains opening brace
+			if !strings.HasSuffix(strings.TrimSpace(entity.Signature), "{") {
+				// If signature contains newline (multi-line), put brace on new line
+				if strings.Contains(entity.Signature, "\n") {
+					result.WriteString("\n" + indent + "{")
+				} else {
+					// Single line signature, add brace on same line
+					result.WriteString(" {")
+				}
+			}
+			result.WriteString("\n")
+
+			// Add children
+			for _, child := range entity.Children {
+				result.WriteString(f.reconstructEntity(child, depth+1))
+			}
+
+			// Add closing brace with namespace comment
+			result.WriteString(indent + "} // namespace " + entity.Name)
+		} else {
+			// Empty namespace, just add opening and closing braces
+			if !strings.HasSuffix(strings.TrimSpace(entity.Signature), "{") {
+				if strings.Contains(entity.Signature, "\n") {
+					result.WriteString("\n" + indent + "{\n" + indent + "} // namespace " + entity.Name)
+				} else {
+					result.WriteString(" {\n" + indent + "} // namespace " + entity.Name)
+				}
+			}
+		}
+
+	case ast.EntityClass, ast.EntityStruct, ast.EntityEnum:
 		// These entities have bodies with children
 		if len(entity.Children) > 0 {
-			result.WriteString(" {\n")
+			// Check if signature already contains opening brace
+			if !strings.HasSuffix(strings.TrimSpace(entity.Signature), "{") {
+				result.WriteString(" {")
+			}
+			result.WriteString("\n")
 
 			// Add children
 			for _, child := range entity.Children {
@@ -76,11 +132,9 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 			result.WriteString(indent + "}")
 		}
 
-		// Add semicolon for class/struct if needed
+		// Add semicolon for class/struct (always required in C++)
 		if entity.Type == ast.EntityClass || entity.Type == ast.EntityStruct {
-			if !strings.HasSuffix(entity.Signature, "{") {
-				result.WriteString(";")
-			}
+			result.WriteString(";")
 		}
 
 	case ast.EntityFunction, ast.EntityMethod, ast.EntityConstructor, ast.EntityDestructor:
@@ -88,6 +142,18 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 		if !strings.HasSuffix(entity.Signature, ";") && entity.BodyRange == nil {
 			result.WriteString(";")
 		}
+
+	case ast.EntityPreprocessor:
+		// Preprocessor directives don't need semicolons or additional formatting
+		// They are output as-is
+
+	case ast.EntityComment:
+		// File-level comments are output as their comment content only
+		// Remove the newline that would be added by default since comment formatting adds its own
+
+	case ast.EntityAccessSpecifier:
+		// Access specifiers don't need semicolons
+		// They are output as-is with their colon
 
 	default:
 		// Other entities typically end with semicolon

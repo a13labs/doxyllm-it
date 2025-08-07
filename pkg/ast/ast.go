@@ -37,6 +37,9 @@ const (
 	EntityUsing
 	EntityMacro
 	EntityTemplate
+	EntityPreprocessor
+	EntityComment
+	EntityAccessSpecifier
 )
 
 func (et EntityType) String() string {
@@ -69,6 +72,12 @@ func (et EntityType) String() string {
 		return "macro"
 	case EntityTemplate:
 		return "template"
+	case EntityPreprocessor:
+		return "preprocessor"
+	case EntityComment:
+		return "comment"
+	case EntityAccessSpecifier:
+		return "access"
 	default:
 		return "unknown"
 	}

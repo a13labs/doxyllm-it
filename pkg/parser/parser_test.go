@@ -8,6 +8,27 @@ import (
 	"doxyllm-it/pkg/ast"
 )
 
+// Helper functions for tests
+func getNonAccessSpecifierChildren(entity *ast.Entity) []*ast.Entity {
+	var result []*ast.Entity
+	for _, child := range entity.Children {
+		if child.Type != ast.EntityAccessSpecifier {
+			result = append(result, child)
+		}
+	}
+	return result
+}
+
+func getAccessSpecifiers(entity *ast.Entity) []*ast.Entity {
+	var result []*ast.Entity
+	for _, child := range entity.Children {
+		if child.Type == ast.EntityAccessSpecifier {
+			result = append(result, child)
+		}
+	}
+	return result
+}
+
 func TestBasicNamespaceParsing(t *testing.T) {
 	content := `namespace TestNamespace {
     class TestClass {
@@ -44,20 +65,27 @@ func TestBasicNamespaceParsing(t *testing.T) {
 		t.Errorf("Expected class TestClass, got %s %s", class.Type, class.Name)
 	}
 
-	// Class should have 2 members
-	if len(class.Children) != 2 {
-		t.Errorf("Expected 2 children in class, got %d", len(class.Children))
+	// Get only non-access-specifier children (actual members)
+	members := getNonAccessSpecifierChildren(class)
+	if len(members) != 2 {
+		t.Errorf("Expected 2 members in class, got %d", len(members))
 	}
 
 	// Check access levels
-	method := class.Children[0]
+	method := members[0]
 	if method.AccessLevel != ast.AccessPublic {
 		t.Errorf("Expected public method, got %s", method.AccessLevel)
 	}
 
-	field := class.Children[1]
+	field := members[1]
 	if field.AccessLevel != ast.AccessPrivate {
 		t.Errorf("Expected private field, got %s", field.AccessLevel)
+	}
+
+	// Verify access specifiers are present
+	accessSpecs := getAccessSpecifiers(class)
+	if len(accessSpecs) != 2 {
+		t.Errorf("Expected 2 access specifiers, got %d", len(accessSpecs))
 	}
 }
 
@@ -80,8 +108,11 @@ protected:
 	}
 
 	class := tree.Root.Children[0]
-	if len(class.Children) != 5 {
-		t.Errorf("Expected 5 children, got %d", len(class.Children))
+
+	// Get only non-access-specifier children (actual members)
+	members := getNonAccessSpecifierChildren(class)
+	if len(members) != 5 {
+		t.Errorf("Expected 5 members, got %d", len(members))
 	}
 
 	// Check access levels in order
@@ -93,9 +124,23 @@ protected:
 		ast.AccessProtected, // protectedMethod
 	}
 
-	for i, child := range class.Children {
-		if child.AccessLevel != expectedAccess[i] {
-			t.Errorf("Child %d: expected %s, got %s", i, expectedAccess[i], child.AccessLevel)
+	for i, member := range members {
+		if member.AccessLevel != expectedAccess[i] {
+			t.Errorf("Member %d: expected %s, got %s", i, expectedAccess[i], member.AccessLevel)
+		}
+	}
+
+	// Verify access specifiers are present
+	accessSpecs := getAccessSpecifiers(class)
+	if len(accessSpecs) != 3 {
+		t.Errorf("Expected 3 access specifiers, got %d", len(accessSpecs))
+	}
+
+	// Verify access specifiers have correct names
+	expectedAccessSpecNames := []string{"public", "private", "protected"}
+	for i, spec := range accessSpecs {
+		if i < len(expectedAccessSpecNames) && spec.Name != expectedAccessSpecNames[i] {
+			t.Errorf("Access specifier %d: expected %s, got %s", i, expectedAccessSpecNames[i], spec.Name)
 		}
 	}
 }
@@ -132,6 +177,242 @@ struct TemplateStruct {
 	templateStruct := tree.Root.Children[1]
 	if templateStruct.Type != ast.EntityStruct || templateStruct.Name != "TemplateStruct" {
 		t.Errorf("Expected template struct TemplateStruct, got %s %s", templateStruct.Type, templateStruct.Name)
+	}
+}
+
+func TestAdvancedTemplateParsing(t *testing.T) {
+	content := `// Test template functions
+template <typename T>
+T add(T a, T b) {
+    return a + b;
+}
+
+template <typename T, typename U>
+auto multiply(T a, U b) -> decltype(a * b);
+
+// Test template using declarations
+template <typename T>
+using Vector = std::vector<T>;
+
+template <class Key, class Value>
+using Map = std::unordered_map<Key, Value>;
+
+// Test complex template class
+template <typename T, size_t N = 10>
+class Container {
+public:
+    template <typename U>
+    void insert(const U& item);
+};`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Filter out comment entities to get only the actual code entities
+	var codeEntities []*ast.Entity
+	for _, child := range tree.Root.Children {
+		if child.Type != ast.EntityComment {
+			codeEntities = append(codeEntities, child)
+		}
+	}
+
+	// Should have: 2 template functions + 2 template using + 1 template class = 5 entities
+	if len(codeEntities) != 5 {
+		t.Errorf("Expected 5 code entities, got %d", len(codeEntities))
+		for i, child := range tree.Root.Children {
+			t.Logf("Child %d: %s %s", i, child.Type, child.Name)
+		}
+	}
+
+	// Check template function
+	templateFunc := codeEntities[0]
+	if templateFunc.Type != ast.EntityFunction || templateFunc.Name != "add" {
+		t.Errorf("Expected template function add, got %s %s", templateFunc.Type, templateFunc.Name)
+	}
+
+	// Check auto return template function
+	autoFunc := codeEntities[1]
+	if autoFunc.Type != ast.EntityFunction || autoFunc.Name != "multiply" {
+		t.Errorf("Expected template function multiply, got %s %s", autoFunc.Type, autoFunc.Name)
+		t.Logf("Debug: autoFunc signature: %s", autoFunc.Signature)
+	}
+
+	// Check template using declarations
+	templateUsing1 := codeEntities[2]
+	if templateUsing1.Type != ast.EntityUsing || templateUsing1.Name != "Vector" {
+		t.Errorf("Expected template using Vector, got %s %s", templateUsing1.Type, templateUsing1.Name)
+	}
+
+	templateUsing2 := codeEntities[3]
+	if templateUsing2.Type != ast.EntityUsing || templateUsing2.Name != "Map" {
+		t.Errorf("Expected template using Map, got %s %s", templateUsing2.Type, templateUsing2.Name)
+	}
+
+	// Check template class with default parameter
+	templateClass := codeEntities[4]
+	if templateClass.Type != ast.EntityClass || templateClass.Name != "Container" {
+		t.Errorf("Expected template class Container, got %s %s", templateClass.Type, templateClass.Name)
+	}
+
+	// Check that template class has the member template function (ignoring access specifiers)
+	members := getNonAccessSpecifierChildren(templateClass)
+	if len(members) != 1 {
+		t.Errorf("Expected 1 member in template class, got %d", len(members))
+	}
+
+	memberFunc := members[0]
+	if memberFunc.Type != ast.EntityMethod || memberFunc.Name != "insert" {
+		t.Errorf("Expected member template method insert, got %s %s", memberFunc.Type, memberFunc.Name)
+	}
+}
+
+func TestPreprocessorDirectiveParsing(t *testing.T) {
+	content := `#pragma once
+#include <iostream>
+#include "local_header.h"
+
+#define MAX_SIZE 1024
+#ifdef DEBUG
+#define LOG(x) std::cout << x << std::endl
+#else
+#define LOG(x)
+#endif
+
+// File-level comment
+/* Multi-line comment
+   about the file */
+
+namespace MyNamespace {
+    class MyClass {
+    public:
+        void method();
+    };
+}`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Count preprocessor directives and other entities
+	preprocessorCount := 0
+	commentCount := 0
+	namespaceCount := 0
+
+	for _, child := range tree.Root.Children {
+		switch child.Type {
+		case ast.EntityPreprocessor:
+			preprocessorCount++
+		case ast.EntityComment:
+			commentCount++
+		case ast.EntityNamespace:
+			namespaceCount++
+		}
+	}
+
+	// Should have preprocessor directives preserved
+	if preprocessorCount == 0 {
+		t.Error("Expected preprocessor directives to be parsed, got none")
+	}
+
+	// Should have comments preserved
+	if commentCount == 0 {
+		t.Error("Expected file-level comments to be parsed, got none")
+	}
+
+	// Should have namespace
+	if namespaceCount != 1 {
+		t.Errorf("Expected 1 namespace, got %d", namespaceCount)
+	}
+
+	// Verify specific preprocessor directives exist
+	foundPragma := false
+	foundInclude := false
+	foundDefine := false
+
+	for _, child := range tree.Root.Children {
+		if child.Type == ast.EntityPreprocessor {
+			if strings.Contains(child.Signature, "#pragma once") {
+				foundPragma = true
+			}
+			if strings.Contains(child.Signature, "#include <iostream>") {
+				foundInclude = true
+			}
+			if strings.Contains(child.Signature, "#define MAX_SIZE") {
+				foundDefine = true
+			}
+		}
+	}
+
+	if !foundPragma {
+		t.Error("Expected #pragma once directive to be preserved")
+	}
+	if !foundInclude {
+		t.Error("Expected #include directive to be preserved")
+	}
+	if !foundDefine {
+		t.Error("Expected #define directive to be preserved")
+	}
+}
+
+func TestMultiLineTemplateSignatures(t *testing.T) {
+	content := `template <
+    typename T,
+    typename U = int,
+    size_t N = 100
+>
+class MultiLineTemplate {
+public:
+    void method();
+};
+
+template <
+    class Iterator,
+    class Distance
+>
+void advance(Iterator& it, Distance n);`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	if len(tree.Root.Children) != 2 {
+		t.Errorf("Expected 2 root entities, got %d", len(tree.Root.Children))
+		for i, child := range tree.Root.Children {
+			t.Logf("Entity %d: %s %s (signature: %s)", i, child.Type, child.Name, child.Signature)
+		}
+	}
+
+	// Check multi-line template class
+	templateClass := tree.Root.Children[0]
+	if templateClass.Type != ast.EntityClass || templateClass.Name != "MultiLineTemplate" {
+		t.Errorf("Expected multi-line template class MultiLineTemplate, got %s %s", templateClass.Type, templateClass.Name)
+	}
+
+	// Verify the signature contains template parameters
+	if !strings.Contains(templateClass.Signature, "template") {
+		t.Error("Expected class signature to contain template declaration")
+	}
+
+	// Check multi-line template function
+	if len(tree.Root.Children) >= 2 {
+		templateFunc := tree.Root.Children[1]
+		if templateFunc.Type != ast.EntityFunction || templateFunc.Name != "advance" {
+			t.Errorf("Expected multi-line template function advance, got %s %s", templateFunc.Type, templateFunc.Name)
+		}
+
+		// Verify the signature contains template parameters
+		if !strings.Contains(templateFunc.Signature, "template") {
+			t.Error("Expected function signature to contain template declaration")
+		}
+	} else {
+		t.Error("Expected to find template function, but it's missing")
 	}
 }
 
@@ -179,31 +460,32 @@ public:
 
 	// Check class methods
 	class := tree.Root.Children[4] // Last entity should be the class
-	if len(class.Children) != 5 {
-		t.Errorf("Expected 5 class members, got %d", len(class.Children))
+	members := getNonAccessSpecifierChildren(class)
+	if len(members) != 5 {
+		t.Errorf("Expected 5 class members, got %d", len(members))
 	}
 
-	constructor := class.Children[0]
+	constructor := members[0]
 	if constructor.Type != ast.EntityConstructor {
 		t.Errorf("Expected constructor, got %s", constructor.Type)
 	}
 
-	destructor := class.Children[1]
+	destructor := members[1]
 	if destructor.Type != ast.EntityDestructor || destructor.Name != "TestClass" {
 		t.Errorf("Expected destructor TestClass, got %s %s", destructor.Type, destructor.Name)
 	}
 
-	constMethod := class.Children[2]
+	constMethod := members[2]
 	if !constMethod.IsConst {
 		t.Errorf("Expected const method to have IsConst=true")
 	}
 
-	staticMethod := class.Children[3]
+	staticMethod := members[3]
 	if !staticMethod.IsStatic {
 		t.Errorf("Expected static method to have IsStatic=true")
 	}
 
-	virtualMethod := class.Children[4]
+	virtualMethod := members[4]
 	if !virtualMethod.IsVirtual {
 		t.Errorf("Expected virtual method to have IsVirtual=true")
 	}
@@ -248,11 +530,12 @@ private:
 
 	// Check class fields
 	class := tree.Root.Children[4] // Last entity
-	if len(class.Children) != 4 {
-		t.Errorf("Expected 4 class fields, got %d", len(class.Children))
+	members := getNonAccessSpecifierChildren(class)
+	if len(members) != 4 {
+		t.Errorf("Expected 4 class fields, got %d", len(members))
 	}
 
-	publicField := class.Children[0]
+	publicField := members[0]
 	if publicField.Type != ast.EntityField {
 		t.Errorf("Expected field, got %s", publicField.Type)
 	}
@@ -260,12 +543,12 @@ private:
 		t.Errorf("Expected public field, got %s", publicField.AccessLevel)
 	}
 
-	staticField := class.Children[1]
+	staticField := members[1]
 	if !staticField.IsStatic {
 		t.Errorf("Expected static field to have IsStatic=true")
 	}
 
-	constField := class.Children[3]
+	constField := members[3]
 	if !constField.IsConst {
 		t.Errorf("Expected const field to have IsConst=true")
 	}
@@ -420,12 +703,13 @@ func TestComplexNesting(t *testing.T) {
 	}
 
 	// Check nested class members
-	if len(nestedClass.Children) != 2 {
-		t.Errorf("Expected 2 members in NestedClass, got %d", len(nestedClass.Children))
+	members := getNonAccessSpecifierChildren(nestedClass)
+	if len(members) != 2 {
+		t.Errorf("Expected 2 members in NestedClass, got %d", len(members))
 	}
 
 	// Check full names
-	method := nestedClass.Children[0]
+	method := members[0]
 	expectedFullName := "Outer::Inner::NestedClass::method"
 	if method.FullName != expectedFullName {
 		t.Errorf("Expected full name %s, got %s", expectedFullName, method.FullName)
@@ -469,16 +753,17 @@ private:
 
 	// Check complex struct with explicit access specifiers
 	complexStruct := tree.Root.Children[1]
-	if len(complexStruct.Children) != 2 {
-		t.Errorf("Expected 2 members in ComplexStruct, got %d", len(complexStruct.Children))
+	members := getNonAccessSpecifierChildren(complexStruct)
+	if len(members) != 2 {
+		t.Errorf("Expected 2 members in ComplexStruct, got %d", len(members))
 	}
 
-	method := complexStruct.Children[0]
+	method := members[0]
 	if method.AccessLevel != ast.AccessPublic {
 		t.Errorf("Expected public method, got %s", method.AccessLevel)
 	}
 
-	privateData := complexStruct.Children[1]
+	privateData := members[1]
 	if privateData.AccessLevel != ast.AccessPrivate {
 		t.Errorf("Expected private field, got %s", privateData.AccessLevel)
 	}
@@ -505,14 +790,15 @@ func TestFullNameGeneration(t *testing.T) {
 	a := tree.Root.Children[0]
 	b := a.Children[0]
 	c := b.Children[0]
-	method := c.Children[0]
+	members := getNonAccessSpecifierChildren(c)
+	method := members[0]
 
 	expectedFullName := "A::B::C::method"
 	if method.FullName != expectedFullName {
 		t.Errorf("Expected full name %s, got %s", expectedFullName, method.FullName)
 	}
 
-	field := c.Children[1]
+	field := members[1]
 	expectedFieldFullName := "A::B::C::field"
 	if field.FullName != expectedFieldFullName {
 		t.Errorf("Expected full name %s, got %s", expectedFieldFullName, field.FullName)
@@ -1167,4 +1453,146 @@ func collectAllEntities(entity *ast.Entity) []*ast.Entity {
 		entities = append(entities, collectAllEntities(child)...)
 	}
 	return entities
+}
+
+func TestTemplateEntityCreation(t *testing.T) {
+	content := `template <typename T>
+class TemplatedClass;
+
+template <typename T>
+void templateFunction(T value);
+
+template <typename K, typename V>
+using TemplateMap = std::map<K, V>;`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Verify that templates are attached to their entities
+	for _, entity := range tree.Root.Children {
+		if !strings.Contains(entity.Signature, "template") {
+			t.Errorf("Entity %s (%s) missing template in signature: %s", entity.Name, entity.Type, entity.Signature)
+		}
+	}
+
+	// Test specific template constructs
+	if len(tree.Root.Children) != 3 {
+		t.Errorf("Expected 3 templated entities, got %d", len(tree.Root.Children))
+	}
+}
+
+func TestPreprocessorDirectivePreservation(t *testing.T) {
+	content := `#pragma once
+#include <vector>
+#define VERSION "1.0"
+
+class MyClass {
+public:
+    void method();
+};`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Count different entity types
+	counts := make(map[ast.EntityType]int)
+	for _, entity := range tree.Root.Children {
+		counts[entity.Type]++
+	}
+
+	// Should have preprocessor entities
+	if counts[ast.EntityPreprocessor] == 0 {
+		t.Error("Expected preprocessor directives to be preserved as entities")
+	}
+
+	// Should still have class
+	if counts[ast.EntityClass] != 1 {
+		t.Errorf("Expected 1 class entity, got %d", counts[ast.EntityClass])
+	}
+}
+
+func TestComplexTemplateScenarios(t *testing.T) {
+	content := `// Variadic template
+template <typename... Args>
+void variadic_function(Args... args);
+
+// Template specialization declaration
+template <>
+void specialized_function<int>(int value);
+
+// Template with non-type parameters
+template <int N, typename T = double>
+struct FixedArray {
+    T data[N];
+};
+
+// Nested template in namespace
+namespace Utils {
+    template <typename T>
+    class Container {
+    public:
+        template <typename U>
+        void add(const U& item);
+    };
+}`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Should parse variadic templates, specializations, and nested templates
+	variadicFound := false
+	specializationFound := false
+	fixedArrayFound := false
+	namespaceFound := false
+
+	for _, entity := range tree.Root.Children {
+		switch entity.Name {
+		case "variadic_function":
+			variadicFound = true
+			if !strings.Contains(entity.Signature, "Args...") {
+				t.Error("Variadic template function signature missing parameter pack")
+			}
+		case "specialized_function":
+			specializationFound = true
+		case "FixedArray":
+			fixedArrayFound = true
+			if !strings.Contains(entity.Signature, "int N") {
+				t.Error("Non-type template parameter missing from signature")
+			}
+		case "Utils":
+			namespaceFound = true
+			// Check nested template class
+			if len(entity.Children) > 0 {
+				containerClass := entity.Children[0]
+				if containerClass.Name == "Container" && len(containerClass.Children) > 0 {
+					templateMethod := containerClass.Children[0]
+					if templateMethod.Name == "add" && !strings.Contains(templateMethod.Signature, "template") {
+						t.Error("Nested template method missing template declaration")
+					}
+				}
+			}
+		}
+	}
+
+	if !variadicFound {
+		t.Error("Variadic template function not found")
+	}
+	if !specializationFound {
+		t.Error("Template specialization not found")
+	}
+	if !fixedArrayFound {
+		t.Error("Template with non-type parameters not found")
+	}
+	if !namespaceFound {
+		t.Error("Namespace with nested templates not found")
+	}
 }
