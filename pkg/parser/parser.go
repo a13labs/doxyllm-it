@@ -34,70 +34,20 @@ func New() *Parser {
 
 // Parse parses a C++ header file and returns a scope tree
 func (p *Parser) Parse(filename, content string) (*ast.ScopeTree, error) {
-	p.content = content
-	p.lines = strings.Split(content, "\n")
-	p.current = 0
-	p.position = ast.Position{Line: 1, Column: 1, Offset: 0}
-	p.tree = ast.NewScopeTree(filename, content)
-	p.scopeStack = []*ast.Entity{p.tree.Root}
-
-	// Parse the content line by line
-	for p.current < len(p.lines) {
-		line := p.lines[p.current]
-		trimmed := strings.TrimSpace(line)
-
-		// Skip empty lines
-		if trimmed == "" {
-			p.nextLine()
-			continue
-		}
-
-		// Handle Doxygen comments
-		if strings.HasPrefix(trimmed, "/**") || strings.HasPrefix(trimmed, "///") || strings.HasPrefix(trimmed, "//!") {
-			comment, err := p.parseDoxygenComment()
-			if err != nil {
-				return nil, fmt.Errorf("error parsing doxygen comment at line %d: %w", p.current+1, err)
-			}
-			// Store comment to associate with next entity
-			p.pendingComment = comment
-			continue
-		}
-
-		// Handle regular comments as entities
-		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
-			if err := p.parseComment(line); err != nil {
-				return nil, fmt.Errorf("error parsing comment at line %d: %w", p.current+1, err)
-			}
-			p.nextLine()
-			continue
-		}
-
-		// Handle different C++ constructs
-		if err := p.parseLine(line); err != nil {
-			return nil, fmt.Errorf("error parsing line %d: %w", p.current+1, err)
-		}
-
-		p.nextLine()
+	// Use the new token-based parser
+	tokenParser := NewTokenParser()
+	tree, err := tokenParser.Parse(filename, content)
+	if err != nil {
+		return nil, err
 	}
 
-	// Handle any remaining pending comment as a file-level comment
-	if p.pendingComment != nil {
-		entity := &ast.Entity{
-			Type:         ast.EntityComment, // Use comment type for file-level comments
-			Name:         "file-comment",
-			FullName:     "file-comment",
-			Signature:    "",
-			SourceRange:  p.pendingComment.Range,
-			HeaderRange:  p.pendingComment.Range,
-			OriginalText: p.pendingComment.Raw,
-			Children:     make([]*ast.Entity, 0),
-			Comment:      p.pendingComment,
-		}
-		p.tree.Root.AddChild(entity)
-		p.pendingComment = nil
+	// Copy defines from token parser to main parser for compatibility with tests
+	p.defines = make(map[string]string)
+	for k, v := range tokenParser.defines {
+		p.defines[k] = v
 	}
 
-	return p.tree, nil
+	return tree, nil
 }
 
 // parseLine parses a single line and identifies C++ constructs
