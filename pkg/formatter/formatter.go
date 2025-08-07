@@ -138,8 +138,12 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 		}
 
 	case ast.EntityFunction, ast.EntityMethod, ast.EntityConstructor, ast.EntityDestructor:
-		// Functions end with semicolon or have a body
-		if !strings.HasSuffix(entity.Signature, ";") && entity.BodyRange == nil {
+		// Functions with bodies include the body content, others end with semicolon
+		if entity.BodyRange != nil && entity.OriginalText != "" {
+			// Function has a body - include it from the stored original text
+			result.WriteString(" ")
+			result.WriteString(entity.OriginalText)
+		} else if !strings.HasSuffix(entity.Signature, ";") {
 			result.WriteString(";")
 		}
 

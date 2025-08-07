@@ -10,12 +10,12 @@ import (
 
 // TokenParser implements a token-driven parser for C++ headers
 type TokenParser struct {
-	tokens      []Token
-	current     int
-	tree         *ast.ScopeTree
-	scopeStack   []*ast.Entity
-	accessStack  []ast.AccessLevel
-	defines      map[string]string
+	tokens         []Token
+	current        int
+	tree           *ast.ScopeTree
+	scopeStack     []*ast.Entity
+	accessStack    []ast.AccessLevel
+	defines        map[string]string
 	pendingComment *ast.DoxygenComment // Comment waiting to be associated with next entity
 }
 
@@ -275,7 +275,7 @@ func (p *TokenParser) resolveDefineRecursive(name string, visited map[string]boo
 func (p *TokenParser) parseComment() error {
 	start := p.current
 	token := p.advance()
-	
+
 	// Check if this is a Doxygen comment
 	content := strings.TrimSpace(token.Value)
 	if p.isDoxygenComment(content) {
@@ -283,10 +283,10 @@ func (p *TokenParser) parseComment() error {
 		p.pendingComment = p.parseDoxygenComment(content)
 		return nil
 	}
-	
+
 	// For regular comments, create comment entities
 	name := "comment"
-	
+
 	// Try to extract first few words as name
 	if len(content) > 2 {
 		// Remove comment markers
@@ -322,9 +322,9 @@ func (p *TokenParser) parseComment() error {
 // isDoxygenComment checks if a comment is a Doxygen comment
 func (p *TokenParser) isDoxygenComment(content string) bool {
 	// Check for Doxygen comment patterns
-	return strings.HasPrefix(content, "/**") || 
-		   strings.HasPrefix(content, "///") || 
-		   strings.HasPrefix(content, "//!")
+	return strings.HasPrefix(content, "/**") ||
+		strings.HasPrefix(content, "///") ||
+		strings.HasPrefix(content, "//!")
 }
 
 // parseDoxygenComment parses a Doxygen comment string
@@ -396,24 +396,63 @@ func (p *TokenParser) parseNamespace() error {
 
 	p.skipWhitespace()
 
-	if p.isAtEnd() || p.peek().Type != TokenIdentifier {
+	if p.isAtEnd() || !p.isValidIdentifierToken(p.peek()) {
 		return fmt.Errorf("expected namespace name")
 	}
 
-	nameToken := p.advance()
+	// Parse namespace name (could be nested like mgl::io)
+	var nameBuilder strings.Builder
+	nameBuilder.WriteString(p.advance().Value) // first identifier
+
+	// Check for :: followed by more identifiers (nested namespace)
+	for !p.isAtEnd() {
+		p.skipWhitespace()
+		if p.peek().Type == TokenDoubleColon {
+			nameBuilder.WriteString(p.advance().Value) // add ::
+			p.skipWhitespace()
+			if p.isValidIdentifierToken(p.peek()) {
+				nameBuilder.WriteString(p.advance().Value) // add next identifier
+			} else {
+				break
+			}
+		} else {
+			break
+		}
+	}
+
+	namespaceName := nameBuilder.String()
 
 	p.skipWhitespace()
 
 	// Build signature
-	signature := fmt.Sprintf("namespace %s", nameToken.Value)
+	signature := fmt.Sprintf("namespace %s", namespaceName)
+
+	// Look for opening brace, which might be on the same line or next line
 	if p.match(TokenLeftBrace) {
 		signature += " {"
+	} else {
+		// The brace might be on the next line, so we need to look ahead
+		// Save current position to check for brace
+		checkpoint := p.current
+
+		// Skip any whitespace/newlines to find the brace
+		for !p.isAtEnd() && (p.peek().Type == TokenWhitespace || p.peek().Type == TokenNewline) {
+			p.advance()
+		}
+
+		if !p.isAtEnd() && p.peek().Type == TokenLeftBrace {
+			p.advance() // consume the brace
+			signature += " {"
+		} else {
+			// No brace found, restore position
+			p.current = checkpoint
+		}
 	}
 
 	entity := &ast.Entity{
 		Type:        ast.EntityNamespace,
-		Name:        nameToken.Value,
-		FullName:    p.buildFullName(nameToken.Value),
+		Name:        namespaceName,
+		FullName:    p.buildFullName(namespaceName),
 		Signature:   signature,
 		AccessLevel: p.getCurrentAccessLevel(),
 		SourceRange: p.getRangeFromTokens(start, p.current-1),
@@ -659,6 +698,40 @@ func (p *TokenParser) parseTemplatedFunction(templateStart int, templateParams s
 		return err
 	}
 
+	// Check if there's a function body after the signature
+	var bodyRange *ast.Range
+	var bodyText string
+	p.skipWhitespace()
+	if !p.isAtEnd() && p.peek().Type == TokenLeftBrace {
+		// This function has a body - track its range and content for the formatter
+		bodyStart := p.current
+		braceDepth := 1
+		var bodyTokens []Token
+		bodyTokens = append(bodyTokens, p.advance()) // consume opening brace
+
+		for !p.isAtEnd() && braceDepth > 0 {
+			token := p.peek()
+			if token.Type == TokenLeftBrace {
+				braceDepth++
+			} else if token.Type == TokenRightBrace {
+				braceDepth--
+			}
+			bodyTokens = append(bodyTokens, p.advance())
+		}
+
+		if braceDepth == 0 {
+			rangeValue := p.getRangeFromTokens(bodyStart, p.current-1)
+			bodyRange = &rangeValue
+			
+			// Reconstruct body text from tokens
+			var bodyBuilder strings.Builder
+			for _, token := range bodyTokens {
+				bodyBuilder.WriteString(token.Value)
+			}
+			bodyText = bodyBuilder.String()
+		}
+	}
+
 	// Add template to signature
 	fullSignature := fmt.Sprintf("template %s %s", templateParams, signature)
 
@@ -668,13 +741,15 @@ func (p *TokenParser) parseTemplatedFunction(templateStart int, templateParams s
 	}
 
 	entity := &ast.Entity{
-		Type:        entityType,
-		Name:        name,
-		FullName:    p.buildFullName(name),
-		Signature:   fullSignature,
-		AccessLevel: p.getCurrentAccessLevel(),
-		IsTemplate:  true,
-		SourceRange: p.getRangeFromTokens(templateStart, p.current-1),
+		Type:         entityType,
+		Name:         name,
+		FullName:     p.buildFullName(name),
+		Signature:    fullSignature,
+		AccessLevel:  p.getCurrentAccessLevel(),
+		IsTemplate:   true,
+		SourceRange:  p.getRangeFromTokens(templateStart, p.current-1),
+		BodyRange:    bodyRange,
+		OriginalText: bodyText,
 	}
 
 	p.addEntity(entity)
@@ -1009,6 +1084,40 @@ func (p *TokenParser) parseFunction() error {
 		return err
 	}
 
+	// Check if there's a function body after the signature
+	var bodyRange *ast.Range
+	var bodyText string
+	p.skipWhitespace()
+	if !p.isAtEnd() && p.peek().Type == TokenLeftBrace {
+		// This function has a body - track its range and content for the formatter
+		bodyStart := p.current
+		braceDepth := 1
+		var bodyTokens []Token
+		bodyTokens = append(bodyTokens, p.advance()) // consume opening brace
+
+		for !p.isAtEnd() && braceDepth > 0 {
+			token := p.peek()
+			if token.Type == TokenLeftBrace {
+				braceDepth++
+			} else if token.Type == TokenRightBrace {
+				braceDepth--
+			}
+			bodyTokens = append(bodyTokens, p.advance())
+		}
+
+		if braceDepth == 0 {
+			rangeValue := p.getRangeFromTokens(bodyStart, p.current-1)
+			bodyRange = &rangeValue
+
+			// Reconstruct body text from tokens
+			var bodyBuilder strings.Builder
+			for _, token := range bodyTokens {
+				bodyBuilder.WriteString(token.Value)
+			}
+			bodyText = bodyBuilder.String()
+		}
+	}
+
 	// Check for const after function signature
 	if strings.Contains(signature, ") const") {
 		isConst = true
@@ -1028,16 +1137,18 @@ func (p *TokenParser) parseFunction() error {
 	}
 
 	entity := &ast.Entity{
-		Type:        entityType,
-		Name:        name,
-		FullName:    p.buildFullName(name),
-		Signature:   signature,
-		AccessLevel: p.getCurrentAccessLevel(),
-		IsStatic:    isStatic,
-		IsInline:    isInline,
-		IsVirtual:   isVirtual,
-		IsConst:     isConst,
-		SourceRange: p.getRangeFromTokens(start, p.current-1),
+		Type:         entityType,
+		Name:         name,
+		FullName:     p.buildFullName(name),
+		Signature:    signature,
+		AccessLevel:  p.getCurrentAccessLevel(),
+		IsStatic:     isStatic,
+		IsInline:     isInline,
+		IsVirtual:    isVirtual,
+		IsConst:      isConst,
+		SourceRange:  p.getRangeFromTokens(start, p.current-1),
+		BodyRange:    bodyRange,
+		OriginalText: bodyText,
 	}
 
 	p.addEntity(entity)
@@ -1134,6 +1245,25 @@ func (p *TokenParser) isAtEnd() bool {
 	return p.current >= len(p.tokens) || p.peek().Type == TokenEOF
 }
 
+// isValidIdentifierToken checks if a token can be used as an identifier
+// This includes actual identifiers and keywords that can be used as names
+func (p *TokenParser) isValidIdentifierToken(token Token) bool {
+	// Regular identifiers are always valid
+	if token.Type == TokenIdentifier {
+		return true
+	}
+	
+	// Some keywords can also be used as identifiers in certain contexts
+	// (like namespace names, class names, etc.)
+	switch token.Type {
+	case TokenVoid, TokenBool, TokenChar, TokenShort, TokenInt, TokenLong,
+		 TokenFloat, TokenDouble, TokenSigned, TokenUnsigned, TokenAuto:
+		return true
+	default:
+		return false
+	}
+}
+
 // peek returns the current token without advancing
 func (p *TokenParser) peek() Token {
 	if p.current >= len(p.tokens) {
@@ -1218,7 +1348,7 @@ func (p *TokenParser) isFunction() bool {
 		if token.Type == TokenStatic || token.Type == TokenInline || token.Type == TokenVirtual ||
 			token.Type == TokenExtern || token.Type == TokenConst || token.Type == TokenConstexpr {
 			p.advance()
-			p.skipWhitespace()
+			p.skipWhitespaceAndNewlines()
 		} else {
 			break
 		}
@@ -1227,7 +1357,7 @@ func (p *TokenParser) isFunction() bool {
 	// Look for pattern: [return_type] function_name(
 	identifiersSeen := 0
 
-	for !p.isAtEnd() && identifiersSeen < 4 {
+	for !p.isAtEnd() && identifiersSeen < 6 { // increased limit to handle more complex types
 		token := p.peek()
 
 		if token.Type == TokenVoid || token.Type == TokenInt || token.Type == TokenDouble ||
@@ -1235,16 +1365,16 @@ func (p *TokenParser) isFunction() bool {
 			token.Type == TokenIdentifier {
 			identifiersSeen++
 			p.advance()
-			p.skipWhitespace()
+			p.skipWhitespaceAndNewlines() // Handle newlines between return type and function name
 		} else if token.Type == TokenLeftParen {
 			// Found opening parenthesis, this looks like a function
 			return identifiersSeen >= 1
 		} else if token.Type == TokenDoubleColon {
 			p.advance()
-			p.skipWhitespace()
+			p.skipWhitespaceAndNewlines()
 		} else if token.Type == TokenStar || token.Type == TokenAmpersand {
 			p.advance() // Skip pointer/reference indicators
-			p.skipWhitespace()
+			p.skipWhitespaceAndNewlines()
 		} else if token.Type == TokenLess {
 			// Skip template parameters
 			depth := 1
@@ -1258,11 +1388,11 @@ func (p *TokenParser) isFunction() bool {
 				}
 				p.advance()
 			}
-			p.skipWhitespace()
+			p.skipWhitespaceAndNewlines()
 		} else if token.Type == TokenTilde {
 			// Destructor
 			p.advance()
-			p.skipWhitespace()
+			p.skipWhitespaceAndNewlines()
 		} else {
 			break
 		}
@@ -1294,25 +1424,12 @@ func (p *TokenParser) parseFunctionSignature() (signature string, name string, i
 			depth--
 		}
 
-		// Stop at semicolon (declaration) or consume body if opening brace is found
+		// Stop at semicolon (declaration) or opening brace (definition)
 		if token.Type == TokenSemicolon && depth == 0 {
 			break
 		} else if token.Type == TokenLeftBrace && depth == 0 {
-			// This is a function definition with a body, consume the entire body
-			braceDepth := 1
-			sig.WriteString(token.Value)
-			p.advance()
-
-			for !p.isAtEnd() && braceDepth > 0 {
-				bodyToken := p.peek()
-				if bodyToken.Type == TokenLeftBrace {
-					braceDepth++
-				} else if bodyToken.Type == TokenRightBrace {
-					braceDepth--
-				}
-				sig.WriteString(bodyToken.Value)
-				p.advance()
-			}
+			// This is a function definition with a body
+			// Don't include the body in the signature - the formatter handles it separately
 			break
 		}
 
@@ -1434,7 +1551,7 @@ func (p *TokenParser) addEntity(entity *ast.Entity) {
 		entity.Comment = p.pendingComment
 		p.pendingComment = nil // Clear the pending comment
 	}
-	
+
 	scope := p.getCurrentScope()
 	entity.Parent = scope
 	scope.AddChild(entity)
