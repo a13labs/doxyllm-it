@@ -17,13 +17,18 @@ type Provider interface {
 	GetModelInfo() ModelInfo
 }
 
-// CommentRequest represents a request for comment generation
+// DocumentationRequest represents a request for generating documentation
+type DocumentationRequest struct {
+	EntityName        string                 // Name of the entity to document
+	EntityType        string                 // Type of entity (class, function, etc.)
+	Context           string                 // Code context around the entity
+	AdditionalContext string                 // Additional context from configuration
+}
 type CommentRequest struct {
 	EntityName        string                 // Name of the entity to document
 	EntityType        string                 // Type of entity (function, class, namespace, etc.)
 	Context           string                 // Code context around the entity
 	AdditionalContext string                 // Additional project context
-	GroupInfo         *GroupInfo             // Group membership information
 	Options           map[string]interface{} // Provider-specific options
 }
 

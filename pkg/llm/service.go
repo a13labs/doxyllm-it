@@ -31,8 +31,6 @@ func (s *DocumentationService) GenerateDocumentation(ctx context.Context, req Do
 		EntityType:        req.EntityType,
 		Context:           req.Context,
 		AdditionalContext: req.AdditionalContext,
-		GroupInfo:         req.GroupInfo,
-		Options:           req.Options,
 	}
 
 	// Generate comment using LLM
@@ -46,7 +44,7 @@ func (s *DocumentationService) GenerateDocumentation(ctx context.Context, req Do
 		response,
 		req.EntityName,
 		req.EntityType,
-		req.GroupInfo,
+		nil, // No longer passing GroupInfo - will be handled by post-processor
 		req.Context,
 	)
 
@@ -79,16 +77,6 @@ func (s *DocumentationService) validateRequest(req DocumentationRequest) error {
 		return fmt.Errorf("context cannot be empty")
 	}
 	return nil
-}
-
-// DocumentationRequest represents a request for documentation generation
-type DocumentationRequest struct {
-	EntityName        string                 // Name of the entity to document
-	EntityType        string                 // Type of entity (function, class, namespace, etc.)
-	Context           string                 // Code context around the entity
-	AdditionalContext string                 // Additional project context
-	GroupInfo         *GroupInfo             // Group membership information
-	Options           map[string]interface{} // Provider-specific options
 }
 
 // DocumentationResult represents the result of documentation generation

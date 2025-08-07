@@ -114,15 +114,12 @@ func TestDocumentationService_GenerateDocumentation(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name: "with group information",
+			name: "with additional context",
 			request: DocumentationRequest{
-				EntityName: "TestClass",
-				EntityType: "class",
-				Context:    "class TestClass {};",
-				GroupInfo: &GroupInfo{
-					Name:  "test_group",
-					Title: "Test Group",
-				},
+				EntityName:        "TestClass",
+				EntityType:        "class",
+				Context:           "class TestClass {};",
+				AdditionalContext: "This is a test class for validation.",
 			},
 			mockResponse: &CommentResponse{
 				Description: "A test class for validation.",
@@ -130,13 +127,14 @@ func TestDocumentationService_GenerateDocumentation(t *testing.T) {
 			},
 			expectError: false,
 			checkFunc: func(t *testing.T, result *DocumentationResult) {
-				if !strings.Contains(result.Comment, "@ingroup test_group") {
-					t.Errorf("comment should contain group information")
+				if !strings.Contains(result.Comment, "@brief A test class") {
+					t.Errorf("comment should contain brief description")
 				}
+				// Note: @ingroup is now handled by post-processor in cmd layer, not here
 			},
 		},
 		{
-			name: "with additional context",
+			name: "with additional project context",
 			request: DocumentationRequest{
 				EntityName:        "helper",
 				EntityType:        "function",

@@ -75,11 +75,6 @@ func (cb *CommentBuilder) BuildStructuredComment(response *CommentResponse, enti
 		}
 	}
 
-	// Add group membership
-	if groupInfo != nil {
-		comment.WriteString(fmt.Sprintf(" * @ingroup %s\n", groupInfo.Name))
-	}
-
 	comment.WriteString(" */")
 	return comment.String()
 }

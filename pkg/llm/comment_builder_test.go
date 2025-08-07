@@ -44,10 +44,7 @@ func TestCommentBuilder_BuildStructuredComment(t *testing.T) {
 			},
 			entityName: "TestClass",
 			entityType: "class",
-			groupInfo: &GroupInfo{
-				Name:  "test_group",
-				Title: "Test Group",
-			},
+			groupInfo: nil, // GroupInfo is no longer used by CommentBuilder
 			context: "class TestClass {};",
 			checkFunc: func(t *testing.T, comment string) {
 				if !strings.Contains(comment, "@brief A test class") {
@@ -56,9 +53,7 @@ func TestCommentBuilder_BuildStructuredComment(t *testing.T) {
 				if !strings.Contains(comment, "This class provides test functionality") {
 					t.Errorf("comment should contain detailed description")
 				}
-				if !strings.Contains(comment, "@ingroup test_group") {
-					t.Errorf("comment should contain group membership")
-				}
+				// Note: @ingroup is now handled by post-processor in cmd layer, not here
 				if strings.Contains(comment, "@param") {
 					t.Errorf("class should not have @param tags")
 				}
