@@ -42,7 +42,7 @@ DoxLLM-IT is a CLI tool written in Go that parses C++ header files and creates a
    - `format` - Reconstruct and format code
    - `update` - Update files with LLM-generated comments
    - `batch-update` - Batch update multiple entities
-   - `ollama` - Built-in Ollama LLM integration with context-aware documentation
+   - `llm` - Built-in LLM integration with context-aware documentation (supports Ollama, OpenAI, Anthropic)
 
 ### Key Design Principles
 
@@ -198,6 +198,14 @@ safe_name=$(echo "$entity" | tr ':' '_' | tr ' ' '_')
 5. Add comprehensive help text
 6. Consider using document abstraction for complex operations
 
+### When Adding New LLM Providers
+1. Implement the `llm.Provider` interface in `pkg/llm/`
+2. Add provider initialization in `llm.NewProvider()`
+3. Update command flags and help text in `cmd/llm.go`
+4. Add comprehensive tests with mock providers
+5. Update documentation with provider-specific examples
+6. Ensure proper error handling and connection testing
+
 ### When Modifying Parser
 - Always preserve `OriginalText` and formatting
 - Update both `SourceRange` and `HeaderRange`
@@ -254,17 +262,21 @@ safe_name=$(echo "$entity" | tr ':' '_' | tr ' ' '_')
 
 ## LLM Integration Patterns
 
-### Ollama Integration (Built-in)
+### LLM Integration (Built-in)
 ```bash
-# Basic usage with context
-./doxyllm-it ollama --model codegemma:7b --backup header.hpp
+# Basic usage with default provider (Ollama)
+./doxyllm-it llm --model codegemma:7b --backup header.hpp
 
-# Advanced configuration
-./doxyllm-it ollama --url http://remote:11434 --model deepseek-coder:6.7b \
+# Advanced configuration with Ollama
+./doxyllm-it llm --provider ollama --url http://remote:11434 --model deepseek-coder:6.7b \
   --temperature 0.1 --context 8192 --max-entities 5 --dry-run src/
 
+# Use different LLM providers
+./doxyllm-it llm --provider openai --model gpt-4 --api-key YOUR_KEY src/
+./doxyllm-it llm --provider anthropic --model claude-3-sonnet --api-key YOUR_KEY src/
+
 # Process directories with context files
-./doxyllm-it ollama --in-place --format --exclude build,vendor .
+./doxyllm-it llm --format --exclude build,vendor .
 ```
 
 ### Context Configuration
@@ -296,6 +308,25 @@ files:
 
 # Batch update from JSON
 ./doxyllm-it batch-update config.json -i -f
+```
+
+### LLM Documentation Patterns
+```bash
+# Basic LLM documentation with default provider (Ollama)
+./doxyllm-it llm --backup header.hpp
+
+# Dry run to preview changes
+./doxyllm-it llm --dry-run --max-entities 3 src/
+
+# Use specific providers
+./doxyllm-it llm --provider ollama --model deepseek-coder:6.7b src/
+./doxyllm-it llm --provider openai --model gpt-4 --api-key YOUR_KEY src/
+./doxyllm-it llm --provider anthropic --model claude-3-sonnet --api-key YOUR_KEY src/
+
+# Advanced configuration
+./doxyllm-it llm --temperature 0.1 --context 8192 --max-entities 5 \
+  --backup --format --exclude build,vendor src/
+```
 ```
 
 ### JSON Structure for Batch Updates
@@ -382,7 +413,7 @@ doxyllm-it/
 
 ## Integration Examples
 
-### Ollama Integration (Recommended)
+### LLM Integration (Recommended)
 ```bash
 # Create project context
 cat > .doxyllm << 'EOF'
@@ -395,8 +426,12 @@ files:
     Extensive use of feature detection macros.
 EOF
 
-# Auto-generate documentation
-./doxyllm-it ollama --model codegemma:7b --backup --in-place span.hpp
+# Auto-generate documentation with default provider (Ollama)
+./doxyllm-it llm --model codegemma:7b --backup span.hpp
+
+# Use different providers
+./doxyllm-it llm --provider openai --model gpt-4 --api-key YOUR_KEY span.hpp
+./doxyllm-it llm --provider anthropic --model claude-3-sonnet --api-key YOUR_KEY span.hpp
 ```
 
 ### Python API Wrapper
@@ -414,8 +449,8 @@ class DoxLLM:
         result = subprocess.run(['./doxyllm-it', 'extract', '-p', '-s', header_file, entity_path])
         return result.stdout
     
-    def generate_docs(self, header_file, model='codegemma:7b'):
-        subprocess.run(['./doxyllm-it', 'ollama', '--model', model, '--backup', header_file])
+    def generate_docs(self, header_file, model='codegemma:7b', provider='ollama'):
+        subprocess.run(['./doxyllm-it', 'llm', '--provider', provider, '--model', model, '--backup', header_file])
     
     def create_context(self, directory, global_context, file_contexts=None):
         config = {'global': global_context}
@@ -466,4 +501,4 @@ func documentHeader(filename string) error {
 }
 ```
 
-This tool bridges C++ code analysis with modern LLM-powered documentation generation, maintaining code integrity while enabling automated documentation workflows. The enhanced context system and Ollama integration provide production-ready documentation automation for complex C++ projects.
+This tool bridges C++ code analysis with modern LLM-powered documentation generation, maintaining code integrity while enabling automated documentation workflows. The enhanced context system and multi-provider LLM integration (Ollama, OpenAI, Anthropic) provide production-ready documentation automation for complex C++ projects.

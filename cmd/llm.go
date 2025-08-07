@@ -136,14 +136,20 @@ func runLLM(cmd *cobra.Command, args []string) {
 	// Create document service
 	docService := document.NewDocumentationService(llmService)
 
-	// Test LLM connectivity
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// Check if dry-run first
+	if llmDryRun {
+		fmt.Println("🔍 Dry run mode - no files will be modified")
+		// Skip connection test for dry-run
+	} else {
+		// Test LLM connectivity only for actual runs
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-	err = llmService.TestConnection(ctx)
-	if err != nil {
-		fmt.Printf("❌ Failed to connect to LLM: %v\n", err)
-		os.Exit(1)
+		err = llmService.TestConnection(ctx)
+		if err != nil {
+			fmt.Printf("❌ Failed to connect to LLM: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	modelInfo := llmService.GetModelInfo()
