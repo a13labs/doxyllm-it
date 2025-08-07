@@ -171,6 +171,9 @@ func runInit(cmd *cobra.Command, args []string) {
 func findCppFilesForInit(targetDir string) ([]string, error) {
 	var files []string
 
+	// Default excluded directories
+	excludeDirs := []string{"build", "vendor", "third_party", ".git", "node_modules"}
+
 	err := filepath.Walk(targetDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
