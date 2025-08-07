@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"doxyllm-it/pkg/ast"
+	"doxyllm-it/pkg/formatter"
 	"doxyllm-it/pkg/parser"
 )
 
@@ -19,6 +21,7 @@ type Document struct {
 	content     string                 // Current content
 	tree        *ast.ScopeTree         // Parsed AST
 	parser      *parser.Parser         // Parser instance
+	formatter   *formatter.Formatter   // Formatter instance for code reconstruction
 	modified    bool                   // Whether document has been modified
 	entityCache map[string]*ast.Entity // Cache for quick entity lookup by path
 }
@@ -56,6 +59,7 @@ func NewFromContent(name, content string) (*Document, error) {
 		content:     content,
 		tree:        tree,
 		parser:      p,
+		formatter:   formatter.New(),
 		modified:    false,
 		entityCache: make(map[string]*ast.Entity),
 	}
@@ -162,11 +166,37 @@ func (d *Document) SetEntityComment(entityPath string, comment *ast.DoxygenComme
 	return nil
 }
 
-// updateCommentRaw updates the Raw field of a comment to indicate it has content
+// updateCommentRaw updates the Raw field of a comment using the formatter
 func (d *Document) updateCommentRaw(comment *ast.DoxygenComment) {
-	// Build a simple raw representation from the comment fields
+	// Use the formatter to generate a properly formatted comment representation
 	if comment.Raw == "" {
-		comment.Raw = "/** Programmatically generated comment */"
+		// Create a temporary entity to format the comment
+		tempEntity := &ast.Entity{
+			Comment: comment,
+		}
+		// Extract just the comment part using the formatter's logic
+		formattedComment := d.formatter.ReconstructScope(tempEntity)
+		// Extract just the comment block (remove any extra formatting)
+		lines := strings.Split(formattedComment, "\n")
+		var commentLines []string
+		inComment := false
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "/**") || strings.HasPrefix(trimmed, "/*") {
+				inComment = true
+			}
+			if inComment {
+				commentLines = append(commentLines, line)
+			}
+			if strings.HasSuffix(trimmed, "*/") {
+				inComment = false
+			}
+		}
+		if len(commentLines) > 0 {
+			comment.Raw = strings.Join(commentLines, "\n")
+		} else {
+			comment.Raw = "/** Programmatically generated comment */"
+		}
 	}
 }
 
@@ -483,20 +513,73 @@ func (d *Document) Save() error {
 
 // SaveAs saves the document to a specified file
 func (d *Document) SaveAs(filename string) error {
-	// TODO: Implement content reconstruction from AST with updated comments
-	// This would involve traversing the AST and rebuilding the source code
-	// with the modified Doxygen comments in the correct positions
+	// Reconstruct the code with updated comments using the formatter
+	reconstructedCode := d.formatter.ReconstructCode(d.tree)
 
-	// For now, we'll return an error indicating this needs to be implemented
-	// with the formatter package
-	return fmt.Errorf("save functionality requires integration with formatter package (not yet implemented)")
+	// Write the reconstructed code to the file
+	err := os.WriteFile(filename, []byte(reconstructedCode), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write file %s: %w", filename, err)
+	}
+
+	// Update the document's content and filename if successful
+	d.content = reconstructedCode
+	d.filename = filename
+	d.modified = false
+
+	return nil
 }
 
 // SaveToString returns the document content as a string with all modifications applied
 func (d *Document) SaveToString() (string, error) {
-	// TODO: Implement content reconstruction from AST
-	// This would use the formatter package to generate the updated source
-	return "", fmt.Errorf("save to string functionality requires integration with formatter package (not yet implemented)")
+	// Use the formatter to reconstruct the code with updated comments
+	reconstructedCode := d.formatter.ReconstructCode(d.tree)
+	return reconstructedCode, nil
+}
+
+// SaveToStringFormatted returns the document content formatted with clang-format
+func (d *Document) SaveToStringFormatted() (string, error) {
+	// Get the reconstructed code
+	reconstructedCode := d.formatter.ReconstructCode(d.tree)
+
+	// Apply clang-format if available
+	formattedCode, err := d.formatter.FormatWithClang(reconstructedCode)
+	if err != nil {
+		// If clang-format fails, return the unformatted code with a warning
+		return reconstructedCode, fmt.Errorf("clang-format not available, returning unformatted code: %w", err)
+	}
+
+	return formattedCode, nil
+}
+
+// GetEntityContext returns formatted context for an entity (useful for LLM workflows)
+func (d *Document) GetEntityContext(entityPath string, includeParent, includeSiblings bool) (string, error) {
+	entity := d.FindEntity(entityPath)
+	if entity == nil {
+		return "", fmt.Errorf("entity not found: %s", entityPath)
+	}
+
+	return d.formatter.ExtractEntityContext(entity, includeParent, includeSiblings), nil
+}
+
+// GetEntitySummaryFormatted returns a formatted summary of an entity
+func (d *Document) GetEntitySummaryFormatted(entityPath string) (string, error) {
+	entity := d.FindEntity(entityPath)
+	if entity == nil {
+		return "", fmt.Errorf("entity not found: %s", entityPath)
+	}
+
+	return d.formatter.GetEntitySummary(entity), nil
+}
+
+// ReconstructScope returns the reconstructed code for a specific entity scope
+func (d *Document) ReconstructScope(entityPath string) (string, error) {
+	entity := d.FindEntity(entityPath)
+	if entity == nil {
+		return "", fmt.Errorf("entity not found: %s", entityPath)
+	}
+
+	return d.formatter.ReconstructScope(entity), nil
 }
 
 // Validation Methods

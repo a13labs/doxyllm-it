@@ -174,6 +174,33 @@ func (f *Formatter) formatDoxygenComment(comment *ast.DoxygenComment, depth int)
 		result.WriteString(indent + " * @see " + see + "\n")
 	}
 
+	// Ingroup tags
+	for _, group := range comment.Ingroup {
+		result.WriteString(indent + " * @ingroup " + group + "\n")
+	}
+
+	// Group definition tags
+	if comment.Defgroup != "" {
+		result.WriteString(indent + " * @defgroup " + comment.Defgroup + "\n")
+	}
+
+	if comment.Addtogroup != "" {
+		result.WriteString(indent + " * @addtogroup " + comment.Addtogroup + "\n")
+	}
+
+	// Structural tags
+	if comment.File != "" {
+		result.WriteString(indent + " * @file " + comment.File + "\n")
+	}
+
+	if comment.Namespace != "" {
+		result.WriteString(indent + " * @namespace " + comment.Namespace + "\n")
+	}
+
+	if comment.Class != "" {
+		result.WriteString(indent + " * @class " + comment.Class + "\n")
+	}
+
 	// Custom tags
 	for tag, value := range comment.CustomTags {
 		result.WriteString(indent + " * @" + tag + " " + value + "\n")

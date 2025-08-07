@@ -12,6 +12,8 @@ The Document abstraction layer offers several key benefits:
 - **Change Tracking**: Keep track of modifications for efficient saving
 - **Batch Operations**: Apply multiple documentation updates efficiently
 - **Validation**: Built-in validation for common documentation issues
+- **Formatter Integration**: Seamless code reconstruction with proper formatting
+- **Professional Output**: Support for clang-format integration for polished results
 
 ## Quick Start
 
@@ -146,10 +148,22 @@ if doc.IsModified() {
     fmt.Println("Document has unsaved changes")
 }
 
-// Save changes (requires integration with formatter package)
-// err := doc.Save() // Save to original file
-// err := doc.SaveAs("newfile.hpp") // Save to new file
-// content, err := doc.SaveToString() // Get modified content as string
+// Save changes with formatter integration
+err := doc.Save() // Save to original file
+err := doc.SaveAs("newfile.hpp") // Save to new file
+content, err := doc.SaveToString() // Get modified content as string
+
+// Advanced formatting options
+formattedContent, err := doc.SaveToStringFormatted() // Apply clang-format if available
+
+// Get entity context for LLM workflows
+context, err := doc.GetEntityContext("MyClass::method", true, true) // include parent and siblings
+
+// Get formatted entity summary
+summary, err := doc.GetEntitySummaryFormatted("MyClass::method")
+
+// Reconstruct specific scopes
+scopeCode, err := doc.ReconstructScope("MyClass") // Just the class and its contents
 ```
 
 ## API Reference
@@ -213,13 +227,22 @@ The document package integrates with:
 
 - `pkg/ast` - Provides the AST structures
 - `pkg/parser` - Handles C++ parsing
-- `pkg/formatter` - Will handle content reconstruction (TODO)
+- `pkg/formatter` - Handles content reconstruction and formatting ✅
+
+## Features
+
+Implemented features:
+
+- **Save Functionality**: Full integration with formatter package for saving changes ✅
+- **Code Reconstruction**: Rebuild source code with updated documentation ✅
+- **Professional Formatting**: Optional clang-format integration ✅
+- **Entity Context Extraction**: Generate context for LLM workflows ✅
+- **Scope Reconstruction**: Rebuild specific code sections ✅
 
 ## Future Enhancements
 
 Planned features:
 
-- **Save Functionality**: Integration with formatter package for saving changes
 - **Diff Generation**: Show documentation changes
 - **Template Support**: Documentation templates for different entity types
 - **Plugin System**: Extensible validation and formatting rules
