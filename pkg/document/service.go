@@ -184,7 +184,7 @@ func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, 
 		EntityName:        entity.GetFullPath(),
 		EntityType:        entityType,
 		Context:           context,
-		AdditionalContext: "", // TODO: Add support for .doxyllm context
+		AdditionalContext: "", // TODO: Add support for .doxyllm.yaml context
 	}
 
 	// Generate documentation using LLM

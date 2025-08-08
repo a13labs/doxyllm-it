@@ -47,7 +47,7 @@ Examples:
 	Run:  runLLM,
 }
 
-// DoxyllmConfig represents the structure of a .doxyllm configuration file
+// DoxyllmConfig represents the structure of a .doxyllm.yaml configuration file
 type DoxyllmConfig struct {
 	Global string                           `yaml:"global,omitempty"`
 	Files  map[string]string                `yaml:"files,omitempty"`
@@ -393,7 +393,7 @@ func shouldIgnoreFile(filePath, rootPath string) bool {
 	return false
 }
 
-// loadDoxyllmConfig loads the .doxyllm.yaml configuration file
+// loadDoxyllmConfig loads the .doxyllm.yaml.yaml configuration file
 func loadDoxyllmConfig(filePath, rootPath string) *DoxyllmConfig {
 	var rootDir string
 	if info, err := os.Stat(rootPath); err == nil && info.IsDir() {
@@ -402,7 +402,7 @@ func loadDoxyllmConfig(filePath, rootPath string) *DoxyllmConfig {
 		rootDir = filepath.Dir(rootPath)
 	}
 
-	doxyllmPath := filepath.Join(rootDir, ".doxyllm.yaml")
+	doxyllmPath := filepath.Join(rootDir, ".doxyllm.yaml.yaml")
 	content, err := os.ReadFile(doxyllmPath)
 	if err != nil {
 		return nil
@@ -410,7 +410,7 @@ func loadDoxyllmConfig(filePath, rootPath string) *DoxyllmConfig {
 
 	var config DoxyllmConfig
 	if err := yaml.Unmarshal(content, &config); err != nil {
-		fmt.Printf("⚠️  Warning: Failed to parse .doxyllm.yaml: %v\n", err)
+		fmt.Printf("⚠️  Warning: Failed to parse .doxyllm.yaml.yaml: %v\n", err)
 		return nil
 	}
 

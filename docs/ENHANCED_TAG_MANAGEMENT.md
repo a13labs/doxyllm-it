@@ -20,7 +20,7 @@ Instead of asking the LLM to generate complete Doxygen comments, the system now:
 
 ### 3. **Group Management**
 
-New `.doxyllm.yaml` configuration supports:
+New `.doxyllm.yaml.yaml` configuration supports:
 ```yaml
 groups:
   group_name:
@@ -72,10 +72,10 @@ The system automatically generates:
 
 ## Configuration Migration
 
-Existing `.doxyllm` files remain compatible. To use group features:
+Existing `.doxyllm.yaml` files remain compatible. To use group features:
 
-1. Rename `.doxyllm` to `.doxyllm.yaml`
+1. Rename `.doxyllm.yaml` to `.doxyllm.yaml.yaml`
 2. Add `groups:` section
 3. Configure group membership and `generateDefgroup` flags
 
-The system maintains backward compatibility with plain text `.doxyllm` files.
+The system maintains backward compatibility with plain text `.doxyllm.yaml` files.

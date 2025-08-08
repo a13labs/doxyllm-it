@@ -36,13 +36,20 @@ DoxLLM-IT is a CLI tool written in Go that parses C++ header files and creates a
    - Path manipulation utilities
    - C++ identifier validation
 
-6. **`cmd/`** - CLI commands using Cobra framework
+6. **`pkg/llm/`** - LLM integration layer
+   - Provider interface and factory for multiple LLM providers
+   - Ollama provider implementation with full API support
+   - Comment builder for structured Doxygen comment generation
+   - Service layer for high-level LLM operations
+
+7. **`cmd/`** - CLI commands using Cobra framework
    - `parse` - Parse files and output entity structure
    - `extract` - Extract context for specific entities
    - `format` - Reconstruct and format code
    - `update` - Update files with LLM-generated comments
    - `batch-update` - Batch update multiple entities
    - `llm` - Built-in LLM integration with context-aware documentation (supports Ollama, OpenAI, Anthropic)
+   - `init` - Initialize .doxyllm.yaml.yaml configuration files by analyzing codebase structure
 
 ### Key Design Principles
 
@@ -50,7 +57,7 @@ DoxLLM-IT is a CLI tool written in Go that parses C++ header files and creates a
 - **Scope-aware**: Understand C++ scope rules and hierarchies with access level tracking
 - **LLM-optimized**: Provide targeted context without overwhelming, enhanced with project-specific context
 - **Format-preserving**: Maintain code style and formatting
-- **Context-aware**: Support for `.doxyllm.yaml` configuration files with global and file-specific contexts
+- **Context-aware**: Support for `.doxyllm.yaml.yaml` configuration files with global and file-specific contexts
 - **Modern C++ support**: Enhanced parser for constexpr macros, template functions, and C++20 features
 - **Modular design**: Separate parsing, AST, and formatting concerns
 - **Comprehensive testing**: Unit tests for all parser components and regex patterns
@@ -110,6 +117,13 @@ Can be found in `pkg/ast/ast.go`:
 5. Add comprehensive help text
 6. Consider using document abstraction for complex operations
 
+### When Working with Init Command
+- Use the `init` command to automatically generate `.doxyllm.yaml` configuration files
+- The command analyzes the codebase structure using LLM providers
+- It generates individual file summaries and global project summaries
+- The resulting YAML configuration provides contextual information for better documentation
+- Supports overwrite flag to replace existing configurations
+
 ### When Adding New LLM Providers
 1. Implement the `llm.Provider` interface in `pkg/llm/`
 2. Add provider initialization in `llm.NewProvider()`
@@ -162,7 +176,7 @@ Can be found in `pkg/ast/ast.go`:
 
 ### Context Configuration
 ```yaml
-# .doxyllm.yaml file structure
+# .doxyllm.yaml.yaml file structure
 global: |
   Project-wide context and design principles...
   
@@ -199,6 +213,18 @@ ignore:
 
 # Get context with parent and siblings
 ./doxyllm-it extract -p -s header.hpp "Class::method"
+```
+
+### Initialize Configuration
+```bash
+# Initialize .doxyllm.yaml for current directory
+./doxyllm-it init .
+
+# Initialize with custom model and overwrite existing
+./doxyllm-it init --model deepseek-coder:6.7b --overwrite src/
+
+# Initialize with specific provider settings
+./doxyllm-it init --provider ollama --url http://remote:11434 --overwrite .
 ```
 
 ### Update Patterns
@@ -246,17 +272,63 @@ ignore:
 doxyllm-it/
 ├── main.go                 # Entry point
 ├── go.mod                  # Dependencies
+├── go.sum                  # Dependencies lock file
+├── README.md               # Project documentation
+├── IMPLEMENTATION.md       # Implementation details
 ├── cmd/                    # CLI commands
-├── tmp/                    # Temporary files used during test and developement
+│   ├── extract.go         # Extract command
+│   ├── format.go          # Format command
+│   ├── init.go            # Initialize .doxyllm.yaml configuration
+│   ├── llm.go             # LLM integration command
+│   ├── llm_test.go        # LLM command tests
+│   ├── parse.go           # Parse command
+│   ├── root.go            # Root command and CLI setup
+│   └── update.go          # Update and batch-update commands
+├── docs/                   # Documentation files
+│   ├── doxyllm-config.md  # Configuration documentation
+│   ├── ENHANCED_TAG_MANAGEMENT.md
+│   ├── OLLAMA_BUILTIN.md  # Ollama integration docs
+│   ├── OLLAMA_REFACTORING.md
+│   ├── REFACTORING_SUMMARY.md
+│   ├── RELEASE.md         # Release documentation
+│   └── WORKFLOW_SUMMARY.md
 ├── pkg/                    # Core packages
 │   ├── ast/               # AST definitions and structures
-│   ├── parser/            # C++ parsing engine
+│   │   └── ast.go
 │   ├── document/          # High-level document abstraction
-│   ├── formatter/         # Code reconstruction
+│   │   ├── document.go
+│   │   ├── document_test.go
+│   │   ├── formatter_integration_test.go
+│   │   ├── README.md
+│   │   ├── service.go
+│   │   └── service_test.go
+│   ├── formatter/         # Code reconstruction and formatting
+│   │   ├── formatter.go
+│   │   └── formatter_test.go
+│   ├── llm/               # LLM integration layer
+│   │   ├── comment_builder.go
+│   │   ├── comment_builder_test.go
+│   │   ├── factory.go
+│   │   ├── interface.go
+│   │   ├── ollama.go
+│   │   ├── ollama_test.go
+│   │   ├── service.go
+│   │   └── service_test.go
+│   ├── parser/            # C++ parsing engine
+│   │   ├── parser.go
+│   │   ├── parser_test.go
+│   │   ├── tokenizer.go
+│   │   ├── tokenizer_safeguard_test.go
+│   │   └── tokenizer_test.go
 │   └── utils/             # Utility functions
+│       └── utils.go
 ├── examples/               # Test files and demos
 │   └── document_demo/     # Document abstraction examples
-└── .github/               # Project metadata
+│       └── main.go
+├── scripts/               # Build and release scripts
+│   └── build-release.sh
+├── tmp/                   # Temporary files used during test and development
+└── .github/               # Project metadata and CI/CD
 ```
 
 # Reasoning, Troubleshooting, and Debugging

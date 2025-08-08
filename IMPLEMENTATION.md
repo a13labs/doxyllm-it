@@ -10,7 +10,7 @@ You now have a fully functional C++ Doxygen comments parser built in Go that can
 4. **Generate JSON output** for programmatic processing
 5. **Integrate with clang-format** for consistent code formatting
 6. **Built-in Ollama LLM integration** for automatic documentation generation
-7. **Context-aware documentation** using .doxyllm configuration files
+7. **Context-aware documentation** using .doxyllm.yaml configuration files
 8. **Multi-platform releases** with automated GitHub Actions workflow
 
 ## Project Structure
@@ -52,7 +52,7 @@ doxyllm-it/
 ├── examples/                 # Test files and configurations
 │   ├── example.hpp          # Example C++ header for testing
 │   ├── span.hpp             # Real-world complex C++ example
-│   └── .doxyllm             # YAML context configuration
+│   └── .doxyllm.yaml             # YAML context configuration
 └── test/
     └── example.hpp           # Additional test files
 ```
@@ -79,7 +79,7 @@ The parser recognizes all major C++ documentable entities with modern C++ suppor
 - Scope-aware navigation and searching with improved entity filtering
 
 ### 3. Context-Aware Documentation System
-- **Project context files** (.doxyllm) with YAML and plain text support
+- **Project context files** (.doxyllm.yaml) with YAML and plain text support
 - **Global context** shared across all files in a directory
 - **File-specific context** for targeted documentation enhancement
 - **Backward compatibility** with plain text context files
@@ -97,7 +97,7 @@ The parser recognizes all major C++ documentable entities with modern C++ suppor
 - **Parent context** (containing scope) with enhanced detail
 - **Sibling context** (neighboring entities) for better understanding
 - **Scope extraction** (complete class/namespace content)
-- **Project-aware context** integration from .doxyllm files
+- **Project-aware context** integration from .doxyllm.yaml files
 
 ### 6. Professional Code Management
 - Perfect reconstruction of original code structure
@@ -260,7 +260,7 @@ done
 - **Continuous Integration**: Automated testing across multiple platforms
 
 ### Context-Aware System
-- **YAML Context Files**: Support for `.doxyllm` files with structured project information
+- **YAML Context Files**: Support for `.doxyllm.yaml` files with structured project information
 - **Global and File-Specific Contexts**: Hierarchical context system for targeted documentation
 - **Backward Compatibility**: Maintains support for plain text context files
 - **Smart Context Loading**: Automatic detection and merging of context information
