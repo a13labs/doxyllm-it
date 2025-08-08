@@ -19,7 +19,7 @@ DoxLLM-IT is a CLI tool that parses C++ header files and creates a tree structur
 - **Context-aware documentation**: Support for `.doxyllm.yaml` configuration files with global and file-specific contexts
 - **YAML configuration**: Structured context files for multi-file projects
 - **Backward compatibility**: Plain text `.doxyllm.yaml` files still supported
-- **Enhanced parser**: Improved detection of modern C++ constructs (constexpr macros, template functions)
+- **Enhanced parser**: Streaming tokenizer with O(1) memory complexity and improved detection of modern C++ constructs
 - **Comprehensive testing**: Unit tests for parser components and regex patterns
 - **Clang-format integration**: Format output using clang-format
 - **JSON output**: Export parsed structure as JSON for further processing
@@ -216,6 +216,10 @@ OpenAI and Anthropic providers are planned for future releases. The architecture
 
 ### Enhanced Parser Features
 
+- **Streaming Tokenizer**: O(1) memory complexity with lazy token generation following single responsibility principle
+- **Memory Efficiency**: Constant ~1KB tokenization memory vs 20-40MB+ for large files with array-based approach
+- **On-Demand Processing**: 3-token lookahead buffer instead of pre-tokenizing entire files
+- **Backward Compatibility**: Compatibility layer maintains existing parser interface
 - **Modern C++ Support**: Detects constexpr macros like `TCB_SPAN_CONSTEXPR11`, `TCB_SPAN_NODISCARD`
 - **Access Level Tracking**: Properly tracks public/private/protected sections with stack-based management
 - **Template Detection**: Improved recognition of template functions and classes

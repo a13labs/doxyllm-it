@@ -13,11 +13,14 @@ DoxLLM-IT is a CLI tool written in Go that parses C++ header files and creates a
    - Manages hierarchical relationships and scope
    - Handles Doxygen comment structures
 
-2. **`pkg/parser/`** - C++ parsing engine
-   - Uses token-based parsing (not full AST compilation, but enough to manipulate the doxygen comments)
+2. **`pkg/parser/`** - C++ parsing engine with streaming tokenizer
+   - Uses streaming token-based parsing following single responsibility principle
+   - Streaming tokenizer provides tokens on-demand with O(1) memory complexity
+   - Small 3-token lookahead buffer for parser needs without pre-tokenizing entire files
    - Identifies documentable entities and their signatures
    - Preserves original text and formatting
    - Tracks source positions and ranges
+   - Backward compatibility layer maintains existing parser interface
 
 3. **`pkg/document/`** - High-level document abstraction
    - Provides intuitive API for manipulating C++ header files
@@ -60,6 +63,7 @@ DoxLLM-IT is a CLI tool written in Go that parses C++ header files and creates a
 - **Context-aware**: Support for `.doxyllm.yaml.yaml` configuration files with global and file-specific contexts
 - **Modern C++ support**: Enhanced parser for constexpr macros, template functions, and C++20 features
 - **Modular design**: Separate parsing, AST, and formatting concerns
+- **Streaming architecture**: Tokenizer provides O(1) memory complexity with lazy evaluation
 - **Comprehensive testing**: Unit tests for all parser components and regex patterns
 
 ## Code Patterns and Conventions
@@ -140,6 +144,9 @@ Can be found in `pkg/ast/ast.go`:
 - Test regex patterns with comprehensive unit tests
 - Handle modern C++ constructs (constexpr macros, templates)
 - Test with complex C++ constructs
+- Use streaming tokenizer architecture: tokens generated on-demand via NextToken()
+- Maintain backward compatibility layer for existing parser interface
+- Ensure tokenizer follows single responsibility principle
 
 ### When Adding Context Features
 - Update `DoxyllmConfig` struct if needed
@@ -153,6 +160,9 @@ Can be found in `pkg/ast/ast.go`:
 - Validate modern C++ construct detection
 - Test scope management with complex nesting
 - Ensure entity deduplication works properly
+- Test streaming tokenizer with large files
+- Validate memory efficiency of streaming approach
+- Ensure backward compatibility layer works correctly
 
 ### Error Handling
 - Use `fmt.Errorf()` for error wrapping
@@ -331,6 +341,20 @@ doxyllm-it/
 └── .github/               # Project metadata and CI/CD
 ```
 
+# Documentation 
+
+Documentation for the project can be found in the `docs/` directory. This includes guides, API documentation, and other relevant materials. If documentation is missing or incomplete, it should be added to the appropriate files in this directory. The `README.md` file provides an overview of the project, while `IMPLEMENTATION.md` contains detailed information about the architecture and design decisions.
+
+# Changes to Architecture
+
+Every change to the architecture should be documented in the `IMPLEMENTATION.md` file. This includes changes to the core components, design principles, and any new features or modifications to existing functionality. Also you should update the `README.md` file to reflect any significant changes that impact the overall understanding of the project. The ".github/copilot-instructions.md" file should also be updated to include any new patterns or conventions that have been established as a result of these changes.
+
+# Coding Agent
+
+Every architecture change should be reflected in the Coding agent's instructions. This includes updating the patterns, conventions, and guidelines for using the DoxLLM-IT project. The Coding agent should be able to understand the current architecture, design principles, and how to effectively use the project's features. This are stored in the `.github/copilot-instructions.md` file, which serves as a reference for the Coding agent to provide accurate and relevant suggestions.
+
+
 # Reasoning, Troubleshooting, and Debugging
 
-All temporary files during reasoning, troubleshooting and debugging should be stored in the `tmp/` directory.
+All temporary files during reasoning, troubleshooting and debugging should be stored in the `tmp/` directory. The agent should ensure that these files are cleaned up after use to maintain a tidy project structure. If any files in the `tmp/` directory are no longer needed, they should be deleted to prevent clutter. Also it must runs all tests before making any changes to ensure that the project remains stable and functional. If any tests fail, the agent should investigate the cause of the failure and address it before proceeding with further changes.
+

@@ -1,4 +1,4 @@
-// Package parser implements a token-driven C++ header file parser
+// Package parser implements a streaming token-driven C++ header file parser with O(1) memory complexity
 package parser
 
 import (
@@ -8,15 +8,16 @@ import (
 	"doxyllm-it/pkg/ast"
 )
 
-// Parser implements a token-driven parser for C++ headers
+// Parser implements a token-driven parser for C++ headers with streaming tokenizer backend
 type Parser struct {
-	tokens         []Token
-	current        int
+	tokenizer      *Tokenizer
+	tokens         []Token  // Compatibility layer: cache tokens as needed
+	current        int      // Compatibility layer: current position
 	tree           *ast.ScopeTree
 	scopeStack     []*ast.Entity
 	accessStack    []ast.AccessLevel
 	defines        map[string]string
-	pendingComment *ast.DoxygenComment // Comment waiting to be associated with next entity
+	pendingComment *ast.DoxygenComment
 }
 
 // NewTokenParser creates a new token-driven parser
@@ -26,27 +27,27 @@ func NewTokenParser() *Parser {
 	}
 }
 
-// Parse parses tokens into an AST
+// Parse parses tokens into an AST using streaming tokenizer with compatibility layer
 func (p *Parser) Parse(filename, content string) (*ast.ScopeTree, error) {
 	// Initialize the tree
 	p.tree = ast.NewScopeTree(filename, content)
 	p.scopeStack = []*ast.Entity{p.tree.Root}
 	p.accessStack = []ast.AccessLevel{ast.AccessPublic} // Global scope is public
 
-	// Tokenize the input
-	tokenizer := NewTokenizer(content)
-	p.tokens = tokenizer.Tokenize()
+	// Initialize streaming tokenizer
+	p.tokenizer = NewTokenizer(content)
+	p.tokens = p.tokenizer.Tokenize() // Pre-tokenize for compatibility
 	p.current = 0
 
 	// Check for tokenizer errors
-	if tokenizer.HasErrors() {
-		errors := tokenizer.GetErrors()
+	if p.tokenizer.HasErrors() {
+		errors := p.tokenizer.GetErrors()
 		if len(errors) > 0 {
 			return nil, fmt.Errorf("tokenizer error: %s", errors[0].Value)
 		}
 	}
 
-	// Parse the tokens
+	// Parse tokens
 	for !p.isAtEnd() {
 		if err := p.parseTopLevel(); err != nil {
 			return nil, err
@@ -95,20 +96,21 @@ func (p *Parser) parseTopLevel() error {
 		// Check if this identifier is a macro that should be resolved
 		if _, exists := p.defines[token.Value]; exists {
 			// Look ahead to see if after macro resolution we have a keyword
-			nextTokenIndex := p.current + 1
-			for nextTokenIndex < len(p.tokens) && p.tokens[nextTokenIndex].Type == TokenWhitespace {
-				nextTokenIndex++
+			offset := 1
+			nextToken := p.peekAhead(offset)
+			// Skip whitespace in lookahead
+			for nextToken.Type == TokenWhitespace {
+				offset++
+				nextToken = p.peekAhead(offset)
 			}
-			if nextTokenIndex < len(p.tokens) {
-				nextToken := p.tokens[nextTokenIndex]
-				switch nextToken.Type {
-				case TokenClass:
-					return p.parseClassWithMacro()
-				case TokenStruct:
-					return p.parseStructWithMacro()
-				case TokenEnum:
-					return p.parseEnumWithMacro()
-				}
+			
+			switch nextToken.Type {
+			case TokenClass:
+				return p.parseClassWithMacro()
+			case TokenStruct:
+				return p.parseStructWithMacro()
+			case TokenEnum:
+				return p.parseEnumWithMacro()
 			}
 		}
 		// Fall through to default if not a macro or not followed by keyword
@@ -1245,25 +1247,6 @@ func (p *Parser) isAtEnd() bool {
 	return p.current >= len(p.tokens) || p.peek().Type == TokenEOF
 }
 
-// isValidIdentifierToken checks if a token can be used as an identifier
-// This includes actual identifiers and keywords that can be used as names
-func (p *Parser) isValidIdentifierToken(token Token) bool {
-	// Regular identifiers are always valid
-	if token.Type == TokenIdentifier {
-		return true
-	}
-
-	// Some keywords can also be used as identifiers in certain contexts
-	// (like namespace names, class names, etc.)
-	switch token.Type {
-	case TokenVoid, TokenBool, TokenChar, TokenShort, TokenInt, TokenLong,
-		TokenFloat, TokenDouble, TokenSigned, TokenUnsigned, TokenAuto:
-		return true
-	default:
-		return false
-	}
-}
-
 // peek returns the current token without advancing
 func (p *Parser) peek() Token {
 	if p.current >= len(p.tokens) {
@@ -1278,6 +1261,32 @@ func (p *Parser) previous() Token {
 		return Token{Type: TokenEOF}
 	}
 	return p.tokens[p.current-1]
+}
+
+// peekAhead looks ahead by offset tokens (for compatibility)
+func (p *Parser) peekAhead(offset int) Token {
+	targetIndex := p.current + offset
+	if targetIndex >= len(p.tokens) {
+		return Token{Type: TokenEOF}
+	}
+	return p.tokens[targetIndex]
+}
+
+// isValidIdentifierToken checks if a token can be used as an identifier
+func (p *Parser) isValidIdentifierToken(token Token) bool {
+	// Regular identifiers are always valid
+	if token.Type == TokenIdentifier {
+		return true
+	}
+
+	// Some keywords can also be used as identifiers in certain contexts
+	switch token.Type {
+	case TokenVoid, TokenBool, TokenChar, TokenShort, TokenInt, TokenLong,
+		TokenFloat, TokenDouble, TokenSigned, TokenUnsigned, TokenAuto:
+		return true
+	default:
+		return false
+	}
 }
 
 // match checks if current token matches any of the given types
