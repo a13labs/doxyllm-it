@@ -894,7 +894,7 @@ private:
 			members = append(members, child)
 		}
 	}
-	
+
 	// Should have: constructor, 3 methods, 1 field = 5 members
 	if len(members) != 5 {
 		t.Errorf("Expected 5 members, got %d", len(members))
@@ -1011,7 +1011,7 @@ func TestComplexInlineFunctions(t *testing.T) {
 	if !readBuffer.IsInline {
 		t.Errorf("Expected function to be marked as inline")
 	}
-	
+
 	// Signature should not contain function body
 	if strings.Contains(readBuffer.Signature, "ASSERT(") {
 		t.Errorf("Function signature should not contain body: %s", readBuffer.Signature)
@@ -1019,12 +1019,12 @@ func TestComplexInlineFunctions(t *testing.T) {
 	if strings.Contains(readBuffer.Signature, "file->read(") {
 		t.Errorf("Function signature should not contain body: %s", readBuffer.Signature)
 	}
-	
+
 	// Should have body stored
 	if readBuffer.OriginalText == "" {
 		t.Errorf("Function should have body stored in OriginalText")
 	}
-	
+
 	// Body should contain the actual implementation
 	if !strings.Contains(readBuffer.OriginalText, "ASSERT(") {
 		t.Errorf("Function body should contain implementation: %s", readBuffer.OriginalText)
