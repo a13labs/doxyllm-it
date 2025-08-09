@@ -21,6 +21,9 @@ func ParseDoxygenComment(comment string) *ast.DoxygenComment {
 	// Clean up the comment (remove /** */ and leading *)
 	lines := strings.Split(comment, "\n")
 	var cleanLines []string
+	isTrailingComment := strings.HasPrefix(comment, "/**<") || 
+						 strings.HasPrefix(comment, "///<") || 
+						 strings.HasPrefix(comment, "//!<")
 
 	for i, line := range lines {
 		clean := strings.TrimSpace(line)
@@ -28,9 +31,21 @@ func ParseDoxygenComment(comment string) *ast.DoxygenComment {
 		// Remove comment markers
 		if i == 0 && strings.HasPrefix(clean, "/**") {
 			clean = strings.TrimPrefix(clean, "/**")
+			// For trailing comments, preserve the < character as it's semantically important
+			// Don't strip it here - it will be handled by the formatter
 		}
 		if i == len(lines)-1 && strings.HasSuffix(clean, "*/") {
 			clean = strings.TrimSuffix(clean, "*/")
+		}
+		if strings.HasPrefix(clean, "///") {
+			clean = strings.TrimPrefix(clean, "///")
+			// For trailing comments, preserve the < character as it's semantically important
+			// Don't strip it here - it will be handled by the formatter
+		}
+		if strings.HasPrefix(clean, "//!") {
+			clean = strings.TrimPrefix(clean, "//!")
+			// For trailing comments, preserve the < character as it's semantically important
+			// Don't strip it here - it will be handled by the formatter
 		}
 		clean = strings.TrimPrefix(clean, "*")
 
@@ -60,14 +75,24 @@ func ParseDoxygenComment(comment string) *ast.DoxygenComment {
 			}
 		} else {
 			if currentTag == "" {
-				// This is part of the main description
-				if doc.Brief == "" {
-					doc.Brief = line
-				} else {
-					if doc.Detailed == "" {
-						doc.Detailed = line
+				// For trailing comments, the text should be treated as brief description
+				// without creating verbose @brief tags
+				if isTrailingComment {
+					if doc.Brief == "" {
+						doc.Brief = line
 					} else {
-						doc.Detailed += " " + line
+						doc.Brief += " " + line
+					}
+				} else {
+					// This is part of the main description for regular comments
+					if doc.Brief == "" {
+						doc.Brief = line
+					} else {
+						if doc.Detailed == "" {
+							doc.Detailed = line
+						} else {
+							doc.Detailed += " " + line
+						}
 					}
 				}
 			} else {
@@ -92,6 +117,11 @@ func setDoxygenTag(doc *ast.DoxygenComment, tag, content string) {
 	case "details", "detailed":
 		doc.Detailed = content
 	case "param":
+		parts := strings.SplitN(content, " ", 2)
+		if len(parts) == 2 {
+			doc.Params[parts[0]] = parts[1]
+		}
+	case "tparam":
 		parts := strings.SplitN(content, " ", 2)
 		if len(parts) == 2 {
 			doc.Params[parts[0]] = parts[1]

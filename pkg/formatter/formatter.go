@@ -57,8 +57,14 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 		result.WriteString(entity.LeadingWS)
 	}
 
-	// Add doxygen comment if present
+	// Check if comment should be inline
+	var isInlineComment bool
 	if entity.Comment != nil {
+		isInlineComment = f.shouldUseInlineComment(entity.Comment)
+	}
+
+	// Add doxygen comment if present and it's NOT an inline comment
+	if entity.Comment != nil && !isInlineComment {
 		result.WriteString(f.formatDoxygenComment(entity.Comment, depth))
 		result.WriteString("\n")
 	}
@@ -172,6 +178,12 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 		if !strings.HasSuffix(entity.Signature, ";") {
 			result.WriteString(";")
 		}
+		
+		// Add inline comment if present (after semicolon, before newline)
+		if entity.Comment != nil && isInlineComment {
+			result.WriteString(" ")
+			result.WriteString(f.formatInlineComment(entity.Comment, depth))
+		}
 	}
 
 	result.WriteString("\n")
@@ -190,6 +202,74 @@ func (f *Formatter) formatDoxygenComment(comment *ast.DoxygenComment, depth int)
 		return ""
 	}
 
+	// Check if this should be formatted as an inline comment
+	if f.shouldFormatInline(comment) {
+		return f.formatInlineComment(comment, depth)
+	}
+
+	return f.formatBlockComment(comment, depth)
+}
+
+// shouldFormatInline determines if a comment should be formatted as inline
+func (f *Formatter) shouldFormatInline(comment *ast.DoxygenComment) bool {
+	// Check if original comment was inline style
+	if strings.HasPrefix(strings.TrimSpace(comment.Raw), "/**<") {
+		return true
+	}
+
+	// Check if it's a simple brief comment suitable for inline format
+	if comment.Brief != "" && comment.Detailed == "" && 
+	   len(comment.Params) == 0 && comment.Returns == "" && 
+	   len(comment.Throws) == 0 && len(comment.Ingroup) == 0 &&
+	   len(comment.Brief) < 80 {
+		// If the brief starts with '<', it was likely generated for inline style
+		if strings.HasPrefix(strings.TrimSpace(comment.Brief), "<") {
+			return true
+		}
+	}
+
+	return false
+}
+
+// shouldUseInlineComment determines if a comment should be formatted as inline
+func (f *Formatter) shouldUseInlineComment(comment *ast.DoxygenComment) bool {
+	// Check if the original comment was inline style
+	if comment.Raw != "" {
+		trimmed := strings.TrimSpace(comment.Raw)
+		if strings.HasPrefix(trimmed, "/**<") || strings.HasPrefix(trimmed, "///<") || strings.HasPrefix(trimmed, "//!<") {
+			return true
+		}
+	}
+	
+	// Check if the brief description starts with < (indicating LLM generated inline comment)
+	if comment.Brief != "" && strings.HasPrefix(strings.TrimSpace(comment.Brief), "<") {
+		return true
+	}
+	
+	return false
+}
+
+// formatInlineComment formats a comment in inline style
+func (f *Formatter) formatInlineComment(comment *ast.DoxygenComment, depth int) string {
+	description := comment.Brief
+	
+	if description == "" && comment.Detailed != "" {
+		description = comment.Detailed
+	}
+	
+	// Clean up the description - remove leading/trailing whitespace first
+	description = strings.TrimSpace(description)
+	
+	// Remove leading '<' character if present (from LLM generation)
+	if strings.HasPrefix(description, "<") {
+		description = strings.TrimSpace(description[1:])
+	}
+	
+	return fmt.Sprintf("/**< %s */", description)
+}
+
+// formatBlockComment formats a comment in traditional block style
+func (f *Formatter) formatBlockComment(comment *ast.DoxygenComment, depth int) string {
 	var result strings.Builder
 	indent := f.getIndent(depth)
 
@@ -197,7 +277,13 @@ func (f *Formatter) formatDoxygenComment(comment *ast.DoxygenComment, depth int)
 
 	// Brief description
 	if comment.Brief != "" {
-		result.WriteString(indent + " * @brief " + comment.Brief + "\n")
+		// Clean up brief description (remove leading < if present)
+		brief := comment.Brief
+		if strings.HasPrefix(strings.TrimSpace(brief), "<") {
+			brief = strings.TrimSpace(brief[1:])
+			brief = strings.TrimSpace(brief)
+		}
+		result.WriteString(indent + " * @brief " + brief + "\n")
 	}
 
 	// Detailed description

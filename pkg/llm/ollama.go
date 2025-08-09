@@ -38,6 +38,41 @@ Type: %s
 
 Generate focused descriptive content for this entity (description only, no tags).`
 
+const fieldPromptTemplate = `You are a C++ documentation expert. Generate a very concise description for a struct/class field.
+
+CRITICAL REQUIREMENTS:
+- Generate ONLY a brief description (ONE sentence, under 60 characters)
+- Do NOT include Doxygen tags, comment markers, or < symbols
+- Start with "The" (e.g., "The x-coordinate of the point")
+- Be specific and concise
+- Examples of good responses:
+  * "The width of the rectangle"
+  * "The player's health points"  
+  * "The file handle for reading"
+
+%s
+
+Context:
+` + "```cpp\n%s\n```" + `
+
+TARGET FIELD: %s
+
+Generate ONE concise sentence (under 60 characters, no < symbols).`
+
+// getPromptTemplate returns the appropriate prompt template based on entity type
+func (p *OllamaProvider) getPromptTemplate(entityType string) string {
+	switch entityType {
+	case "field", "member":
+		return fieldPromptTemplate
+	default:
+		// Use custom template if provided, otherwise default
+		if p.config.PromptTemplate != "" {
+			return p.config.PromptTemplate
+		}
+		return defaultOllamaPromptTemplate
+	}
+}
+
 // NewOllamaProvider creates a new Ollama provider instance
 func NewOllamaProvider(config *Config) *OllamaProvider {
 	return &OllamaProvider{
@@ -70,21 +105,30 @@ func (p *OllamaProvider) GenerateComment(ctx context.Context, request CommentReq
 		contextSection = fmt.Sprintf("ADDITIONAL PROJECT CONTEXT:\n%s\n", request.AdditionalContext)
 	}
 
-	// Determine which prompt template to use
-	promptTemplate := defaultOllamaPromptTemplate
-	if p.config.PromptTemplate != "" {
-		promptTemplate = p.config.PromptTemplate
-	}
+	// Get the appropriate prompt template based on entity type
+	promptTemplate := p.getPromptTemplate(request.EntityType)
 
-	// Create the prompt
-	prompt := fmt.Sprintf(
-		promptTemplate,
-		request.EntityName,
-		contextSection,
-		request.Context,
-		request.EntityName,
-		request.EntityType,
-	)
+	// Create the prompt based on entity type
+	var prompt string
+	if request.EntityType == "field" || request.EntityType == "member" {
+		// Use simplified prompt for fields
+		prompt = fmt.Sprintf(
+			promptTemplate,
+			contextSection,
+			request.Context,
+			request.EntityName,
+		)
+	} else {
+		// Use full prompt for other entities
+		prompt = fmt.Sprintf(
+			promptTemplate,
+			request.EntityName,
+			contextSection,
+			request.Context,
+			request.EntityName,
+			request.EntityType,
+		)
+	}
 
 	// Prepare request options
 	options := make(map[string]interface{})

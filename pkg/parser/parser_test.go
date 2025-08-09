@@ -8,6 +8,156 @@ import (
 	"doxyllm-it/pkg/formatter"
 )
 
+// TestInlineCommentParsing tests parsing of inline comments with < character preservation
+func TestInlineCommentParsing(t *testing.T) {
+	content := `struct Point {
+    int x; /**< The x-coordinate of the point. */
+    int y; /**< The y-coordinate of the point. */
+    float z; /**< The z-coordinate of the point. */
+};`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Should have 1 struct at root level
+	if len(tree.Root.Children) != 1 {
+		t.Errorf("Expected 1 root entity, got %d", len(tree.Root.Children))
+		return
+	}
+
+	structEntity := tree.Root.Children[0]
+	if structEntity.Type != ast.EntityStruct {
+		t.Errorf("Expected struct, got %v", structEntity.Type)
+		return
+	}
+
+	// Get fields (excluding access specifiers)
+	fields := getNonAccessSpecifierChildren(structEntity)
+	if len(fields) != 3 {
+		t.Errorf("Expected 3 fields, got %d", len(fields))
+		return
+	}
+
+	// Test each field has correct inline comment with < preserved
+	expectedComments := []string{
+		"< The x-coordinate of the point.",
+		"< The y-coordinate of the point.", 
+		"< The z-coordinate of the point.",
+	}
+
+	for i, field := range fields {
+		if field.Comment == nil {
+			t.Errorf("Field %d (%s) should have a comment", i, field.Name)
+			continue
+		}
+		
+		if field.Comment.Brief != expectedComments[i] {
+			t.Errorf("Field %d (%s) comment brief = %q, want %q", 
+				i, field.Name, field.Comment.Brief, expectedComments[i])
+		}
+
+		// Verify original raw comment is preserved
+		if !strings.Contains(field.Comment.Raw, "/**<") {
+			t.Errorf("Field %d (%s) raw comment should contain '/**<', got: %q", 
+				i, field.Name, field.Comment.Raw)
+		}
+	}
+}
+
+// TestInlineCommentAssociation tests that inline comments are associated with the correct entity
+func TestInlineCommentAssociation(t *testing.T) {
+	content := `struct TestStruct {
+    int first; /**< First field comment. */
+    int second; /**< Second field comment. */
+    int third; /**< Third field comment. */
+};`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	structEntity := tree.Root.Children[0]
+	fields := getNonAccessSpecifierChildren(structEntity)
+
+	expectedNames := []string{"first", "second", "third"}
+	expectedComments := []string{
+		"< First field comment.",
+		"< Second field comment.",
+		"< Third field comment.",
+	}
+
+	for i, field := range fields {
+		if field.Name != expectedNames[i] {
+			t.Errorf("Field %d name = %q, want %q", i, field.Name, expectedNames[i])
+		}
+		
+		if field.Comment == nil {
+			t.Errorf("Field %s should have a comment", field.Name)
+			continue
+		}
+		
+		if field.Comment.Brief != expectedComments[i] {
+			t.Errorf("Field %s comment = %q, want %q", 
+				field.Name, field.Comment.Brief, expectedComments[i])
+		}
+	}
+}
+
+// TestMixedCommentStyles tests parsing of both block and inline comments
+func TestMixedCommentStyles(t *testing.T) {
+	content := `/**
+ * @brief A test structure with mixed comment styles.
+ */
+struct MixedComments {
+    /**
+     * @brief A field with block comment.
+     */
+    int blockCommented;
+    
+    int inlineCommented; /**< A field with inline comment. */
+};`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	structEntity := tree.Root.Children[0]
+	
+	// Check struct comment
+	if structEntity.Comment == nil {
+		t.Error("Struct should have a comment")
+	} else if !strings.Contains(structEntity.Comment.Brief, "test structure") {
+		t.Errorf("Struct comment brief = %q, should contain 'test structure'", structEntity.Comment.Brief)
+	}
+
+	fields := getNonAccessSpecifierChildren(structEntity)
+	if len(fields) != 2 {
+		t.Errorf("Expected 2 fields, got %d", len(fields))
+		return
+	}
+
+	// First field should have block comment (no < prefix)
+	if fields[0].Comment == nil {
+		t.Error("First field should have a comment")
+	} else if strings.HasPrefix(fields[0].Comment.Brief, "<") {
+		t.Errorf("Block comment should not start with '<', got: %q", fields[0].Comment.Brief)
+	}
+
+	// Second field should have inline comment (with < prefix)
+	if fields[1].Comment == nil {
+		t.Error("Second field should have a comment")
+	} else if !strings.HasPrefix(fields[1].Comment.Brief, "<") {
+		t.Errorf("Inline comment should start with '<', got: %q", fields[1].Comment.Brief)
+	}
+}
+
 // Helper functions for tests
 func getNonAccessSpecifierChildren(entity *ast.Entity) []*ast.Entity {
 	var result []*ast.Entity

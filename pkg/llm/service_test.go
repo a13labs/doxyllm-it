@@ -7,6 +7,142 @@ import (
 	"testing"
 )
 
+// TestShouldUseInlineStyle tests the inline style detection logic
+func TestShouldUseInlineStyle(t *testing.T) {
+	service := &DocumentationService{}
+
+	tests := []struct {
+		name        string
+		entityType  string
+		description string
+		expected    bool
+	}{
+		{
+			name:        "Field with short description",
+			entityType:  "field",
+			description: "The x-coordinate.",
+			expected:    true,
+		},
+		{
+			name:        "Field with description starting with <",
+			entityType:  "field", 
+			description: "< The x-coordinate.",
+			expected:    true,
+		},
+		{
+			name:        "Field with long description",
+			entityType:  "field",
+			description: "This is a very long description that exceeds the character limit for inline comments and should be formatted as a block comment instead.",
+			expected:    false,
+		},
+		{
+			name:        "Field with multiple sentences",
+			entityType:  "field",
+			description: "The x-coordinate. It represents horizontal position.",
+			expected:    false,
+		},
+		{
+			name:        "Non-field entity",
+			entityType:  "class",
+			description: "Short description.",
+			expected:    false,
+		},
+		{
+			name:        "Member entity with short description",
+			entityType:  "member",
+			description: "The value.",
+			expected:    true,
+		},
+		{
+			name:        "Field with multiline description",
+			entityType:  "field",
+			description: "First line.\nSecond line.",
+			expected:    false,
+		},
+		{
+			name:        "Field with exclamation",
+			entityType:  "field",
+			description: "Important! Use carefully.",
+			expected:    false,
+		},
+		{
+			name:        "Field with question",
+			entityType:  "field",
+			description: "Is this correct? Maybe.",
+			expected:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := service.shouldUseInlineStyle(tt.entityType, tt.description)
+			if result != tt.expected {
+				t.Errorf("shouldUseInlineStyle(%q, %q) = %v, want %v", 
+					tt.entityType, tt.description, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestGenerateDocumentationWithInlineStyle tests that inline style is applied correctly
+func TestGenerateDocumentationWithInlineStyle(t *testing.T) {
+	// Mock provider that returns short field descriptions
+	mockProvider := &MockProvider{
+		generateCommentFunc: func(ctx context.Context, request CommentRequest) (*CommentResponse, error) {
+			if request.EntityType == "field" {
+				return &CommentResponse{
+					Description: "The coordinate value.",
+					Metadata:    map[string]string{"provider": "mock"},
+				}, nil
+			}
+			return &CommentResponse{
+				Description: "A longer description for non-field entities that should use block comment style.",
+				Metadata:    map[string]string{"provider": "mock"},
+			}, nil
+		},
+	}
+
+	service := NewDocumentationService(mockProvider)
+
+	tests := []struct {
+		name       string
+		entityType string
+		expectInlineKeyword string
+	}{
+		{
+			name:       "Field should use inline style",
+			entityType: "field",
+			expectInlineKeyword: "/**<",
+		},
+		{
+			name:       "Class should use block style", 
+			entityType: "class",
+			expectInlineKeyword: "@brief", // Block style uses @brief
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := DocumentationRequest{
+				EntityName:        "testEntity",
+				EntityType:        tt.entityType,
+				Context:           "int testEntity;",
+				AdditionalContext: "",
+			}
+
+			result, err := service.GenerateDocumentation(context.Background(), req)
+			if err != nil {
+				t.Fatalf("GenerateDocumentation failed: %v", err)
+			}
+
+			if !strings.Contains(result.Comment, tt.expectInlineKeyword) {
+				t.Errorf("Expected comment to contain %q, got: %s", 
+					tt.expectInlineKeyword, result.Comment)
+			}
+		})
+	}
+}
+
 // MockProvider implements Provider interface for testing
 type MockProvider struct {
 	generateCommentFunc func(ctx context.Context, request CommentRequest) (*CommentResponse, error)
