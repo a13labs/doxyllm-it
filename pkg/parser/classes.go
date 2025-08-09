@@ -25,7 +25,7 @@ func (p *Parser) parseClassOrStruct(entityType ast.EntityType) error {
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected %s name", keyword.Value)
+		return p.formatErrorAtCurrentPosition(fmt.Sprintf("expected %s name", keyword.Value))
 	}
 
 	nameToken := p.tokenCache.advance()
@@ -44,18 +44,39 @@ func (p *Parser) parseClassOrStruct(entityType ast.EntityType) error {
 	if inheritance != "" {
 		signature += " : " + inheritance
 	}
+	
+	// Allow newline and comments before opening brace
+	p.tokenCache.skipWhitespaceAndNewlines()
+	for {
+		if p.tokenCache.isAtEnd() { break }
+		tok := p.tokenCache.peek()
+		if tok.Type == TokenLineComment || tok.Type == TokenBlockComment || tok.Type == TokenDoxygenComment {
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespaceAndNewlines()
+			continue
+		}
+		break
+	}
+	// Check for opening brace (definition) or semicolon (forward declaration)
+	isForwardDeclaration := false
 	if p.tokenCache.match(TokenLeftBrace) {
 		signature += " {"
+	} else if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenSemicolon {
+		// This is a forward declaration - consume the semicolon but don't add it to signature
+		// The formatter will handle adding the semicolon during reconstruction
+		isForwardDeclaration = true
+		p.tokenCache.advance()
 	}
 
 	entity := &ast.Entity{
-		Type:        entityType,
-		Name:        nameToken.Value,
-		FullName:    p.buildFullName(nameToken.Value),
-		Signature:   signature,
-		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
-		Children:    make([]*ast.Entity, 0),
+		Type:                 entityType,
+		Name:                 nameToken.Value,
+		FullName:             p.buildFullName(nameToken.Value),
+		Signature:            signature,
+		AccessLevel:          p.getCurrentAccessLevel(),
+		IsForwardDeclaration: isForwardDeclaration,
+		SourceRange:          p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
+		Children:             make([]*ast.Entity, 0),
 	}
 
 	p.addEntity(entity)
@@ -112,7 +133,7 @@ func (p *Parser) parseClassOrStructWithMacro(entityType ast.EntityType) error {
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected %s name", keyword.Value)
+		return p.formatErrorAtCurrentPosition(fmt.Sprintf("expected %s name", keyword.Value))
 	}
 
 	nameToken := p.tokenCache.advance()
@@ -130,6 +151,18 @@ func (p *Parser) parseClassOrStructWithMacro(entityType ast.EntityType) error {
 	signature := fmt.Sprintf("%s %s %s", macroValue, keyword.Value, nameToken.Value)
 	if inheritance != "" {
 		signature += " : " + inheritance
+	}
+	// Allow newline and comments before opening brace
+	p.tokenCache.skipWhitespaceAndNewlines()
+	for {
+		if p.tokenCache.isAtEnd() { break }
+		tok := p.tokenCache.peek()
+		if tok.Type == TokenLineComment || tok.Type == TokenBlockComment || tok.Type == TokenDoxygenComment {
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespaceAndNewlines()
+			continue
+		}
+		break
 	}
 	if p.tokenCache.match(TokenLeftBrace) {
 		signature += " {"

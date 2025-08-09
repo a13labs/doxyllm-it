@@ -16,10 +16,33 @@ func NewCommentBuilder() *CommentBuilder {
 
 // BuildStructuredComment creates a properly structured Doxygen comment
 func (cb *CommentBuilder) BuildStructuredComment(response *CommentResponse, entityName, entityType string, groupInfo *GroupInfo, context string) string {
+	return cb.BuildStructuredCommentWithStyle(response, entityName, entityType, groupInfo, context, false)
+}
+
+// BuildStructuredCommentWithStyle creates a structured Doxygen comment with specified style
+func (cb *CommentBuilder) BuildStructuredCommentWithStyle(response *CommentResponse, entityName, entityType string, groupInfo *GroupInfo, context string, isInlineStyle bool) string {
+	description := response.Description
+
+	// For inline comments, create simple inline format
+	if isInlineStyle {
+		// For simple field documentation, use inline style
+		lines := strings.Split(description, "\n")
+		brief := ""
+		if len(lines) > 0 {
+			brief = strings.TrimSpace(lines[0])
+		}
+
+		if brief != "" && len(brief) < 100 && !strings.Contains(brief, "\n") {
+			// Simple single-line description - use inline format
+			return fmt.Sprintf("/**< %s */", brief)
+		}
+	}
+
+	// Fall back to block comment format
 	var comment strings.Builder
 	comment.WriteString("/**\n")
 
-	description := response.Description
+	// Continue with existing logic...
 
 	// Add brief description (first sentence or line)
 	lines := strings.Split(description, "\n")
@@ -61,6 +84,14 @@ func (cb *CommentBuilder) BuildStructuredComment(response *CommentResponse, enti
 		comment.WriteString(" *\n")
 		// Wrap detailed description
 		cb.writeWrappedText(&comment, detailed, 80)
+	}
+
+	// Add template parameters for template entities
+	if cb.isTemplateType(entityType) || cb.hasTemplateParameters(context) {
+		tparams := cb.extractTemplateParametersFromContext(context)
+		for _, tparam := range tparams {
+			comment.WriteString(fmt.Sprintf(" * @tparam %s Template parameter\n", tparam))
+		}
 	}
 
 	// Add function-specific tags only for actual functions/methods
@@ -201,4 +232,54 @@ func (cb *CommentBuilder) isValidIdentifier(s string) bool {
 	}
 
 	return true
+}
+
+// isTemplateType determines if an entity type represents a template
+func (cb *CommentBuilder) isTemplateType(entityType string) bool {
+	templateTypes := []string{"template", "using", "typedef", "class template", "function template"}
+	lowerType := strings.ToLower(entityType)
+
+	for _, tt := range templateTypes {
+		if strings.Contains(lowerType, tt) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasTemplateParameters checks if the context contains template parameters
+func (cb *CommentBuilder) hasTemplateParameters(context string) bool {
+	return strings.Contains(context, "template") && strings.Contains(context, "<") && strings.Contains(context, ">")
+}
+
+// extractTemplateParametersFromContext extracts template parameter names from context
+func (cb *CommentBuilder) extractTemplateParametersFromContext(context string) []string {
+	var tparams []string
+
+	// Look for template parameter declarations
+	templateRegex := regexp.MustCompile(`template\s*<([^>]+)>`)
+	matches := templateRegex.FindAllStringSubmatch(context, -1)
+
+	for _, match := range matches {
+		if len(match) > 1 {
+			paramStr := match[1]
+			// Split by comma to get individual parameters
+			parts := strings.Split(paramStr, ",")
+			for _, part := range parts {
+				part = strings.TrimSpace(part)
+
+				// Extract parameter name from declarations like "typename T" or "class U"
+				words := strings.Fields(part)
+				if len(words) >= 2 {
+					// Handle cases like "typename T", "class U", "int N"
+					paramName := words[len(words)-1]
+					if cb.isValidIdentifier(paramName) {
+						tparams = append(tparams, paramName)
+					}
+				}
+			}
+		}
+	}
+
+	return tparams
 }

@@ -111,7 +111,8 @@ type DoxygenComment struct {
 	Raw        string            // Original comment text
 	Brief      string            // Brief description
 	Detailed   string            // Detailed description
-	Params     map[string]string // Parameter documentation
+	Params     map[string]string // Parameter documentation (@param)
+	TParams    map[string]string // Template parameter documentation (@tparam)
 	Returns    string            // Return value documentation
 	Throws     []string          // Exception documentation
 	Since      string            // Since version
@@ -133,29 +134,32 @@ type DoxygenComment struct {
 
 // Entity represents a documentable C++ entity
 type Entity struct {
-	Type           EntityType      // Type of entity
-	Name           string          // Entity name
-	FullName       string          // Fully qualified name
-	Signature      string          // Complete signature/declaration
-	AccessLevel    AccessLevel     // Access level (for class members)
-	IsStatic       bool            // Whether entity is static
-	IsConst        bool            // Whether entity is const
-	IsVirtual      bool            // Whether method is virtual
-	IsPure         bool            // Whether method is pure virtual
-	IsInline       bool            // Whether function is inline
-	IsTemplate     bool            // Whether entity is templated
-	TemplateParams []string        // Template parameters
-	Namespace      string          // Containing namespace
-	Class          string          // Containing class (for methods/fields)
-	Comment        *DoxygenComment // Associated doxygen comment
-	Children       []*Entity       // Child entities
-	Parent         *Entity         // Parent entity
-	SourceRange    Range           // Range in source file
-	HeaderRange    Range           // Range of just the declaration/header
-	BodyRange      *Range          // Range of body (for functions/classes with implementation)
-	OriginalText   string          // Original text including whitespace and comments
-	LeadingWS      string          // Leading whitespace/comments before entity
-	TrailingWS     string          // Trailing whitespace/comments after entity
+	Type                 EntityType      // Type of entity
+	Name                 string          // Entity name
+	FullName             string          // Fully qualified name
+	Signature            string          // Complete signature/declaration
+	AccessLevel          AccessLevel     // Access level (for class members)
+	IsStatic             bool            // Whether entity is static
+	IsConst              bool            // Whether entity is const
+	IsConstexpr          bool            // Whether entity is constexpr
+	IsExtern             bool            // Whether entity is extern
+	IsVirtual            bool            // Whether method is virtual
+	IsPure               bool            // Whether method is pure virtual
+	IsInline             bool            // Whether function is inline
+	IsForwardDeclaration bool            // Whether this is a forward declaration
+	IsTemplate           bool            // Whether entity is templated
+	TemplateParams       []string        // Template parameters
+	Namespace            string          // Containing namespace
+	Class                string          // Containing class (for methods/fields)
+	Comment              *DoxygenComment // Associated doxygen comment
+	Children             []*Entity       // Child entities
+	Parent               *Entity         // Parent entity
+	SourceRange          Range           // Range in source file
+	HeaderRange          Range           // Range of just the declaration/header
+	BodyRange            *Range          // Range of body (for functions/classes with implementation)
+	OriginalText         string          // Original text including whitespace and comments
+	LeadingWS            string          // Leading whitespace/comments before entity
+	TrailingWS           string          // Trailing whitespace/comments after entity
 }
 
 // GetPath returns the hierarchical path to this entity
@@ -316,7 +320,13 @@ func (st *ScopeTree) GetDocumentableEntities() []*Entity {
 	}
 
 	for _, entityType := range documentableTypes {
-		entities = append(entities, st.GetEntitiesByType(entityType)...)
+		candidates := st.GetEntitiesByType(entityType)
+		// Filter out forward declarations - they typically don't need documentation
+		for _, entity := range candidates {
+			if !entity.IsForwardDeclaration {
+				entities = append(entities, entity)
+			}
+		}
 	}
 
 	return entities

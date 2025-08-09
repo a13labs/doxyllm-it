@@ -30,7 +30,7 @@ func (p *Parser) parseFunction() error {
 	start := p.tokenCache.getCurrentPosition()
 
 	// Parse specifiers and attributes first
-	var isStatic, isInline, isVirtual, isConst bool
+	var isStatic, isInline, isVirtual, isConst, isConstexpr bool
 
 	// Parse function specifiers
 	for !p.tokenCache.isAtEnd() {
@@ -45,6 +45,10 @@ func (p *Parser) parseFunction() error {
 			p.tokenCache.skipWhitespace()
 		} else if token.Type == TokenVirtual {
 			isVirtual = true
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespace()
+		} else if token.Type == TokenConstexpr {
+			isConstexpr = true
 			p.tokenCache.advance()
 			p.tokenCache.skipWhitespace()
 		} else {
@@ -119,6 +123,7 @@ func (p *Parser) parseFunction() error {
 		IsInline:     isInline,
 		IsVirtual:    isVirtual,
 		IsConst:      isConst,
+		IsConstexpr:  isConstexpr,
 		SourceRange:  p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 		BodyRange:    bodyRange,
 		OriginalText: bodyText,
@@ -148,6 +153,7 @@ func (p *Parser) isFunction() bool {
 	// Look for pattern: [return_type] function_name(
 	identifiersSeen := 0
 
+loop:
 	for !p.tokenCache.isAtEnd() && identifiersSeen < 6 { // increased limit to handle more complex types
 		token := p.tokenCache.peek()
 
@@ -156,6 +162,16 @@ func (p *Parser) isFunction() bool {
 			identifiersSeen++
 			p.tokenCache.advance()
 			p.tokenCache.skipWhitespaceAndNewlines() // Handle newlines between return type and function name
+		case TokenOperator:
+			// Handle operator overloads
+			identifiersSeen++
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespaceAndNewlines()
+			// Also skip the operator symbol
+			if !p.tokenCache.isAtEnd() && !p.isValidIdentifierToken(p.tokenCache.peek()) {
+				p.tokenCache.advance() // consume operator symbol (+, -, etc.)
+				p.tokenCache.skipWhitespaceAndNewlines()
+			}
 		case TokenLeftParen:
 			// Found opening parenthesis, this looks like a function
 			return identifiersSeen >= 1
@@ -185,7 +201,7 @@ func (p *Parser) isFunction() bool {
 			p.tokenCache.advance()
 			p.tokenCache.skipWhitespaceAndNewlines()
 		default:
-			break
+			break loop
 		}
 	}
 
@@ -230,11 +246,22 @@ func (p *Parser) parseFunctionSignature() (signature string, name string, isMeth
 			tokenValue = p.resolveDefine(token.Value)
 		}
 
-		sig.WriteString(tokenValue)
-
 		// Track the function name (last identifier before '(')
 		if token.Type == TokenIdentifier && beforeParen {
 			funcName = token.Value
+			sig.WriteString(tokenValue) // add to signature
+		} else if token.Type == TokenOperator && beforeParen {
+			// Handle operator overloads - we need to look ahead for the operator symbol
+			funcName = "operator"
+			sig.WriteString("operator") // add operator keyword to signature
+			p.tokenCache.advance() // consume 'operator'
+			if !p.tokenCache.isAtEnd() {
+				operatorToken := p.tokenCache.peek()
+				funcName += operatorToken.Value
+				sig.WriteString(operatorToken.Value) // add symbol to signature
+				p.tokenCache.advance() // consume operator symbol
+				continue // skip the normal advance at the end of loop
+			}
 		} else if token.Type == TokenTilde && beforeParen {
 			// Handle destructor names
 			isDestructor = true
@@ -242,6 +269,9 @@ func (p *Parser) parseFunctionSignature() (signature string, name string, isMeth
 			if nextToken.Type == TokenIdentifier {
 				funcName = nextToken.Value // Just the class name, not including ~
 			}
+			sig.WriteString(tokenValue) // add to signature
+		} else {
+			sig.WriteString(tokenValue) // add to signature for other cases
 		}
 
 		p.tokenCache.advance()

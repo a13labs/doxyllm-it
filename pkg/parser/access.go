@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"fmt"
-
 	"doxyllm-it/pkg/ast"
 )
 
@@ -12,7 +10,7 @@ func (p *Parser) parseAccessSpecifier() error {
 	accessToken := p.tokenCache.advance()
 
 	if !p.tokenCache.match(TokenColon) {
-		return fmt.Errorf("expected ':' after access specifier")
+		return p.formatErrorAtCurrentPosition("expected ':' after access specifier")
 	}
 
 	// Update current access level

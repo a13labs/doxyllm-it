@@ -7,6 +7,185 @@ import (
 	"doxyllm-it/pkg/ast"
 )
 
+// TestInlineCommentFormatting tests that inline comments are formatted correctly
+func TestInlineCommentFormatting(t *testing.T) {
+	// Create a struct with inline comments
+	root := &ast.Entity{
+		Type:     ast.EntityUnknown,
+		Name:     "",
+		FullName: "",
+		Children: []*ast.Entity{},
+	}
+
+	// Create struct with fields that have inline comments
+	structEntity := &ast.Entity{
+		Type:      ast.EntityStruct,
+		Name:      "Point",
+		FullName:  "Point",
+		Signature: "struct Point {",
+		Parent:    root,
+		Children:  []*ast.Entity{},
+	}
+
+	// Field with inline comment (has < prefix)
+	field1 := &ast.Entity{
+		Type:      ast.EntityField,
+		Name:      "x",
+		FullName:  "Point::x",
+		Signature: "int x",
+		Parent:    structEntity,
+		Children:  []*ast.Entity{},
+		Comment: &ast.DoxygenComment{
+			Brief:      "< The x-coordinate.",
+			Raw:        "/**< The x-coordinate. */",
+			Params:     make(map[string]string),
+			CustomTags: make(map[string]string),
+		},
+	}
+
+	// Field with block comment (no < prefix)
+	field2 := &ast.Entity{
+		Type:      ast.EntityField,
+		Name:      "y",
+		FullName:  "Point::y",
+		Signature: "int y",
+		Parent:    structEntity,
+		Children:  []*ast.Entity{},
+		Comment: &ast.DoxygenComment{
+			Brief:      "The y-coordinate.",
+			Raw:        "/** @brief The y-coordinate. */",
+			Params:     make(map[string]string),
+			CustomTags: make(map[string]string),
+		},
+	}
+
+	structEntity.Children = append(structEntity.Children, field1, field2)
+	root.Children = append(root.Children, structEntity)
+
+	tree := &ast.ScopeTree{Root: root}
+	formatter := New()
+	result := formatter.ReconstructCode(tree)
+
+	// Check that inline comment is placed after the declaration
+	if !strings.Contains(result, "int x; /**< The x-coordinate. */") {
+		t.Errorf("Expected inline comment after field declaration, got:\n%s", result)
+	}
+
+	// Check that block comment is placed before the declaration
+	if !strings.Contains(result, "* @brief The y-coordinate.") || !strings.Contains(result, "int y;") {
+		t.Errorf("Expected block comment before field declaration, got:\n%s", result)
+	}
+}
+
+// TestShouldUseInlineComment tests the inline comment detection logic
+func TestShouldUseInlineComment(t *testing.T) {
+	formatter := New()
+
+	tests := []struct {
+		name     string
+		comment  *ast.DoxygenComment
+		expected bool
+	}{
+		{
+			name: "Original inline comment with Raw field",
+			comment: &ast.DoxygenComment{
+				Brief:      "< The description.",
+				Raw:        "/**< The description. */",
+				Params:     make(map[string]string),
+				CustomTags: make(map[string]string),
+			},
+			expected: true,
+		},
+		{
+			name: "LLM generated inline comment with < prefix",
+			comment: &ast.DoxygenComment{
+				Brief:      "< Generated description.",
+				Raw:        "",
+				Params:     make(map[string]string),
+				CustomTags: make(map[string]string),
+			},
+			expected: true,
+		},
+		{
+			name: "Block comment without < prefix",
+			comment: &ast.DoxygenComment{
+				Brief:      "Regular description.",
+				Raw:        "/** @brief Regular description. */",
+				Params:     make(map[string]string),
+				CustomTags: make(map[string]string),
+			},
+			expected: false,
+		},
+		{
+			name: "Triple slash inline comment",
+			comment: &ast.DoxygenComment{
+				Brief:      "< Description.",
+				Raw:        "///< Description.",
+				Params:     make(map[string]string),
+				CustomTags: make(map[string]string),
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatter.shouldUseInlineComment(tt.comment)
+			if result != tt.expected {
+				t.Errorf("shouldUseInlineComment() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestFormatInlineComment tests the inline comment formatting function
+func TestFormatInlineComment(t *testing.T) {
+	formatter := New()
+
+	tests := []struct {
+		name     string
+		comment  *ast.DoxygenComment
+		expected string
+	}{
+		{
+			name: "Simple inline comment with < prefix",
+			comment: &ast.DoxygenComment{
+				Brief:      "< The description.",
+				Params:     make(map[string]string),
+				CustomTags: make(map[string]string),
+			},
+			expected: "/**< The description. */",
+		},
+		{
+			name: "Inline comment without < prefix",
+			comment: &ast.DoxygenComment{
+				Brief:      "The description.",
+				Params:     make(map[string]string),
+				CustomTags: make(map[string]string),
+			},
+			expected: "/**< The description. */",
+		},
+		{
+			name: "Inline comment with extra whitespace",
+			comment: &ast.DoxygenComment{
+				Brief:      "  < The description.  ",
+				Params:     make(map[string]string),
+				CustomTags: make(map[string]string),
+			},
+			expected: "/**< The description. */",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatter.formatInlineComment(tt.comment, 0)
+			if result != tt.expected {
+				t.Errorf("formatInlineComment() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
 // createTestScopeTree creates a sample AST for testing
 func createTestScopeTree() *ast.ScopeTree {
 	// Create root entity

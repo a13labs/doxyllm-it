@@ -179,7 +179,7 @@ doxyllm-it ollama-new --model codellama:13b --temperature 0.2 src/
 
 ### Configuration
 
-The refactored command uses the same `.doxyllm.yaml.yaml` configuration:
+The refactored command uses the same `.doxyllm.yaml` configuration:
 
 ```yaml
 global: "Project-wide context"
@@ -197,7 +197,7 @@ groups:
 
 1. **Current command remains unchanged**: The original `ollama` command continues to work
 2. **New command available**: `ollama-new` provides the refactored implementation
-3. **Same configuration**: Uses the existing `.doxyllm.yaml.yaml` files
+3. **Same configuration**: Uses the existing `.doxyllm.yaml` files
 4. **Same output**: Produces the same documentation results
 
 ### For Developers

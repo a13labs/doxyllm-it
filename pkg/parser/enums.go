@@ -22,12 +22,12 @@ func (p *Parser) parseEnum() error {
 	}
 
 	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected enum name")
+		return p.formatErrorAtCurrentPosition("expected enum name")
 	}
 
 	nameToken := p.tokenCache.advance()
 
-	p.tokenCache.skipWhitespace()
+	p.tokenCache.skipWhitespaceAndNewlines()
 
 	// Parse underlying type if present
 	underlyingType := ""
@@ -35,7 +35,7 @@ func (p *Parser) parseEnum() error {
 		underlyingType = p.parseType()
 	}
 
-	p.tokenCache.skipWhitespace()
+	p.tokenCache.skipWhitespaceAndNewlines()
 
 	// Build signature and handle body
 	signature := "enum"
@@ -102,7 +102,7 @@ func (p *Parser) parseEnumWithMacro() error {
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected enum name")
+		return p.formatErrorAtCurrentPosition("expected enum name")
 	}
 
 	nameToken := p.tokenCache.advance()

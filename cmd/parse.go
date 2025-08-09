@@ -62,6 +62,7 @@ func outputJSON(tree *ast.ScopeTree, showAll bool) error {
 		IsStatic    bool         `json:"isStatic,omitempty"`
 		IsVirtual   bool         `json:"isVirtual,omitempty"`
 		IsConst     bool         `json:"isConst,omitempty"`
+		IsExtern    bool         `json:"isExtern,omitempty"`
 		HasComment  bool         `json:"hasComment"`
 		Children    []JSONEntity `json:"children,omitempty"`
 		Line        int          `json:"line"`
@@ -78,6 +79,7 @@ func outputJSON(tree *ast.ScopeTree, showAll bool) error {
 			IsStatic:   e.IsStatic,
 			IsVirtual:  e.IsVirtual,
 			IsConst:    e.IsConst,
+			IsExtern:   e.IsExtern,
 			HasComment: e.HasDoxygenComment(),
 			Line:       e.SourceRange.Start.Line,
 			Column:     e.SourceRange.Start.Column,
@@ -187,6 +189,15 @@ func printEntity(entity *ast.Entity, depth int) {
 	}
 	if entity.IsConst {
 		fmt.Printf(" [const]")
+	}
+	if entity.IsExtern {
+		fmt.Printf(" [extern]")
+	}
+	if entity.IsConstexpr {
+		fmt.Printf(" [constexpr]")
+	}
+	if entity.IsForwardDeclaration {
+		fmt.Printf(" [forward]")
 	}
 
 	if entity.HasDoxygenComment() {

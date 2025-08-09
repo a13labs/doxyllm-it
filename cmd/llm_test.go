@@ -196,10 +196,10 @@ groups:
     description: "A test group for documentation"
     files:
       - "*.hpp"
-    generateDefgroup: true
+    generateDefGroup: true
 `
 
-	configPath := filepath.Join(tempDir, ".doxyllm.yaml.yaml")
+	configPath := filepath.Join(tempDir, ".doxyllm.yaml")
 	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create config file: %v", err)
@@ -231,7 +231,7 @@ groups:
 		if group.Name != "testgroup" {
 			t.Errorf("Expected group name 'testgroup', got '%s'", group.Name)
 		}
-		if !group.GenerateDefgroup {
+		if !group.GenerateDefGroup {
 			t.Error("Expected generateDefgroup to be true")
 		}
 	}
@@ -253,7 +253,7 @@ ignore:
   - "ignored.hpp"
 `
 
-	configPath := filepath.Join(tempDir, ".doxyllm.yaml.yaml")
+	configPath := filepath.Join(tempDir, ".doxyllm.yaml")
 	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create config file: %v", err)
@@ -286,7 +286,7 @@ func TestGetGroupForFile(t *testing.T) {
 				Name:             "headers",
 				Title:            "Header Files",
 				Files:            []string{"*.hpp", "*.h"},
-				GenerateDefgroup: true,
+				GenerateDefGroup: true,
 			},
 			"utils": {
 				Name:  "utils",

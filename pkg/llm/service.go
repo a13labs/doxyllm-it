@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // DocumentationService provides high-level documentation generation functionality
@@ -40,19 +41,61 @@ func (s *DocumentationService) GenerateDocumentation(ctx context.Context, req Do
 	}
 
 	// Build structured comment
-	structuredComment := s.builder.BuildStructuredComment(
-		response,
-		req.EntityName,
-		req.EntityType,
-		nil, // No longer passing GroupInfo - will be handled by post-processor
-		req.Context,
-	)
+	// Use inline style for struct/class fields with simple descriptions
+	useInlineStyle := s.shouldUseInlineStyle(req.EntityType, response.Description)
+
+	var structuredComment string
+	if useInlineStyle {
+		structuredComment = s.builder.BuildStructuredCommentWithStyle(
+			response,
+			req.EntityName,
+			req.EntityType,
+			nil, // No GroupInfo for inline comments
+			req.Context,
+			true, // Use inline style
+		)
+	} else {
+		structuredComment = s.builder.BuildStructuredComment(
+			response,
+			req.EntityName,
+			req.EntityType,
+			nil, // No longer passing GroupInfo - will be handled by post-processor
+			req.Context,
+		)
+	}
 
 	return &DocumentationResult{
 		Comment:     structuredComment,
 		Description: response.Description,
 		Metadata:    response.Metadata,
 	}, nil
+}
+
+// shouldUseInlineStyle determines if inline comment style should be used
+func (s *DocumentationService) shouldUseInlineStyle(entityType, description string) bool {
+	// Use inline style for struct/class fields (members) with simple descriptions
+	if entityType != "field" && entityType != "member" {
+		return false
+	}
+
+	// For debugging: temporarily make this very permissive
+	firstLine := strings.TrimSpace(description)
+	// Remove any leading < character that might have been added by LLM
+	firstLine = strings.TrimPrefix(firstLine, "<")
+	firstLine = strings.TrimSpace(firstLine)
+
+	// Check if description is simple enough for inline style
+	lines := strings.Split(firstLine, "\n")
+	if len(lines) > 1 {
+		return false // Multi-line descriptions should use block style
+	}
+
+	// Be more strict for field descriptions - allow up to 80 characters for single sentence
+	isSimpleSentence := !strings.Contains(firstLine, ". ") &&
+		!strings.Contains(firstLine, "! ") &&
+		!strings.Contains(firstLine, "? ")
+
+	return len(firstLine) < 80 && isSimpleSentence && firstLine != ""
 }
 
 // TestConnection tests the connection to the LLM provider
