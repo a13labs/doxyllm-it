@@ -58,22 +58,25 @@ func (p *Parser) parseClassOrStruct(entityType ast.EntityType) error {
 		break
 	}
 	// Check for opening brace (definition) or semicolon (forward declaration)
+	isForwardDeclaration := false
 	if p.tokenCache.match(TokenLeftBrace) {
 		signature += " {"
 	} else if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenSemicolon {
 		// This is a forward declaration - consume the semicolon but don't add it to signature
 		// The formatter will handle adding the semicolon during reconstruction
+		isForwardDeclaration = true
 		p.tokenCache.advance()
 	}
 
 	entity := &ast.Entity{
-		Type:        entityType,
-		Name:        nameToken.Value,
-		FullName:    p.buildFullName(nameToken.Value),
-		Signature:   signature,
-		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
-		Children:    make([]*ast.Entity, 0),
+		Type:                 entityType,
+		Name:                 nameToken.Value,
+		FullName:             p.buildFullName(nameToken.Value),
+		Signature:            signature,
+		AccessLevel:          p.getCurrentAccessLevel(),
+		IsForwardDeclaration: isForwardDeclaration,
+		SourceRange:          p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
+		Children:             make([]*ast.Entity, 0),
 	}
 
 	p.addEntity(entity)

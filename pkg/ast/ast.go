@@ -143,9 +143,10 @@ type Entity struct {
 	IsConstexpr    bool            // Whether entity is constexpr
 	IsVirtual      bool            // Whether method is virtual
 	IsPure         bool            // Whether method is pure virtual
-	IsInline       bool            // Whether function is inline
-	IsTemplate     bool            // Whether entity is templated
-	TemplateParams []string        // Template parameters
+	IsInline            bool     // Whether function is inline
+	IsForwardDeclaration bool     // Whether this is a forward declaration
+	IsTemplate          bool     // Whether entity is templated
+	TemplateParams      []string // Template parameters
 	Namespace      string          // Containing namespace
 	Class          string          // Containing class (for methods/fields)
 	Comment        *DoxygenComment // Associated doxygen comment
@@ -317,7 +318,13 @@ func (st *ScopeTree) GetDocumentableEntities() []*Entity {
 	}
 
 	for _, entityType := range documentableTypes {
-		entities = append(entities, st.GetEntitiesByType(entityType)...)
+		candidates := st.GetEntitiesByType(entityType)
+		// Filter out forward declarations - they typically don't need documentation
+		for _, entity := range candidates {
+			if !entity.IsForwardDeclaration {
+				entities = append(entities, entity)
+			}
+		}
 	}
 
 	return entities

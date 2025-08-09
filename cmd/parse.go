@@ -191,6 +191,9 @@ func printEntity(entity *ast.Entity, depth int) {
 	if entity.IsConstexpr {
 		fmt.Printf(" [constexpr]")
 	}
+	if entity.IsForwardDeclaration {
+		fmt.Printf(" [forward]")
+	}
 
 	if entity.HasDoxygenComment() {
 		fmt.Printf(" [documented]")
