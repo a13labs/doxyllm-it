@@ -17,13 +17,14 @@ import (
 // Document represents a C++ header file with its parsed AST and provides
 // high-level operations for manipulating Doxygen documentation
 type Document struct {
-	filename    string                 // Original filename (if loaded from file)
-	content     string                 // Current content
-	tree        *ast.ScopeTree         // Parsed AST
-	parser      *parser.Parser         // Parser instance
-	formatter   *formatter.Formatter   // Formatter instance for code reconstruction
-	modified    bool                   // Whether document has been modified
-	entityCache map[string]*ast.Entity // Cache for quick entity lookup by path
+	filename         string                 // Original filename (if loaded from file)
+	content          string                 // Current content
+	tree             *ast.ScopeTree         // Parsed AST
+	parser           *parser.Parser         // Parser instance
+	formatter        *formatter.Formatter   // Formatter instance for code reconstruction
+	modified         bool                   // Whether document has been modified
+	entityCache      map[string]*ast.Entity // Cache for quick entity lookup by path
+	prependedContent string                 // Content prepended to the file (e.g., defgroup comments)
 }
 
 // NewFromFile creates a new document by loading and parsing a file
@@ -55,13 +56,14 @@ func NewFromContent(name, content string) (*Document, error) {
 	}
 
 	doc := &Document{
-		filename:    name,
-		content:     content,
-		tree:        tree,
-		parser:      p,
-		formatter:   formatter.New(),
-		modified:    false,
-		entityCache: make(map[string]*ast.Entity),
+		filename:         name,
+		content:          content,
+		tree:             tree,
+		parser:           p,
+		formatter:        formatter.New(),
+		modified:         false,
+		entityCache:      make(map[string]*ast.Entity),
+		prependedContent: "", // Initialize empty
 	}
 
 	// Build entity cache
@@ -88,6 +90,10 @@ func (d *Document) GetFilename() string {
 
 // GetContent returns the current content of the document
 func (d *Document) GetContent() string {
+	// Return the full content including any prepended content
+	if d.prependedContent != "" {
+		return d.prependedContent + d.content
+	}
 	return d.content
 }
 
@@ -396,6 +402,19 @@ func (d *Document) SetEntityCustomTag(entityPath, tagName, value string) error {
 	return nil
 }
 
+// PrependFileComment adds a comment at the beginning of the file
+func (d *Document) PrependFileComment(comment string) error {
+	// Ensure comment ends with newline
+	if !strings.HasSuffix(comment, "\n") {
+		comment += "\n"
+	}
+
+	// Store the prepended content separately
+	d.prependedContent = comment + d.prependedContent
+	d.modified = true
+	return nil
+}
+
 // Convenience Methods
 
 // GetEntitySummary returns a summary of an entity's documentation status
@@ -597,8 +616,11 @@ func (d *Document) Save() error {
 
 // SaveAs saves the document to a specified file
 func (d *Document) SaveAs(filename string) error {
-	// Reconstruct the code with updated comments using the formatter
-	reconstructedCode := d.formatter.ReconstructCode(d.tree)
+	// Get the reconstructed content including any prepended content
+	reconstructedCode, err := d.SaveToString()
+	if err != nil {
+		return fmt.Errorf("failed to reconstruct content: %w", err)
+	}
 
 	// Validate reconstruction
 	if err := d.validateReconstructedCode(reconstructedCode); err != nil {
@@ -606,7 +628,7 @@ func (d *Document) SaveAs(filename string) error {
 	}
 
 	// Write the reconstructed code to the file
-	err := os.WriteFile(filename, []byte(reconstructedCode), 0644)
+	err = os.WriteFile(filename, []byte(reconstructedCode), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write file %s: %w", filename, err)
 	}
@@ -623,6 +645,12 @@ func (d *Document) SaveAs(filename string) error {
 func (d *Document) SaveToString() (string, error) {
 	// Use the formatter to reconstruct the code with updated comments
 	reconstructedCode := d.formatter.ReconstructCode(d.tree)
+	
+	// Prepend any file-level comments
+	if d.prependedContent != "" {
+		reconstructedCode = d.prependedContent + reconstructedCode
+	}
+	
 	return reconstructedCode, nil
 }
 
@@ -630,6 +658,11 @@ func (d *Document) SaveToString() (string, error) {
 func (d *Document) SaveToStringFormatted() (string, error) {
 	// Get the reconstructed code
 	reconstructedCode := d.formatter.ReconstructCode(d.tree)
+	
+	// Prepend any file-level comments
+	if d.prependedContent != "" {
+		reconstructedCode = d.prependedContent + reconstructedCode
+	}
 
 	// Apply clang-format if available
 	formattedCode, err := d.formatter.FormatWithClang(reconstructedCode)

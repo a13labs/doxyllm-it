@@ -162,18 +162,8 @@ func (s *DocumentationService) AddDefgroupToDocument(doc *Document, group *Group
 	// Generate @defgroup comment
 	defgroupComment := s.generateDefgroupComment(group)
 
-	// Create a DoxygenComment structure for the defgroup
-	comment := &ast.DoxygenComment{
-		Raw: defgroupComment,
-	}
-
-	// Add the defgroup comment to the root entity (file level)
-	tree := doc.GetTree()
-	if tree != nil && tree.Root != nil {
-		tree.Root.Comment = comment
-	}
-
-	return nil
+	// Inject the defgroup comment at the beginning of the file
+	return doc.PrependFileComment(defgroupComment)
 }
 
 // generateEntityDocumentation generates documentation for a single entity
