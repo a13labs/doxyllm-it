@@ -245,7 +245,7 @@ func TestParseDoxygenCommentParamVsTParam(t *testing.T) {
 	}
 }
 
-// TestParseDoxygenCommentRegressionPreventParamTParamMixup tests that the original 
+// TestParseDoxygenCommentRegressionPreventParamTParamMixup tests that the original
 // bug where @tparam was stored in Params map doesn't happen anymore
 func TestParseDoxygenCommentRegressionPreventParamTParamMixup(t *testing.T) {
 	comment := `/**

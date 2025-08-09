@@ -90,7 +90,7 @@ func (cb *CommentBuilder) BuildStructuredCommentWithStyle(response *CommentRespo
 	if cb.isTemplateType(entityType) || cb.hasTemplateParameters(context) {
 		tparams := cb.extractTemplateParametersFromContext(context)
 		for _, tparam := range tparams {
-			comment.WriteString(fmt.Sprintf(" * @tparam %s \n", tparam))
+			comment.WriteString(fmt.Sprintf(" * @tparam %s Template parameter\n", tparam))
 		}
 	}
 

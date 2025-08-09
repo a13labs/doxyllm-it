@@ -32,7 +32,7 @@ func TestFormatDoxygenCommentWithTParams(t *testing.T) {
 				"* @brief A generic container function.",
 				"* @tparam T The type of elements",
 				"* @tparam Container The container type",
-				"* @param container The container instance", 
+				"* @param container The container instance",
 				"* @param value The value to process",
 				"* @return true if successful",
 			},
@@ -73,7 +73,7 @@ func TestFormatDoxygenCommentWithTParams(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := formatter.formatDoxygenComment(tt.comment, 0)
-			
+
 			// Check that all expected lines are present
 			for _, expectedLine := range tt.expected {
 				if !strings.Contains(result, expectedLine) {

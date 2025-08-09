@@ -6,9 +6,9 @@ import (
 
 func TestDoxygenCommentParamsAndTParams(t *testing.T) {
 	tests := []struct {
-		name           string
-		comment        *DoxygenComment
-		expectedParams map[string]string
+		name            string
+		comment         *DoxygenComment
+		expectedParams  map[string]string
 		expectedTParams map[string]string
 	}{
 		{
@@ -58,7 +58,7 @@ func TestDoxygenCommentParamsAndTParams(t *testing.T) {
 					"index": "The index where to insert",
 				},
 				TParams: map[string]string{
-					"T": "The type of elements",
+					"T":         "The type of elements",
 					"Allocator": "The allocator type",
 				},
 			},
@@ -67,7 +67,7 @@ func TestDoxygenCommentParamsAndTParams(t *testing.T) {
 				"index": "The index where to insert",
 			},
 			expectedTParams: map[string]string{
-				"T": "The type of elements",
+				"T":         "The type of elements",
 				"Allocator": "The allocator type",
 			},
 		},

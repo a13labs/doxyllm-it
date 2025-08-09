@@ -9,6 +9,7 @@ import (
 
 	"doxyllm-it/pkg/ast"
 	"doxyllm-it/pkg/llm"
+	"doxyllm-it/pkg/parser"
 )
 
 // LLMService defines the interface for LLM-based documentation generation
@@ -200,8 +201,12 @@ func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, 
 		return fmt.Errorf("LLM generation failed: %w", err)
 	}
 
-	// Parse the generated comment into structured format
-	comment := s.parseGeneratedComment(result.Comment)
+	// Parse the generated structured comment using the Doxygen parser
+	// The result.Comment is already a structured Doxygen comment with proper @tparam tags
+	comment := parser.ParseDoxygenComment(result.Comment)
+	if comment == nil {
+		return fmt.Errorf("failed to parse generated comment")
+	}
 
 	// Add group information if specified
 	if group != nil {

@@ -271,6 +271,12 @@ func (p *OllamaProvider) cleanResponse(response string) string {
 	description = strings.TrimPrefix(description, "```")
 	description = strings.TrimSuffix(description, "```")
 
+	// Handle case where LLM returned a complete Doxygen comment despite instructions
+	if strings.Contains(description, "/**") || strings.Contains(description, "@brief") || strings.Contains(description, "@param") || strings.Contains(description, "@tparam") {
+		// Extract just the description content from the complete comment
+		description = p.extractDescriptionFromDoxygenComment(description)
+	}
+
 	// Remove common unwanted prefixes from some models
 	unwantedPrefixes := []string{
 		"This is a C++ documentation expert.",
@@ -286,4 +292,47 @@ func (p *OllamaProvider) cleanResponse(response string) string {
 	}
 
 	return strings.TrimSpace(description)
+}
+
+// extractDescriptionFromDoxygenComment extracts plain description text from a complete Doxygen comment
+func (p *OllamaProvider) extractDescriptionFromDoxygenComment(comment string) string {
+	// Remove comment markers
+	comment = strings.ReplaceAll(comment, "/**", "")
+	comment = strings.ReplaceAll(comment, "*/", "")
+
+	lines := strings.Split(comment, "\n")
+	var descriptionLines []string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		line = strings.TrimPrefix(line, "*")
+		line = strings.TrimSpace(line)
+
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+
+		// Extract content from @brief tag
+		if strings.HasPrefix(line, "@brief ") {
+			briefContent := strings.TrimPrefix(line, "@brief ")
+			briefContent = strings.Trim(briefContent, `"`) // Remove quotes if present
+			if briefContent != "" {
+				descriptionLines = append(descriptionLines, briefContent)
+			}
+			continue
+		}
+
+		// Skip Doxygen tags (@param, @tparam, @return, etc.)
+		if strings.HasPrefix(line, "@") {
+			continue
+		}
+
+		// Include regular description lines
+		if line != "" {
+			descriptionLines = append(descriptionLines, line)
+		}
+	}
+
+	return strings.Join(descriptionLines, " ")
 }

@@ -42,7 +42,7 @@ func TestRegressionTParamVsParam(t *testing.T) {
 	}
 }
 
-// TestFormatterPreservesCorrectTParamFormat tests that the formatter 
+// TestFormatterPreservesCorrectTParamFormat tests that the formatter
 // outputs the correct @tparam tags, not @param
 // NOTE: This test is covered by the formatter package tests
 func TestFormatterPreservesCorrectTParamFormat(t *testing.T) {
