@@ -44,7 +44,7 @@ func TestInlineCommentParsing(t *testing.T) {
 	// Test each field has correct inline comment with < preserved
 	expectedComments := []string{
 		"< The x-coordinate of the point.",
-		"< The y-coordinate of the point.", 
+		"< The y-coordinate of the point.",
 		"< The z-coordinate of the point.",
 	}
 
@@ -53,15 +53,15 @@ func TestInlineCommentParsing(t *testing.T) {
 			t.Errorf("Field %d (%s) should have a comment", i, field.Name)
 			continue
 		}
-		
+
 		if field.Comment.Brief != expectedComments[i] {
-			t.Errorf("Field %d (%s) comment brief = %q, want %q", 
+			t.Errorf("Field %d (%s) comment brief = %q, want %q",
 				i, field.Name, field.Comment.Brief, expectedComments[i])
 		}
 
 		// Verify original raw comment is preserved
 		if !strings.Contains(field.Comment.Raw, "/**<") {
-			t.Errorf("Field %d (%s) raw comment should contain '/**<', got: %q", 
+			t.Errorf("Field %d (%s) raw comment should contain '/**<', got: %q",
 				i, field.Name, field.Comment.Raw)
 		}
 	}
@@ -95,14 +95,14 @@ func TestInlineCommentAssociation(t *testing.T) {
 		if field.Name != expectedNames[i] {
 			t.Errorf("Field %d name = %q, want %q", i, field.Name, expectedNames[i])
 		}
-		
+
 		if field.Comment == nil {
 			t.Errorf("Field %s should have a comment", field.Name)
 			continue
 		}
-		
+
 		if field.Comment.Brief != expectedComments[i] {
-			t.Errorf("Field %s comment = %q, want %q", 
+			t.Errorf("Field %s comment = %q, want %q",
 				field.Name, field.Comment.Brief, expectedComments[i])
 		}
 	}
@@ -129,7 +129,7 @@ struct MixedComments {
 	}
 
 	structEntity := tree.Root.Children[0]
-	
+
 	// Check struct comment
 	if structEntity.Comment == nil {
 		t.Error("Struct should have a comment")

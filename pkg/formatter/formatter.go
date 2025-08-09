@@ -45,7 +45,7 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 			result.WriteString(f.formatDoxygenComment(entity.Comment, depth))
 			result.WriteString("\n")
 		}
-		
+
 		for _, child := range entity.Children {
 			result.WriteString(f.reconstructEntity(child, depth))
 		}
@@ -178,7 +178,7 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 		if !strings.HasSuffix(entity.Signature, ";") {
 			result.WriteString(";")
 		}
-		
+
 		// Add inline comment if present (after semicolon, before newline)
 		if entity.Comment != nil && isInlineComment {
 			result.WriteString(" ")
@@ -218,10 +218,10 @@ func (f *Formatter) shouldFormatInline(comment *ast.DoxygenComment) bool {
 	}
 
 	// Check if it's a simple brief comment suitable for inline format
-	if comment.Brief != "" && comment.Detailed == "" && 
-	   len(comment.Params) == 0 && comment.Returns == "" && 
-	   len(comment.Throws) == 0 && len(comment.Ingroup) == 0 &&
-	   len(comment.Brief) < 80 {
+	if comment.Brief != "" && comment.Detailed == "" &&
+		len(comment.Params) == 0 && len(comment.TParams) == 0 && comment.Returns == "" &&
+		len(comment.Throws) == 0 && len(comment.Ingroup) == 0 &&
+		len(comment.Brief) < 80 {
 		// If the brief starts with '<', it was likely generated for inline style
 		if strings.HasPrefix(strings.TrimSpace(comment.Brief), "<") {
 			return true
@@ -240,31 +240,31 @@ func (f *Formatter) shouldUseInlineComment(comment *ast.DoxygenComment) bool {
 			return true
 		}
 	}
-	
+
 	// Check if the brief description starts with < (indicating LLM generated inline comment)
 	if comment.Brief != "" && strings.HasPrefix(strings.TrimSpace(comment.Brief), "<") {
 		return true
 	}
-	
+
 	return false
 }
 
 // formatInlineComment formats a comment in inline style
 func (f *Formatter) formatInlineComment(comment *ast.DoxygenComment, depth int) string {
 	description := comment.Brief
-	
+
 	if description == "" && comment.Detailed != "" {
 		description = comment.Detailed
 	}
-	
+
 	// Clean up the description - remove leading/trailing whitespace first
 	description = strings.TrimSpace(description)
-	
+
 	// Remove leading '<' character if present (from LLM generation)
 	if strings.HasPrefix(description, "<") {
 		description = strings.TrimSpace(description[1:])
 	}
-	
+
 	return fmt.Sprintf("/**< %s */", description)
 }
 
@@ -295,6 +295,14 @@ func (f *Formatter) formatBlockComment(comment *ast.DoxygenComment, depth int) s
 			} else {
 				result.WriteString(indent + " *\n")
 			}
+		}
+	}
+
+	// Template parameters
+	if len(comment.TParams) > 0 {
+		result.WriteString(indent + " *\n")
+		for tparam, desc := range comment.TParams {
+			result.WriteString(indent + " * @tparam " + tparam + " " + desc + "\n")
 		}
 	}
 
@@ -505,30 +513,30 @@ func (f *Formatter) GetEntitySummary(entity *ast.Entity) string {
 // buildCompleteSignature reconstructs the complete signature including modifiers
 func (f *Formatter) buildCompleteSignature(entity *ast.Entity) string {
 	var parts []string
-	
+
 	// Add static modifier if present
 	if entity.IsStatic {
 		parts = append(parts, "static")
 	}
-	
+
 	// Add inline modifier if present
 	if entity.IsInline {
 		parts = append(parts, "inline")
 	}
-	
+
 	// Add virtual modifier if present
 	if entity.IsVirtual {
 		parts = append(parts, "virtual")
 	}
-	
+
 	// Add constexpr modifier if present (for fields/variables)
 	if entity.IsConstexpr {
 		parts = append(parts, "constexpr")
 	}
-	
+
 	// Add the base signature
 	parts = append(parts, entity.Signature)
-	
+
 	// Join all parts with spaces
 	return strings.Join(parts, " ")
 }

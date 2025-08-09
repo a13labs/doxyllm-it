@@ -31,7 +31,7 @@ func (cb *CommentBuilder) BuildStructuredCommentWithStyle(response *CommentRespo
 		if len(lines) > 0 {
 			brief = strings.TrimSpace(lines[0])
 		}
-		
+
 		if brief != "" && len(brief) < 100 && !strings.Contains(brief, "\n") {
 			// Simple single-line description - use inline format
 			return fmt.Sprintf("/**< %s */", brief)

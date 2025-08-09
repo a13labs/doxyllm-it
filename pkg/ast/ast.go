@@ -111,7 +111,8 @@ type DoxygenComment struct {
 	Raw        string            // Original comment text
 	Brief      string            // Brief description
 	Detailed   string            // Detailed description
-	Params     map[string]string // Parameter documentation
+	Params     map[string]string // Parameter documentation (@param)
+	TParams    map[string]string // Template parameter documentation (@tparam)
 	Returns    string            // Return value documentation
 	Throws     []string          // Exception documentation
 	Since      string            // Since version

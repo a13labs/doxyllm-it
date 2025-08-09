@@ -217,6 +217,7 @@ func (d *Document) SetEntityBrief(entityPath, brief string) error {
 	if entity.Comment == nil {
 		entity.Comment = &ast.DoxygenComment{
 			Params:     make(map[string]string),
+			TParams:    make(map[string]string),
 			CustomTags: make(map[string]string),
 		}
 	}
@@ -238,6 +239,7 @@ func (d *Document) SetEntityDetailed(entityPath, detailed string) error {
 	if entity.Comment == nil {
 		entity.Comment = &ast.DoxygenComment{
 			Params:     make(map[string]string),
+			TParams:    make(map[string]string),
 			CustomTags: make(map[string]string),
 		}
 	}
@@ -263,11 +265,37 @@ func (d *Document) AddEntityParam(entityPath, paramName, description string) err
 	if entity.Comment == nil {
 		entity.Comment = &ast.DoxygenComment{
 			Params:     make(map[string]string),
+			TParams:    make(map[string]string),
 			CustomTags: make(map[string]string),
 		}
 	}
 
 	entity.Comment.Params[paramName] = description
+	d.updateCommentRaw(entity.Comment)
+	d.modified = true
+	return nil
+}
+
+// AddEntityTParam adds or updates a template parameter description for a templated entity
+func (d *Document) AddEntityTParam(entityPath, tparamName, description string) error {
+	entity := d.FindEntity(entityPath)
+	if entity == nil {
+		return fmt.Errorf("entity not found: %s", entityPath)
+	}
+
+	if !entity.IsTemplate {
+		return fmt.Errorf("entity %s is not templated", entityPath)
+	}
+
+	if entity.Comment == nil {
+		entity.Comment = &ast.DoxygenComment{
+			Params:     make(map[string]string),
+			TParams:    make(map[string]string),
+			CustomTags: make(map[string]string),
+		}
+	}
+
+	entity.Comment.TParams[tparamName] = description
 	d.updateCommentRaw(entity.Comment)
 	d.modified = true
 	return nil
@@ -287,6 +315,7 @@ func (d *Document) SetEntityReturn(entityPath, description string) error {
 	if entity.Comment == nil {
 		entity.Comment = &ast.DoxygenComment{
 			Params:     make(map[string]string),
+			TParams:    make(map[string]string),
 			CustomTags: make(map[string]string),
 		}
 	}
@@ -307,6 +336,7 @@ func (d *Document) AddEntityGroup(entityPath, groupName string) error {
 	if entity.Comment == nil {
 		entity.Comment = &ast.DoxygenComment{
 			Params:     make(map[string]string),
+			TParams:    make(map[string]string),
 			CustomTags: make(map[string]string),
 		}
 	}
@@ -334,6 +364,7 @@ func (d *Document) SetEntityDeprecated(entityPath, message string) error {
 	if entity.Comment == nil {
 		entity.Comment = &ast.DoxygenComment{
 			Params:     make(map[string]string),
+			TParams:    make(map[string]string),
 			CustomTags: make(map[string]string),
 		}
 	}
@@ -354,6 +385,7 @@ func (d *Document) SetEntityCustomTag(entityPath, tagName, value string) error {
 	if entity.Comment == nil {
 		entity.Comment = &ast.DoxygenComment{
 			Params:     make(map[string]string),
+			TParams:    make(map[string]string),
 			CustomTags: make(map[string]string),
 		}
 	}
@@ -455,6 +487,7 @@ func (d *Document) ApplyBatchUpdates(updates []BatchUpdate) error {
 		if entity.Comment == nil {
 			entity.Comment = &ast.DoxygenComment{
 				Params:     make(map[string]string),
+				TParams:    make(map[string]string),
 				CustomTags: make(map[string]string),
 			}
 		}

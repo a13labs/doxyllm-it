@@ -43,7 +43,7 @@ func (s *DocumentationService) GenerateDocumentation(ctx context.Context, req Do
 	// Build structured comment
 	// Use inline style for struct/class fields with simple descriptions
 	useInlineStyle := s.shouldUseInlineStyle(req.EntityType, response.Description)
-	
+
 	var structuredComment string
 	if useInlineStyle {
 		structuredComment = s.builder.BuildStructuredCommentWithStyle(
@@ -77,24 +77,24 @@ func (s *DocumentationService) shouldUseInlineStyle(entityType, description stri
 	if entityType != "field" && entityType != "member" {
 		return false
 	}
-	
+
 	// For debugging: temporarily make this very permissive
 	firstLine := strings.TrimSpace(description)
 	// Remove any leading < character that might have been added by LLM
 	firstLine = strings.TrimPrefix(firstLine, "<")
 	firstLine = strings.TrimSpace(firstLine)
-	
+
 	// Check if description is simple enough for inline style
 	lines := strings.Split(firstLine, "\n")
 	if len(lines) > 1 {
 		return false // Multi-line descriptions should use block style
 	}
-	
+
 	// Be more strict for field descriptions - allow up to 80 characters for single sentence
-	isSimpleSentence := !strings.Contains(firstLine, ". ") && 
-						!strings.Contains(firstLine, "! ") && 
-						!strings.Contains(firstLine, "? ")
-	
+	isSimpleSentence := !strings.Contains(firstLine, ". ") &&
+		!strings.Contains(firstLine, "! ") &&
+		!strings.Contains(firstLine, "? ")
+
 	return len(firstLine) < 80 && isSimpleSentence && firstLine != ""
 }
 

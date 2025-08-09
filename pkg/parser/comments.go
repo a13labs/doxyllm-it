@@ -16,7 +16,7 @@ func (p *Parser) parseComment() error {
 	content := strings.TrimSpace(token.Value)
 	if p.isDoxygenComment(content) {
 		doxygenComment := p.parseDoxygenComment(content)
-		
+
 		// Check if this is a trailing comment (/**< or ///<)
 		if p.isTrailingComment(content) {
 			// Associate with the last entity instead of storing as pending
@@ -93,7 +93,7 @@ func (p *Parser) attachCommentToLastEntity(comment *ast.DoxygenComment) error {
 			return nil
 		}
 	}
-	
+
 	// If we're at global scope, check the root entities
 	if len(p.tree.Root.Children) > 0 {
 		lastEntity := p.tree.Root.Children[len(p.tree.Root.Children)-1]
@@ -102,7 +102,7 @@ func (p *Parser) attachCommentToLastEntity(comment *ast.DoxygenComment) error {
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("no suitable entity found to attach trailing comment")
 }
 

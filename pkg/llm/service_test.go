@@ -25,7 +25,7 @@ func TestShouldUseInlineStyle(t *testing.T) {
 		},
 		{
 			name:        "Field with description starting with <",
-			entityType:  "field", 
+			entityType:  "field",
 			description: "< The x-coordinate.",
 			expected:    true,
 		},
@@ -77,7 +77,7 @@ func TestShouldUseInlineStyle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := service.shouldUseInlineStyle(tt.entityType, tt.description)
 			if result != tt.expected {
-				t.Errorf("shouldUseInlineStyle(%q, %q) = %v, want %v", 
+				t.Errorf("shouldUseInlineStyle(%q, %q) = %v, want %v",
 					tt.entityType, tt.description, result, tt.expected)
 			}
 		})
@@ -105,18 +105,18 @@ func TestGenerateDocumentationWithInlineStyle(t *testing.T) {
 	service := NewDocumentationService(mockProvider)
 
 	tests := []struct {
-		name       string
-		entityType string
+		name                string
+		entityType          string
 		expectInlineKeyword string
 	}{
 		{
-			name:       "Field should use inline style",
-			entityType: "field",
+			name:                "Field should use inline style",
+			entityType:          "field",
 			expectInlineKeyword: "/**<",
 		},
 		{
-			name:       "Class should use block style", 
-			entityType: "class",
+			name:                "Class should use block style",
+			entityType:          "class",
 			expectInlineKeyword: "@brief", // Block style uses @brief
 		},
 	}
@@ -136,7 +136,7 @@ func TestGenerateDocumentationWithInlineStyle(t *testing.T) {
 			}
 
 			if !strings.Contains(result.Comment, tt.expectInlineKeyword) {
-				t.Errorf("Expected comment to contain %q, got: %s", 
+				t.Errorf("Expected comment to contain %q, got: %s",
 					tt.expectInlineKeyword, result.Comment)
 			}
 		})

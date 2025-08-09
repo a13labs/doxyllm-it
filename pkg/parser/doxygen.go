@@ -15,15 +15,16 @@ func ParseDoxygenComment(comment string) *ast.DoxygenComment {
 	doc := &ast.DoxygenComment{
 		Raw:        comment,
 		Params:     make(map[string]string),
+		TParams:    make(map[string]string),
 		CustomTags: make(map[string]string),
 	}
 
 	// Clean up the comment (remove /** */ and leading *)
 	lines := strings.Split(comment, "\n")
 	var cleanLines []string
-	isTrailingComment := strings.HasPrefix(comment, "/**<") || 
-						 strings.HasPrefix(comment, "///<") || 
-						 strings.HasPrefix(comment, "//!<")
+	isTrailingComment := strings.HasPrefix(comment, "/**<") ||
+		strings.HasPrefix(comment, "///<") ||
+		strings.HasPrefix(comment, "//!<")
 
 	for i, line := range lines {
 		clean := strings.TrimSpace(line)
@@ -37,13 +38,13 @@ func ParseDoxygenComment(comment string) *ast.DoxygenComment {
 		if i == len(lines)-1 && strings.HasSuffix(clean, "*/") {
 			clean = strings.TrimSuffix(clean, "*/")
 		}
-		if strings.HasPrefix(clean, "///") {
-			clean = strings.TrimPrefix(clean, "///")
+		if after, ok := strings.CutPrefix(clean, "///"); ok {
+			clean = after
 			// For trailing comments, preserve the < character as it's semantically important
 			// Don't strip it here - it will be handled by the formatter
 		}
-		if strings.HasPrefix(clean, "//!") {
-			clean = strings.TrimPrefix(clean, "//!")
+		if after, ok := strings.CutPrefix(clean, "//!"); ok {
+			clean = after
 			// For trailing comments, preserve the < character as it's semantically important
 			// Don't strip it here - it will be handled by the formatter
 		}
@@ -124,7 +125,7 @@ func setDoxygenTag(doc *ast.DoxygenComment, tag, content string) {
 	case "tparam":
 		parts := strings.SplitN(content, " ", 2)
 		if len(parts) == 2 {
-			doc.Params[parts[0]] = parts[1]
+			doc.TParams[parts[0]] = parts[1]
 		}
 	case "return", "returns":
 		doc.Returns = content

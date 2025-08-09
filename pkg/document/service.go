@@ -293,6 +293,7 @@ func (s *DocumentationService) parseGeneratedComment(commentText string) *ast.Do
 	comment := &ast.DoxygenComment{
 		Raw:        commentText,
 		Params:     make(map[string]string),
+		TParams:    make(map[string]string),
 		CustomTags: make(map[string]string),
 		Ingroup:    make([]string, 0),
 	}
