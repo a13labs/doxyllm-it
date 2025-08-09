@@ -9,8 +9,8 @@ import (
 
 // parseTypedef handles typedef declarations
 func (p *Parser) parseTypedef() error {
-	start := p.current
-	p.advance() // consume 'typedef'
+	start := p.tokenCache.getCurrentPosition()
+	p.tokenCache.advance() // consume 'typedef'
 
 	// Parse until we find the identifier and semicolon
 	var signature strings.Builder
@@ -19,18 +19,18 @@ func (p *Parser) parseTypedef() error {
 	var name string
 	lastIdentifier := ""
 
-	for !p.isAtEnd() && p.peek().Type != TokenSemicolon {
-		token := p.peek()
+	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenSemicolon {
+		token := p.tokenCache.peek()
 		signature.WriteString(token.Value)
 
 		if token.Type == TokenIdentifier {
 			lastIdentifier = token.Value
 		}
 
-		p.advance()
+		p.tokenCache.advance()
 	}
 
-	if p.match(TokenSemicolon) {
+	if p.tokenCache.match(TokenSemicolon) {
 		signature.WriteString(";")
 	}
 
@@ -42,7 +42,7 @@ func (p *Parser) parseTypedef() error {
 		FullName:    p.buildFullName(name),
 		Signature:   signature.String(),
 		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.current-1),
+		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 	}
 
 	p.addEntity(entity)
@@ -51,41 +51,41 @@ func (p *Parser) parseTypedef() error {
 
 // parseUsing handles using declarations
 func (p *Parser) parseUsing() error {
-	start := p.current
-	p.advance() // consume 'using'
+	start := p.tokenCache.getCurrentPosition()
+	p.tokenCache.advance() // consume 'using'
 
-	p.skipWhitespace()
+	p.tokenCache.skipWhitespace()
 
-	if p.isAtEnd() {
+	if p.tokenCache.isAtEnd() {
 		return fmt.Errorf("expected identifier after using")
 	}
 
 	// Check for 'namespace' keyword
-	if p.peek().Type == TokenNamespace {
+	if p.tokenCache.peek().Type == TokenNamespace {
 		return p.parseUsingNamespace(start)
 	}
 
 	// Regular using declaration
-	if p.peek().Type != TokenIdentifier {
+	if p.tokenCache.peek().Type != TokenIdentifier {
 		return fmt.Errorf("expected identifier after using")
 	}
 
-	nameToken := p.advance()
+	nameToken := p.tokenCache.advance()
 
-	p.skipWhitespace()
+	p.tokenCache.skipWhitespace()
 
-	if !p.match(TokenEquals) {
+	if !p.tokenCache.match(TokenEquals) {
 		return fmt.Errorf("expected '=' in using declaration")
 	}
 
 	// Parse the rest until semicolon
 	var typeValue strings.Builder
-	for !p.isAtEnd() && p.peek().Type != TokenSemicolon {
-		typeValue.WriteString(p.peek().Value)
-		p.advance()
+	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenSemicolon {
+		typeValue.WriteString(p.tokenCache.peek().Value)
+		p.tokenCache.advance()
 	}
 
-	if p.match(TokenSemicolon) {
+	if p.tokenCache.match(TokenSemicolon) {
 		// consumed semicolon
 	}
 
@@ -97,7 +97,7 @@ func (p *Parser) parseUsing() error {
 		FullName:    p.buildFullName(nameToken.Value),
 		Signature:   signature,
 		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.current-1),
+		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 	}
 
 	p.addEntity(entity)
@@ -106,32 +106,32 @@ func (p *Parser) parseUsing() error {
 
 // parseUsingNamespace handles using namespace declarations
 func (p *Parser) parseUsingNamespace(start int) error {
-	p.advance() // consume 'namespace'
+	p.tokenCache.advance() // consume 'namespace'
 
-	p.skipWhitespace()
+	p.tokenCache.skipWhitespace()
 
-	if p.isAtEnd() || p.peek().Type != TokenIdentifier {
+	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
 		return fmt.Errorf("expected namespace name after using namespace")
 	}
 
-	nameToken := p.advance()
+	nameToken := p.tokenCache.advance()
 
 	// Parse qualified namespace name
 	var namespaceName strings.Builder
 	namespaceName.WriteString(nameToken.Value)
 
-	for !p.isAtEnd() && p.peek().Type == TokenDoubleColon {
+	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenDoubleColon {
 		namespaceName.WriteString("::")
-		p.advance()
+		p.tokenCache.advance()
 
-		if p.isAtEnd() || p.peek().Type != TokenIdentifier {
+		if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
 			break
 		}
 
-		namespaceName.WriteString(p.advance().Value)
+		namespaceName.WriteString(p.tokenCache.advance().Value)
 	}
 
-	if p.match(TokenSemicolon) {
+	if p.tokenCache.match(TokenSemicolon) {
 		// consumed semicolon
 	}
 
@@ -143,7 +143,7 @@ func (p *Parser) parseUsingNamespace(start int) error {
 		FullName:    namespaceName.String(),
 		Signature:   signature,
 		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.current-1),
+		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 	}
 
 	p.addEntity(entity)

@@ -9,16 +9,16 @@ import (
 
 // parsePreprocessor handles preprocessor directives
 func (p *Parser) parsePreprocessor() error {
-	start := p.current
-	p.advance() // consume '#'
+	start := p.tokenCache.getCurrentPosition()
+	p.tokenCache.advance() // consume '#'
 
-	p.skipWhitespace()
+	p.tokenCache.skipWhitespace()
 
-	if p.isAtEnd() {
+	if p.tokenCache.isAtEnd() {
 		return nil
 	}
 
-	directive := p.peek()
+	directive := p.tokenCache.peek()
 
 	if directive.Type == TokenIdentifier && directive.Value == "define" {
 		return p.parseDefine(start)
@@ -30,34 +30,34 @@ func (p *Parser) parsePreprocessor() error {
 
 // parseDefine handles #define directives
 func (p *Parser) parseDefine(start int) error {
-	p.advance() // consume 'define'
-	p.skipWhitespace()
+	p.tokenCache.advance() // consume 'define'
+	p.tokenCache.skipWhitespace()
 
-	if p.isAtEnd() {
+	if p.tokenCache.isAtEnd() {
 		return fmt.Errorf("expected identifier after #define")
 	}
 
-	nameToken := p.peek()
+	nameToken := p.tokenCache.peek()
 	if nameToken.Type != TokenIdentifier {
 		return fmt.Errorf("expected identifier after #define, got %v", nameToken.Type)
 	}
-	p.advance()
+	p.tokenCache.advance()
 
 	// Collect the definition value until end of line or end of file
 	var value strings.Builder
 	depth := 0
 	lastWasSpace := false
 
-	for !p.isAtEnd() {
-		token := p.peek()
+	for !p.tokenCache.isAtEnd() {
+		token := p.tokenCache.peek()
 
 		// Handle multiline macros with backslash continuation
 		if token.Type == TokenBackslash {
-			p.advance()
+			p.tokenCache.advance()
 			// Skip the backslash and any following whitespace/newline
-			p.skipWhitespace()
-			if !p.isAtEnd() && p.peek().Type == TokenNewline {
-				p.advance()
+			p.tokenCache.skipWhitespace()
+			if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenNewline {
+				p.tokenCache.advance()
 			}
 			value.WriteString(" ") // Replace backslash-newline with space
 			lastWasSpace = true
@@ -85,7 +85,7 @@ func (p *Parser) parseDefine(start int) error {
 			value.WriteString(token.Value)
 			lastWasSpace = false
 		}
-		p.advance()
+		p.tokenCache.advance()
 	}
 
 	// Store the define
@@ -100,7 +100,7 @@ func (p *Parser) parseDefine(start int) error {
 		FullName:    defineName,
 		Signature:   fmt.Sprintf("#define %s %s", defineName, defineValue),
 		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.current-1),
+		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 	}
 
 	p.addEntity(entity)
@@ -113,9 +113,9 @@ func (p *Parser) parseOtherPreprocessor(start int) error {
 	var content strings.Builder
 	content.WriteString("#")
 
-	for !p.isAtEnd() && p.peek().Type != TokenNewline {
-		content.WriteString(p.peek().Value)
-		p.advance()
+	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenNewline {
+		content.WriteString(p.tokenCache.peek().Value)
+		p.tokenCache.advance()
 	}
 
 	entity := &ast.Entity{
@@ -124,7 +124,7 @@ func (p *Parser) parseOtherPreprocessor(start int) error {
 		FullName:    strings.TrimSpace(content.String()),
 		Signature:   content.String(),
 		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.current-1),
+		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 	}
 
 	p.addEntity(entity)

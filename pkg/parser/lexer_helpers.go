@@ -4,44 +4,6 @@ import (
 	"strings"
 )
 
-// advance returns the current token and moves to the next
-func (p *Parser) advance() Token {
-	if !p.isAtEnd() {
-		p.current++
-	}
-	return p.previous()
-}
-
-// isAtEnd checks if we're at the end of tokens
-func (p *Parser) isAtEnd() bool {
-	return p.current >= len(p.tokens) || p.peek().Type == TokenEOF
-}
-
-// peek returns the current token without advancing
-func (p *Parser) peek() Token {
-	if p.current >= len(p.tokens) {
-		return Token{Type: TokenEOF}
-	}
-	return p.tokens[p.current]
-}
-
-// previous returns the previous token
-func (p *Parser) previous() Token {
-	if p.current <= 0 {
-		return Token{Type: TokenEOF}
-	}
-	return p.tokens[p.current-1]
-}
-
-// peekAhead looks ahead by offset tokens (for compatibility)
-func (p *Parser) peekAhead(offset int) Token {
-	targetIndex := p.current + offset
-	if targetIndex >= len(p.tokens) {
-		return Token{Type: TokenEOF}
-	}
-	return p.tokens[targetIndex]
-}
-
 // isValidIdentifierToken checks if a token can be used as an identifier
 func (p *Parser) isValidIdentifierToken(token Token) bool {
 	// Regular identifiers are always valid
@@ -59,39 +21,6 @@ func (p *Parser) isValidIdentifierToken(token Token) bool {
 	}
 }
 
-// match checks if current token matches any of the given types
-func (p *Parser) match(types ...TokenType) bool {
-	for _, tokenType := range types {
-		if p.check(tokenType) {
-			p.advance()
-			return true
-		}
-	}
-	return false
-}
-
-// check returns true if current token is of given type
-func (p *Parser) check(tokenType TokenType) bool {
-	if p.isAtEnd() {
-		return false
-	}
-	return p.peek().Type == tokenType
-}
-
-// skipWhitespace skips whitespace tokens
-func (p *Parser) skipWhitespace() {
-	for !p.isAtEnd() && p.peek().Type == TokenWhitespace {
-		p.advance()
-	}
-}
-
-// skipWhitespaceAndNewlines skips whitespace and newline tokens
-func (p *Parser) skipWhitespaceAndNewlines() {
-	for !p.isAtEnd() && (p.peek().Type == TokenWhitespace || p.peek().Type == TokenNewline) {
-		p.advance()
-	}
-}
-
 // skipSpecifiers skips storage and cv specifiers
 func (p *Parser) skipSpecifiers() {
 	specifiers := []TokenType{
@@ -100,12 +29,12 @@ func (p *Parser) skipSpecifiers() {
 		TokenExplicit, TokenFriend,
 	}
 
-	for !p.isAtEnd() {
+	for !p.tokenCache.isAtEnd() {
 		found := false
 		for _, spec := range specifiers {
-			if p.check(spec) {
-				p.advance()
-				p.skipWhitespace()
+			if p.tokenCache.check(spec) {
+				p.tokenCache.advance()
+				p.tokenCache.skipWhitespace()
 				found = true
 				break
 			}
@@ -120,12 +49,12 @@ func (p *Parser) skipSpecifiers() {
 func (p *Parser) parseType() string {
 	var typeStr strings.Builder
 
-	for !p.isAtEnd() && p.peek().Type != TokenLeftBrace && p.peek().Type != TokenSemicolon {
-		if p.peek().Type == TokenLeftBrace {
+	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenLeftBrace && p.tokenCache.peek().Type != TokenSemicolon {
+		if p.tokenCache.peek().Type == TokenLeftBrace {
 			break
 		}
-		typeStr.WriteString(p.peek().Value)
-		p.advance()
+		typeStr.WriteString(p.tokenCache.peek().Value)
+		p.tokenCache.advance()
 	}
 
 	return strings.TrimSpace(typeStr.String())

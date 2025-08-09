@@ -8,25 +8,25 @@ import (
 
 // parseVariable handles variable declarations
 func (p *Parser) parseVariable() error {
-	start := p.current
+	start := p.tokenCache.getCurrentPosition()
 
 	// Parse specifiers first
 	var isStatic, isConst bool
 
 	// Parse variable specifiers
-	for !p.isAtEnd() {
-		token := p.peek()
+	for !p.tokenCache.isAtEnd() {
+		token := p.tokenCache.peek()
 		if token.Type == TokenStatic {
 			isStatic = true
-			p.advance()
-			p.skipWhitespace()
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespace()
 		} else if token.Type == TokenConst || token.Type == TokenConstexpr {
 			isConst = true
-			p.advance()
-			p.skipWhitespace()
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespace()
 		} else if token.Type == TokenExtern || token.Type == TokenMutable {
-			p.advance() // consume but don't track these for now
-			p.skipWhitespace()
+			p.tokenCache.advance() // consume but don't track these for now
+			p.tokenCache.skipWhitespace()
 		} else {
 			break
 		}
@@ -37,8 +37,8 @@ func (p *Parser) parseVariable() error {
 	var name string
 	lastIdentifier := ""
 
-	for !p.isAtEnd() && p.peek().Type != TokenSemicolon {
-		token := p.peek()
+	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenSemicolon {
+		token := p.tokenCache.peek()
 
 		// Resolve defines in token values
 		tokenValue := token.Value
@@ -52,10 +52,10 @@ func (p *Parser) parseVariable() error {
 			lastIdentifier = token.Value
 		}
 
-		p.advance()
+		p.tokenCache.advance()
 	}
 
-	if p.match(TokenSemicolon) {
+	if p.tokenCache.match(TokenSemicolon) {
 		signature.WriteString(";")
 	}
 
@@ -74,7 +74,7 @@ func (p *Parser) parseVariable() error {
 		AccessLevel: p.getCurrentAccessLevel(),
 		IsStatic:    isStatic,
 		IsConst:     isConst,
-		SourceRange: p.getRangeFromTokens(start, p.current-1),
+		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 	}
 
 	p.addEntity(entity)

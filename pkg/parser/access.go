@@ -8,10 +8,10 @@ import (
 
 // parseAccessSpecifier handles access specifier declarations
 func (p *Parser) parseAccessSpecifier() error {
-	start := p.current
-	accessToken := p.advance()
+	start := p.tokenCache.getCurrentPosition()
+	accessToken := p.tokenCache.advance()
 
-	if !p.match(TokenColon) {
+	if !p.tokenCache.match(TokenColon) {
 		return fmt.Errorf("expected ':' after access specifier")
 	}
 
@@ -38,7 +38,7 @@ func (p *Parser) parseAccessSpecifier() error {
 		FullName:    accessToken.Value,
 		Signature:   accessToken.Value + ":",
 		AccessLevel: accessLevel,
-		SourceRange: p.getRangeFromTokens(start, p.current-1),
+		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 	}
 
 	p.addEntity(entity)
@@ -47,11 +47,11 @@ func (p *Parser) parseAccessSpecifier() error {
 
 // parseCloseBrace handles closing braces
 func (p *Parser) parseCloseBrace() error {
-	p.advance() // consume '}'
+	p.tokenCache.advance() // consume '}'
 
 	// Check for optional semicolon after brace (for class/struct)
-	if !p.isAtEnd() && p.peek().Type == TokenSemicolon {
-		p.advance()
+	if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenSemicolon {
+		p.tokenCache.advance()
 	}
 
 	// Exit current scope

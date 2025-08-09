@@ -2,16 +2,12 @@
 package parser
 
 import (
-	"fmt"
-
 	"doxyllm-it/pkg/ast"
 )
 
 // Parser implements a token-driven parser for C++ headers with streaming tokenizer backend
 type Parser struct {
-	tokenizer      *Tokenizer
-	tokens         []Token  // Compatibility layer: cache tokens as needed
-	current        int      // Compatibility layer: current position
+	tokenCache     *TokenCache // Token cache abstraction
 	tree           *ast.ScopeTree
 	scopeStack     []*ast.Entity
 	accessStack    []ast.AccessLevel
@@ -19,8 +15,8 @@ type Parser struct {
 	pendingComment *ast.DoxygenComment
 }
 
-// NewTokenParser creates a new token-driven parser
-func NewTokenParser() *Parser {
+// New creates a new token-driven parser
+func New() *Parser {
 	return &Parser{
 		defines: make(map[string]string),
 	}
@@ -34,20 +30,14 @@ func (p *Parser) Parse(filename, content string) (*ast.ScopeTree, error) {
 	p.accessStack = []ast.AccessLevel{ast.AccessPublic} // Global scope is public
 
 	// Initialize streaming tokenizer
-	p.tokenizer = NewTokenizer(content)
-	p.tokens = p.tokenizer.Tokenize() // Pre-tokenize for compatibility
-	p.current = 0
-
-	// Check for tokenizer errors
-	if p.tokenizer.HasErrors() {
-		errors := p.tokenizer.GetErrors()
-		if len(errors) > 0 {
-			return nil, fmt.Errorf("tokenizer error: %s", errors[0].Value)
-		}
+	var err error
+	p.tokenCache, err = NewTokenCache(content)
+	if err != nil {
+		return nil, err
 	}
 
 	// Parse tokens
-	for !p.isAtEnd() {
+	for !p.tokenCache.isAtEnd() {
 		if err := p.parseTopLevel(); err != nil {
 			return nil, err
 		}
@@ -59,14 +49,14 @@ func (p *Parser) Parse(filename, content string) (*ast.ScopeTree, error) {
 // parseTopLevel parses top-level declarations
 func (p *Parser) parseTopLevel() error {
 	// Skip whitespace and newlines
-	p.skipWhitespaceAndNewlines()
+	p.tokenCache.skipWhitespaceAndNewlines()
 
-	if p.isAtEnd() {
+	if p.tokenCache.isAtEnd() {
 		return nil
 	}
 
 	// Handle different token types
-	token := p.peek()
+	token := p.tokenCache.peek()
 
 	switch token.Type {
 	case TokenHash:
@@ -96,13 +86,13 @@ func (p *Parser) parseTopLevel() error {
 		if _, exists := p.defines[token.Value]; exists {
 			// Look ahead to see if after macro resolution we have a keyword
 			offset := 1
-			nextToken := p.peekAhead(offset)
+			nextToken := p.tokenCache.peekAhead(offset)
 			// Skip whitespace in lookahead
 			for nextToken.Type == TokenWhitespace {
 				offset++
-				nextToken = p.peekAhead(offset)
+				nextToken = p.tokenCache.peekAhead(offset)
 			}
-			
+
 			switch nextToken.Type {
 			case TokenClass:
 				return p.parseClassWithMacro()
@@ -118,9 +108,4 @@ func (p *Parser) parseTopLevel() error {
 		// Try to parse as function or variable
 		return p.parseFunctionOrVariable()
 	}
-}
-
-// New creates a new parser instance (alias for NewTokenParser for compatibility)
-func New() *Parser {
-	return NewTokenParser()
 }

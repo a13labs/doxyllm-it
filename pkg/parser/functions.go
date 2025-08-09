@@ -9,44 +9,44 @@ import (
 // parseFunctionOrVariable attempts to parse function or variable declarations
 func (p *Parser) parseFunctionOrVariable() error {
 	// Collect tokens until we can determine what this is
-	checkpoint := p.current
+	checkpoint := p.tokenCache.getCurrentPosition()
 
 	// Skip storage specifiers, cv-qualifiers, etc.
 	p.skipSpecifiers()
 
 	// Look for function pattern: type name(args) or name(args)
 	if p.isFunction() {
-		p.current = checkpoint
+		p.tokenCache.setPosition(checkpoint)
 		return p.parseFunction()
 	}
 
 	// Otherwise, try as variable
-	p.current = checkpoint
+	p.tokenCache.setPosition(checkpoint)
 	return p.parseVariable()
 }
 
 // parseFunction handles function declarations
 func (p *Parser) parseFunction() error {
-	start := p.current
+	start := p.tokenCache.getCurrentPosition()
 
 	// Parse specifiers and attributes first
 	var isStatic, isInline, isVirtual, isConst bool
 
 	// Parse function specifiers
-	for !p.isAtEnd() {
-		token := p.peek()
+	for !p.tokenCache.isAtEnd() {
+		token := p.tokenCache.peek()
 		if token.Type == TokenStatic {
 			isStatic = true
-			p.advance()
-			p.skipWhitespace()
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespace()
 		} else if token.Type == TokenInline {
 			isInline = true
-			p.advance()
-			p.skipWhitespace()
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespace()
 		} else if token.Type == TokenVirtual {
 			isVirtual = true
-			p.advance()
-			p.skipWhitespace()
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespace()
 		} else {
 			break
 		}
@@ -60,26 +60,26 @@ func (p *Parser) parseFunction() error {
 	// Check if there's a function body after the signature
 	var bodyRange *ast.Range
 	var bodyText string
-	p.skipWhitespace()
-	if !p.isAtEnd() && p.peek().Type == TokenLeftBrace {
+	p.tokenCache.skipWhitespace()
+	if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenLeftBrace {
 		// This function has a body - track its range and content for the formatter
-		bodyStart := p.current
+		bodyStart := p.tokenCache.getCurrentPosition()
 		braceDepth := 1
 		var bodyTokens []Token
-		bodyTokens = append(bodyTokens, p.advance()) // consume opening brace
+		bodyTokens = append(bodyTokens, p.tokenCache.advance()) // consume opening brace
 
-		for !p.isAtEnd() && braceDepth > 0 {
-			token := p.peek()
+		for !p.tokenCache.isAtEnd() && braceDepth > 0 {
+			token := p.tokenCache.peek()
 			if token.Type == TokenLeftBrace {
 				braceDepth++
 			} else if token.Type == TokenRightBrace {
 				braceDepth--
 			}
-			bodyTokens = append(bodyTokens, p.advance())
+			bodyTokens = append(bodyTokens, p.tokenCache.advance())
 		}
 
 		if braceDepth == 0 {
-			rangeValue := p.getRangeFromTokens(bodyStart, p.current-1)
+			rangeValue := p.getRangeFromTokens(bodyStart, p.tokenCache.getCurrentPosition()-1)
 			bodyRange = &rangeValue
 
 			// Reconstruct body text from tokens
@@ -119,7 +119,7 @@ func (p *Parser) parseFunction() error {
 		IsInline:     isInline,
 		IsVirtual:    isVirtual,
 		IsConst:      isConst,
-		SourceRange:  p.getRangeFromTokens(start, p.current-1),
+		SourceRange:  p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 		BodyRange:    bodyRange,
 		OriginalText: bodyText,
 	}
@@ -130,16 +130,16 @@ func (p *Parser) parseFunction() error {
 
 // isFunction tries to determine if current position is a function
 func (p *Parser) isFunction() bool {
-	saved := p.current
-	defer func() { p.current = saved }()
+	saved := p.tokenCache.getCurrentPosition()
+	defer func() { p.tokenCache.setPosition(saved) }()
 
 	// Skip specifiers first
-	for !p.isAtEnd() {
-		token := p.peek()
+	for !p.tokenCache.isAtEnd() {
+		token := p.tokenCache.peek()
 		if token.Type == TokenStatic || token.Type == TokenInline || token.Type == TokenVirtual ||
 			token.Type == TokenExtern || token.Type == TokenConst || token.Type == TokenConstexpr {
-			p.advance()
-			p.skipWhitespaceAndNewlines()
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespaceAndNewlines()
 		} else {
 			break
 		}
@@ -148,43 +148,43 @@ func (p *Parser) isFunction() bool {
 	// Look for pattern: [return_type] function_name(
 	identifiersSeen := 0
 
-	for !p.isAtEnd() && identifiersSeen < 6 { // increased limit to handle more complex types
-		token := p.peek()
+	for !p.tokenCache.isAtEnd() && identifiersSeen < 6 { // increased limit to handle more complex types
+		token := p.tokenCache.peek()
 
-		if token.Type == TokenVoid || token.Type == TokenInt || token.Type == TokenDouble ||
-			token.Type == TokenChar || token.Type == TokenFloat || token.Type == TokenBool ||
-			token.Type == TokenIdentifier {
+		switch token.Type {
+		case TokenVoid, TokenInt, TokenDouble, TokenChar, TokenFloat, TokenBool, TokenIdentifier:
 			identifiersSeen++
-			p.advance()
-			p.skipWhitespaceAndNewlines() // Handle newlines between return type and function name
-		} else if token.Type == TokenLeftParen {
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespaceAndNewlines() // Handle newlines between return type and function name
+		case TokenLeftParen:
 			// Found opening parenthesis, this looks like a function
 			return identifiersSeen >= 1
-		} else if token.Type == TokenDoubleColon {
-			p.advance()
-			p.skipWhitespaceAndNewlines()
-		} else if token.Type == TokenStar || token.Type == TokenAmpersand {
-			p.advance() // Skip pointer/reference indicators
-			p.skipWhitespaceAndNewlines()
-		} else if token.Type == TokenLess {
+		case TokenDoubleColon:
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespaceAndNewlines()
+		case TokenStar, TokenAmpersand:
+			p.tokenCache.advance() // Skip pointer/reference indicators
+			p.tokenCache.skipWhitespaceAndNewlines()
+		case TokenLess:
 			// Skip template parameters
 			depth := 1
-			p.advance()
-			for !p.isAtEnd() && depth > 0 {
-				t := p.peek()
-				if t.Type == TokenLess {
+			p.tokenCache.advance()
+			for !p.tokenCache.isAtEnd() && depth > 0 {
+				t := p.tokenCache.peek()
+				switch t.Type {
+				case TokenLess:
 					depth++
-				} else if t.Type == TokenGreater {
+				case TokenGreater:
 					depth--
 				}
-				p.advance()
+				p.tokenCache.advance()
 			}
-			p.skipWhitespaceAndNewlines()
-		} else if token.Type == TokenTilde {
+			p.tokenCache.skipWhitespaceAndNewlines()
+		case TokenTilde:
 			// Destructor
-			p.advance()
-			p.skipWhitespaceAndNewlines()
-		} else {
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespaceAndNewlines()
+		default:
 			break
 		}
 	}
@@ -202,8 +202,8 @@ func (p *Parser) parseFunctionSignature() (signature string, name string, isMeth
 	beforeParen := true
 	isDestructor := false
 
-	for !p.isAtEnd() {
-		token := p.peek()
+	for !p.tokenCache.isAtEnd() {
+		token := p.tokenCache.peek()
 
 		if token.Type == TokenLeftParen && depth == 0 && beforeParen {
 			beforeParen = false
@@ -238,18 +238,19 @@ func (p *Parser) parseFunctionSignature() (signature string, name string, isMeth
 		} else if token.Type == TokenTilde && beforeParen {
 			// Handle destructor names
 			isDestructor = true
-			if !p.isAtEnd() && p.tokens[p.current+1].Type == TokenIdentifier {
-				funcName = p.tokens[p.current+1].Value // Just the class name, not including ~
+			nextToken := p.tokenCache.getTokenAtOffset(1)
+			if nextToken.Type == TokenIdentifier {
+				funcName = nextToken.Value // Just the class name, not including ~
 			}
 		}
 
-		p.advance()
+		p.tokenCache.advance()
 	}
 
 	// Consume semicolon if present
-	if !p.isAtEnd() && p.peek().Type == TokenSemicolon {
+	if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenSemicolon {
 		sig.WriteString(";")
-		p.advance()
+		p.tokenCache.advance()
 	}
 
 	isMethod = p.isInsideClass()

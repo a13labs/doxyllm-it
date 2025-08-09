@@ -8,8 +8,8 @@ import (
 
 // parseComment handles comment parsing
 func (p *Parser) parseComment() error {
-	start := p.current
-	token := p.advance()
+	start := p.tokenCache.getCurrentPosition()
+	token := p.tokenCache.advance()
 
 	// Check if this is a Doxygen comment
 	content := strings.TrimSpace(token.Value)
@@ -47,7 +47,7 @@ func (p *Parser) parseComment() error {
 		FullName:    name,
 		Signature:   token.Value,
 		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.current-1),
+		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 	}
 
 	p.addEntity(entity)

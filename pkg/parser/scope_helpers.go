@@ -66,24 +66,5 @@ func (p *Parser) exitScope() {
 
 // getRangeFromTokens creates a range from token indices
 func (p *Parser) getRangeFromTokens(start, end int) ast.Range {
-	if start >= len(p.tokens) {
-		start = len(p.tokens) - 1
-	}
-	if end >= len(p.tokens) {
-		end = len(p.tokens) - 1
-	}
-	if start < 0 {
-		start = 0
-	}
-	if end < start {
-		end = start
-	}
-
-	startToken := p.tokens[start]
-	endToken := p.tokens[end]
-
-	return ast.Range{
-		Start: ast.Position{Line: startToken.Line, Column: startToken.Column, Offset: startToken.Offset},
-		End:   ast.Position{Line: endToken.Line, Column: endToken.Column, Offset: endToken.Offset},
-	}
+	return p.tokenCache.getRangeFromPositions(start, end)
 }

@@ -9,27 +9,27 @@ import (
 
 // parseNamespace handles namespace declarations
 func (p *Parser) parseNamespace() error {
-	start := p.current
-	p.advance() // consume 'namespace'
+	start := p.tokenCache.getCurrentPosition()
+	p.tokenCache.advance() // consume 'namespace'
 
-	p.skipWhitespace()
+	p.tokenCache.skipWhitespace()
 
-	if p.isAtEnd() || !p.isValidIdentifierToken(p.peek()) {
+	if p.tokenCache.isAtEnd() || !p.isValidIdentifierToken(p.tokenCache.peek()) {
 		return fmt.Errorf("expected namespace name")
 	}
 
 	// Parse namespace name (could be nested like mgl::io)
 	var nameBuilder strings.Builder
-	nameBuilder.WriteString(p.advance().Value) // first identifier
+	nameBuilder.WriteString(p.tokenCache.advance().Value) // first identifier
 
 	// Check for :: followed by more identifiers (nested namespace)
-	for !p.isAtEnd() {
-		p.skipWhitespace()
-		if p.peek().Type == TokenDoubleColon {
-			nameBuilder.WriteString(p.advance().Value) // add ::
-			p.skipWhitespace()
-			if p.isValidIdentifierToken(p.peek()) {
-				nameBuilder.WriteString(p.advance().Value) // add next identifier
+	for !p.tokenCache.isAtEnd() {
+		p.tokenCache.skipWhitespace()
+		if p.tokenCache.peek().Type == TokenDoubleColon {
+			nameBuilder.WriteString(p.tokenCache.advance().Value) // add ::
+			p.tokenCache.skipWhitespace()
+			if p.isValidIdentifierToken(p.tokenCache.peek()) {
+				nameBuilder.WriteString(p.tokenCache.advance().Value) // add next identifier
 			} else {
 				break
 			}
@@ -40,30 +40,30 @@ func (p *Parser) parseNamespace() error {
 
 	namespaceName := nameBuilder.String()
 
-	p.skipWhitespace()
+	p.tokenCache.skipWhitespace()
 
 	// Build signature
 	signature := fmt.Sprintf("namespace %s", namespaceName)
 
 	// Look for opening brace, which might be on the same line or next line
-	if p.match(TokenLeftBrace) {
+	if p.tokenCache.match(TokenLeftBrace) {
 		signature += " {"
 	} else {
 		// The brace might be on the next line, so we need to look ahead
 		// Save current position to check for brace
-		checkpoint := p.current
+		checkpoint := p.tokenCache.getCurrentPosition()
 
 		// Skip any whitespace/newlines to find the brace
-		for !p.isAtEnd() && (p.peek().Type == TokenWhitespace || p.peek().Type == TokenNewline) {
-			p.advance()
+		for !p.tokenCache.isAtEnd() && (p.tokenCache.peek().Type == TokenWhitespace || p.tokenCache.peek().Type == TokenNewline) {
+			p.tokenCache.advance()
 		}
 
-		if !p.isAtEnd() && p.peek().Type == TokenLeftBrace {
-			p.advance() // consume the brace
+		if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenLeftBrace {
+			p.tokenCache.advance() // consume the brace
 			signature += " {"
 		} else {
 			// No brace found, restore position
-			p.current = checkpoint
+			p.tokenCache.setPosition(checkpoint)
 		}
 	}
 
@@ -73,7 +73,7 @@ func (p *Parser) parseNamespace() error {
 		FullName:    p.buildFullName(namespaceName),
 		Signature:   signature,
 		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.current-1),
+		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 		Children:    make([]*ast.Entity, 0),
 	}
 
