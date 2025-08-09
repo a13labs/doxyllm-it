@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"doxyllm-it/pkg/document"
@@ -71,6 +72,73 @@ var (
 	llmFormatOutput bool
 	llmExcludeDirs  []string
 )
+
+// Spinner represents a simple text-based spinner for showing progress
+type Spinner struct {
+	chars    []string
+	current  int
+	active   bool
+	mutex    sync.Mutex
+	stopChan chan bool
+}
+
+// NewSpinner creates a new spinner with default characters
+func NewSpinner() *Spinner {
+	return &Spinner{
+		chars:    []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
+		current:  0,
+		active:   false,
+		stopChan: make(chan bool),
+	}
+}
+
+// Start begins the spinner animation with a message
+func (s *Spinner) Start(message string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	if s.active {
+		return
+	}
+
+	s.active = true
+	s.current = 0
+
+	go func() {
+		ticker := time.NewTicker(80 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-s.stopChan:
+				return
+			case <-ticker.C:
+				s.mutex.Lock()
+				if s.active {
+					fmt.Printf("\r%s %s", s.chars[s.current], message)
+					s.current = (s.current + 1) % len(s.chars)
+				}
+				s.mutex.Unlock()
+			}
+		}
+	}()
+}
+
+// Stop halts the spinner and clears the line
+func (s *Spinner) Stop() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	if !s.active {
+		return
+	}
+
+	s.active = false
+	s.stopChan <- true
+
+	// Clear the spinner line
+	fmt.Printf("\r\033[K")
+}
 
 func init() {
 	rootCmd.AddCommand(llmCmd)
@@ -187,6 +255,7 @@ func runLLM(cmd *cobra.Command, args []string) {
 			updatedFiles = append(updatedFiles, file)
 		}
 		totalUpdates += result.EntitiesUpdated
+		fmt.Println() // Add spacing between files
 	}
 
 	// Summary
@@ -209,10 +278,15 @@ func runLLM(cmd *cobra.Command, args []string) {
 
 // processFile processes a single file using the document abstraction
 func processFile(filePath string, docService *document.DocumentationService, rootPath string) *document.ProcessingResult {
-	fmt.Printf("\n📁 Processing: %s\n", filePath)
+	fmt.Printf("📁 Processing: %s\n", filePath)
+
+	// Create spinner for showing progress during processing
+	spinner := NewSpinner()
 
 	// Load the document
+	spinner.Start("Loading document...")
 	doc, err := document.NewFromFile(filePath)
+	spinner.Stop()
 	if err != nil {
 		fmt.Printf("  ❌ Failed to load document: %v\n", err)
 		return &document.ProcessingResult{}
@@ -235,7 +309,9 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 
 	// Add @defgroup if needed
 	if group != nil && group.GenerateDefGroup {
+		spinner.Start("Adding defgroup...")
 		err := docService.AddDefgroupToDocument(doc, group)
+		spinner.Stop()
 		if err != nil {
 			fmt.Printf("  ⚠️  Failed to add defgroup: %v\n", err)
 		}
@@ -253,7 +329,9 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 		GroupConfig:  group,
 	}
 
+	spinner.Start("Analyzing and generating documentation...")
 	result, err := docService.ProcessUndocumentedEntities(ctx, doc, opts)
+	spinner.Stop()
 	if err != nil {
 		fmt.Printf("  ❌ Failed to process entities: %v\n", err)
 		return &document.ProcessingResult{}
@@ -261,7 +339,9 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 
 	// Process entities needing group updates
 	if group != nil {
+		spinner.Start("Updating group annotations...")
 		groupResult, err := docService.ProcessEntitiesNeedingGroupUpdate(ctx, doc, group)
+		spinner.Stop()
 		if err != nil {
 			fmt.Printf("  ⚠️  Failed to update groups: %v\n", err)
 		} else {
@@ -296,12 +376,15 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 
 	// Save the document if changes were made and not in dry run mode
 	if !llmDryRun && doc.IsModified() {
+		spinner.Start("Saving changes...")
+
 		// Create backup if requested
 		if llmBackup {
 			backupPath := filePath + ".bak"
 			originalContent, _ := os.ReadFile(filePath)
 			err := os.WriteFile(backupPath, originalContent, 0644)
 			if err != nil {
+				spinner.Stop()
 				fmt.Printf("  ⚠️  Failed to create backup: %v\n", err)
 			}
 		}
@@ -316,6 +399,7 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 			if err == nil {
 				err = os.WriteFile(filePath, []byte(content), 0644)
 				if err != nil {
+					spinner.Stop()
 					fmt.Printf("  ❌ Failed to write formatted file: %v\n", err)
 				}
 			}
@@ -323,6 +407,7 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 			err = doc.Save()
 		}
 
+		spinner.Stop()
 		if err != nil {
 			fmt.Printf("  ❌ Failed to save document: %v\n", err)
 		}
