@@ -58,6 +58,39 @@ doxyllm-it/
     └── example.hpp           # Additional test files
 ```
 
+## Parser Modularization
+
+The parser implementation has been refactored from a monolithic ~1884-line file into cohesive, maintainable modules:
+
+### File Structure
+```
+pkg/parser/
+├── parser_core.go        # Parser struct, main Parse method, parseTopLevel dispatcher
+├── lexer_helpers.go      # Token navigation (advance, peek, match, skip methods)
+├── scope_helpers.go      # Scope management (getCurrentScope, enterScope, etc.)
+├── preprocessor.go       # #define handling and macro resolution
+├── comments.go           # Comment parsing and Doxygen comment detection
+├── doxygen.go           # Doxygen comment parsing (ParseDoxygenComment)
+├── namespaces.go        # Namespace declarations
+├── classes.go           # Class/struct declarations and inheritance
+├── templates.go         # Template declarations (class, struct, function, using)
+├── functions.go         # Function/method parsing and signature analysis
+├── variables.go         # Variable/field declarations
+├── enums.go             # Enum declarations (including enum class)
+├── using_typedef.go     # Using declarations and typedef handling
+├── access.go            # Access specifiers and scope management
+├── parser_test.go       # Comprehensive test suite
+├── tokenizer.go         # Streaming tokenizer
+└── tokenizer_test.go    # Tokenizer tests
+```
+
+### Benefits
+- **Maintainability**: Each file focuses on a specific parsing concern
+- **Readability**: Clear separation of responsibilities
+- **Extensibility**: Easy to add new C++ language features in appropriate files
+- **Testing**: Focused unit tests for each parsing module
+- **No API Changes**: All public interfaces remain identical
+
 ## Core Features Implemented
 
 ### 1. Enhanced Entity Recognition

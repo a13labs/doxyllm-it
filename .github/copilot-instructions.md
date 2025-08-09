@@ -137,6 +137,17 @@ Can be found in `pkg/ast/ast.go`:
 6. Ensure proper error handling and connection testing
 
 ### When Modifying Parser
+- **Parser is now modularized** into focused files in `pkg/parser/`:
+  - `parser_core.go` - Main parsing logic and top-level dispatcher
+  - `lexer_helpers.go` - Token navigation utilities
+  - `scope_helpers.go` - Scope management functions  
+  - `preprocessor.go` - Macro and define handling
+  - `comments.go`, `doxygen.go` - Comment parsing
+  - `classes.go`, `functions.go`, `variables.go`, `enums.go` - Language construct parsers
+  - `templates.go`, `namespaces.go`, `using_typedef.go` - Specialized parsing
+  - `access.go` - Access specifier handling
+- **Adding new parsing logic**: Choose the appropriate file or create a new one following the pattern
+- **Modifying existing parsers**: Update the specific module file rather than monolithic parser
 - Always preserve `OriginalText` and formatting
 - Update both `SourceRange` and `HeaderRange`
 - Handle scope stack properly for nested entities
@@ -358,3 +369,13 @@ Every architecture change should be reflected in the Coding agent's instructions
 
 All temporary files during reasoning, troubleshooting and debugging should be stored in the `tmp/` directory. The agent should ensure that these files are cleaned up after use to maintain a tidy project structure. If any files in the `tmp/` directory are no longer needed, they should be deleted to prevent clutter. Also it must runs all tests before making any changes to ensure that the project remains stable and functional. If any tests fail, the agent should investigate the cause of the failure and address it before proceeding with further changes.
 
+# Refactorings
+
+Every time a refactoring is done the agent must:
+
+First: Move the files that will be refactoring to 'tmp/' directory.
+Second: The moved files must be deleted from the original place.
+Third: The agent should use the old files as reference for the refactoring. The agent should always read the original code to understand what code can be reused and what needs to be changed.
+Fourth: Create the new files in the original location.
+Fifth: Use the old files as a reference.
+Sixth: Always test the new implementation to ensure it works as expected.
