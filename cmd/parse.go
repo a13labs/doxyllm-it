@@ -188,6 +188,9 @@ func printEntity(entity *ast.Entity, depth int) {
 	if entity.IsConst {
 		fmt.Printf(" [const]")
 	}
+	if entity.IsConstexpr {
+		fmt.Printf(" [constexpr]")
+	}
 
 	if entity.HasDoxygenComment() {
 		fmt.Printf(" [documented]")

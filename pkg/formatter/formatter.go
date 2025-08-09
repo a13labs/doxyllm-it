@@ -70,7 +70,7 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 
 	// Add the entity declaration with proper multi-line indentation
 	indent := f.getIndent(depth)
-	signature := entity.Signature
+	signature := f.buildCompleteSignature(entity)
 
 	// Handle multi-line signatures by indenting each line properly
 	if strings.Contains(signature, "\n") {
@@ -414,4 +414,35 @@ func (f *Formatter) GetEntitySummary(entity *ast.Entity) string {
 	}
 
 	return result.String()
+}
+
+// buildCompleteSignature reconstructs the complete signature including modifiers
+func (f *Formatter) buildCompleteSignature(entity *ast.Entity) string {
+	var parts []string
+	
+	// Add static modifier if present
+	if entity.IsStatic {
+		parts = append(parts, "static")
+	}
+	
+	// Add inline modifier if present
+	if entity.IsInline {
+		parts = append(parts, "inline")
+	}
+	
+	// Add virtual modifier if present
+	if entity.IsVirtual {
+		parts = append(parts, "virtual")
+	}
+	
+	// Add constexpr modifier if present (for fields/variables)
+	if entity.IsConstexpr {
+		parts = append(parts, "constexpr")
+	}
+	
+	// Add the base signature
+	parts = append(parts, entity.Signature)
+	
+	// Join all parts with spaces
+	return strings.Join(parts, " ")
 }

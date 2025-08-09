@@ -30,7 +30,7 @@ func (p *Parser) parseFunction() error {
 	start := p.tokenCache.getCurrentPosition()
 
 	// Parse specifiers and attributes first
-	var isStatic, isInline, isVirtual, isConst bool
+	var isStatic, isInline, isVirtual, isConst, isConstexpr bool
 
 	// Parse function specifiers
 	for !p.tokenCache.isAtEnd() {
@@ -45,6 +45,10 @@ func (p *Parser) parseFunction() error {
 			p.tokenCache.skipWhitespace()
 		} else if token.Type == TokenVirtual {
 			isVirtual = true
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespace()
+		} else if token.Type == TokenConstexpr {
+			isConstexpr = true
 			p.tokenCache.advance()
 			p.tokenCache.skipWhitespace()
 		} else {
@@ -119,6 +123,7 @@ func (p *Parser) parseFunction() error {
 		IsInline:     isInline,
 		IsVirtual:    isVirtual,
 		IsConst:      isConst,
+		IsConstexpr:  isConstexpr,
 		SourceRange:  p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 		BodyRange:    bodyRange,
 		OriginalText: bodyText,

@@ -11,7 +11,7 @@ func (p *Parser) parseVariable() error {
 	start := p.tokenCache.getCurrentPosition()
 
 	// Parse specifiers first
-	var isStatic, isConst bool
+	var isStatic, isConst, isConstexpr bool
 
 	// Parse variable specifiers
 	for !p.tokenCache.isAtEnd() {
@@ -20,8 +20,13 @@ func (p *Parser) parseVariable() error {
 			isStatic = true
 			p.tokenCache.advance()
 			p.tokenCache.skipWhitespace()
-		} else if token.Type == TokenConst || token.Type == TokenConstexpr {
+		} else if token.Type == TokenConst {
 			isConst = true
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespace()
+		} else if token.Type == TokenConstexpr {
+			isConstexpr = true
+			isConst = true // constexpr implies const
 			p.tokenCache.advance()
 			p.tokenCache.skipWhitespace()
 		} else if token.Type == TokenExtern || token.Type == TokenMutable {
@@ -74,6 +79,7 @@ func (p *Parser) parseVariable() error {
 		AccessLevel: p.getCurrentAccessLevel(),
 		IsStatic:    isStatic,
 		IsConst:     isConst,
+		IsConstexpr: isConstexpr,
 		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 	}
 
