@@ -196,10 +196,10 @@ groups:
     description: "A test group for documentation"
     files:
       - "*.hpp"
-    generateDefgroup: true
+    generateDefGroup: true
 `
 
-	configPath := filepath.Join(tempDir, ".doxyllm.yaml.yaml")
+	configPath := filepath.Join(tempDir, ".doxyllm.yaml")
 	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create config file: %v", err)
@@ -253,7 +253,7 @@ ignore:
   - "ignored.hpp"
 `
 
-	configPath := filepath.Join(tempDir, ".doxyllm.yaml.yaml")
+	configPath := filepath.Join(tempDir, ".doxyllm.yaml")
 	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create config file: %v", err)

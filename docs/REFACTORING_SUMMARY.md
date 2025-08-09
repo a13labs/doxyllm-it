@@ -179,7 +179,7 @@ type ProcessingResult struct {
 
 ### Configuration Management
 ```yaml
-# Same .doxyllm.yaml.yaml format with enhanced parsing
+# Same .doxyllm.yaml format with enhanced parsing
 groups:
   mygroup:
     name: "mygroup"
@@ -212,7 +212,7 @@ The new architecture makes these future improvements straightforward:
 ### For Users
 - **No immediate action required**: Original `ollama` command continues to work
 - **Optional adoption**: Try `ollama-new` command for enhanced experience
-- **Same configuration**: Existing `.doxyllm.yaml.yaml` files work unchanged
+- **Same configuration**: Existing `.doxyllm.yaml` files work unchanged
 
 ### For Developers  
 - **Study the architecture**: Review the layered design patterns

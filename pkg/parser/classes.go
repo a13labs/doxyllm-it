@@ -25,7 +25,7 @@ func (p *Parser) parseClassOrStruct(entityType ast.EntityType) error {
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected %s name", keyword.Value)
+		return p.formatErrorAtCurrentPosition(fmt.Sprintf("expected %s name", keyword.Value))
 	}
 
 	nameToken := p.tokenCache.advance()
@@ -112,7 +112,7 @@ func (p *Parser) parseClassOrStructWithMacro(entityType ast.EntityType) error {
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected %s name", keyword.Value)
+		return p.formatErrorAtCurrentPosition(fmt.Sprintf("expected %s name", keyword.Value))
 	}
 
 	nameToken := p.tokenCache.advance()

@@ -22,7 +22,7 @@ func (p *Parser) parseEnum() error {
 	}
 
 	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected enum name")
+		return p.formatErrorAtCurrentPosition("expected enum name")
 	}
 
 	nameToken := p.tokenCache.advance()
@@ -102,7 +102,7 @@ func (p *Parser) parseEnumWithMacro() error {
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected enum name")
+		return p.formatErrorAtCurrentPosition("expected enum name")
 	}
 
 	nameToken := p.tokenCache.advance()

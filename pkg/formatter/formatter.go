@@ -38,8 +38,14 @@ func (f *Formatter) ReconstructScope(entity *ast.Entity) string {
 func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 	var result strings.Builder
 
-	// If this is the root entity, reconstruct all children
+	// If this is the root entity, handle root comment and reconstruct all children
 	if entity.Type == ast.EntityUnknown && entity.Name == "" {
+		// Add root entity comment (e.g., file-level @defgroup) at the beginning
+		if entity.Comment != nil {
+			result.WriteString(f.formatDoxygenComment(entity.Comment, depth))
+			result.WriteString("\n")
+		}
+		
 		for _, child := range entity.Children {
 			result.WriteString(f.reconstructEntity(child, depth))
 		}

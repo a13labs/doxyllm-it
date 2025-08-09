@@ -393,7 +393,7 @@ func shouldIgnoreFile(filePath, rootPath string) bool {
 	return false
 }
 
-// loadDoxyllmConfig loads the .doxyllm.yaml.yaml configuration file
+// loadDoxyllmConfig loads the .doxyllm.yaml configuration file
 func loadDoxyllmConfig(filePath, rootPath string) *DoxyllmConfig {
 	var rootDir string
 	if info, err := os.Stat(rootPath); err == nil && info.IsDir() {
@@ -402,7 +402,7 @@ func loadDoxyllmConfig(filePath, rootPath string) *DoxyllmConfig {
 		rootDir = filepath.Dir(rootPath)
 	}
 
-	doxyllmPath := filepath.Join(rootDir, ".doxyllm.yaml.yaml")
+	doxyllmPath := filepath.Join(rootDir, ".doxyllm.yaml")
 	content, err := os.ReadFile(doxyllmPath)
 	if err != nil {
 		return nil
@@ -410,7 +410,7 @@ func loadDoxyllmConfig(filePath, rootPath string) *DoxyllmConfig {
 
 	var config DoxyllmConfig
 	if err := yaml.Unmarshal(content, &config); err != nil {
-		fmt.Printf("⚠️  Warning: Failed to parse .doxyllm.yaml.yaml: %v\n", err)
+		fmt.Printf("⚠️  Warning: Failed to parse .doxyllm.yaml: %v\n", err)
 		return nil
 	}
 
@@ -423,7 +423,15 @@ func getGroupForFile(filePath, rootPath string, config *DoxyllmConfig) *document
 		return nil
 	}
 
-	relPath, err := filepath.Rel(rootPath, filePath)
+	// Determine the actual directory containing the config
+	var configDir string
+	if info, err := os.Stat(rootPath); err == nil && info.IsDir() {
+		configDir = rootPath
+	} else {
+		configDir = filepath.Dir(rootPath)
+	}
+
+	relPath, err := filepath.Rel(configDir, filePath)
 	if err != nil {
 		relPath = filepath.Base(filePath)
 	}

@@ -15,7 +15,7 @@ func (p *Parser) parseNamespace() error {
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() || !p.isValidIdentifierToken(p.tokenCache.peek()) {
-		return fmt.Errorf("expected namespace name")
+		return p.formatErrorAtCurrentPosition("expected namespace name")
 	}
 
 	// Parse namespace name (could be nested like mgl::io)

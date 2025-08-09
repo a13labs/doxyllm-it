@@ -52,7 +52,7 @@ DoxLLM-IT is a CLI tool written in Go that parses C++ header files and creates a
    - `update` - Update files with LLM-generated comments
    - `batch-update` - Batch update multiple entities
    - `llm` - Built-in LLM integration with context-aware documentation (supports Ollama, OpenAI, Anthropic)
-   - `init` - Initialize .doxyllm.yaml.yaml configuration files by analyzing codebase structure
+   - `init` - Initialize .doxyllm.yaml configuration files by analyzing codebase structure
 
 ### Key Design Principles
 
@@ -60,7 +60,7 @@ DoxLLM-IT is a CLI tool written in Go that parses C++ header files and creates a
 - **Scope-aware**: Understand C++ scope rules and hierarchies with access level tracking
 - **LLM-optimized**: Provide targeted context without overwhelming, enhanced with project-specific context
 - **Format-preserving**: Maintain code style and formatting
-- **Context-aware**: Support for `.doxyllm.yaml.yaml` configuration files with global and file-specific contexts
+- **Context-aware**: Support for `.doxyllm.yaml` configuration files with global and file-specific contexts
 - **Modern C++ support**: Enhanced parser for constexpr macros, template functions, and C++20 features
 - **Modular design**: Separate parsing, AST, and formatting concerns
 - **Streaming architecture**: Tokenizer provides O(1) memory complexity with lazy evaluation
@@ -197,7 +197,7 @@ Can be found in `pkg/ast/ast.go`:
 
 ### Context Configuration
 ```yaml
-# .doxyllm.yaml.yaml file structure
+# .doxyllm.yaml file structure
 global: |
   Project-wide context and design principles...
   

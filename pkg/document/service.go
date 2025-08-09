@@ -46,7 +46,7 @@ type GroupConfig struct {
 	Title            string   `yaml:"title"`            // Group title/brief description
 	Description      string   `yaml:"description"`      // Detailed group description
 	Files            []string `yaml:"files"`            // Files that belong to this group
-	GenerateDefgroup bool     `yaml:"generateDefgroup"` // Whether to generate @defgroup in header files
+	GenerateDefgroup bool     `yaml:"generateDefGroup"` // Whether to generate @defgroup in header files
 }
 
 // ProcessingResult contains the result of document processing
@@ -159,13 +159,20 @@ func (s *DocumentationService) AddDefgroupToDocument(doc *Document, group *Group
 	}
 
 	// Generate @defgroup comment
-	_ = s.generateDefgroupComment(group)
+	defgroupComment := s.generateDefgroupComment(group)
 
-	// TODO: Implement insertion of defgroup at file beginning
-	// This would require extending the Document interface to support
-	// inserting content at arbitrary positions
+	// Create a DoxygenComment structure for the defgroup
+	comment := &ast.DoxygenComment{
+		Raw: defgroupComment,
+	}
 
-	return fmt.Errorf("defgroup insertion not yet implemented in document abstraction")
+	// Add the defgroup comment to the root entity (file level)
+	tree := doc.GetTree()
+	if tree != nil && tree.Root != nil {
+		tree.Root.Comment = comment
+	}
+
+	return nil
 }
 
 // generateEntityDocumentation generates documentation for a single entity

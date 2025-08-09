@@ -3,6 +3,7 @@ package parser
 
 import (
 	"doxyllm-it/pkg/ast"
+	"fmt"
 )
 
 // Parser implements a token-driven parser for C++ headers with streaming tokenizer backend
@@ -13,6 +14,20 @@ type Parser struct {
 	accessStack    []ast.AccessLevel
 	defines        map[string]string
 	pendingComment *ast.DoxygenComment
+}
+
+// formatError creates an error message with line and column information
+func (p *Parser) formatError(message string, token Token) error {
+	return fmt.Errorf("%s at line %d, column %d (token: '%s')", message, token.Line, token.Column, token.Value)
+}
+
+// formatErrorAtCurrentPosition creates an error message with current position information
+func (p *Parser) formatErrorAtCurrentPosition(message string) error {
+	if p.tokenCache.isAtEnd() {
+		return fmt.Errorf("%s at end of file", message)
+	}
+	token := p.tokenCache.peek()
+	return p.formatError(message, token)
 }
 
 // New creates a new token-driven parser

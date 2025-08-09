@@ -17,7 +17,7 @@ func (p *Parser) parseTemplate() error {
 
 	// Parse template parameters
 	if !p.tokenCache.match(TokenLess) {
-		return fmt.Errorf("expected '<' after template")
+		return p.formatErrorAtCurrentPosition("expected '<' after template")
 	}
 
 	depth := 1
@@ -45,22 +45,71 @@ func (p *Parser) parseTemplate() error {
 // parseTemplatedEntity parses the entity that follows a template declaration
 func (p *Parser) parseTemplatedEntity(templateStart int, templateParams string) error {
 	if p.tokenCache.isAtEnd() {
-		return fmt.Errorf("expected entity after template")
+		// If we reach end of file, just return successfully instead of failing
+		// This can happen with incomplete template declarations at the end of files
+		return nil
 	}
 
 	token := p.tokenCache.peek()
 
 	switch token.Type {
 	case TokenClass:
-		return p.parseTemplatedClass(templateStart, templateParams)
+		err := p.parseTemplatedClass(templateStart, templateParams)
+		if err != nil {
+			// If parsing fails, try to skip to the next semicolon or closing brace
+			return p.skipToNextEntity()
+		}
+		return nil
 	case TokenStruct:
-		return p.parseTemplatedStruct(templateStart, templateParams)
+		err := p.parseTemplatedStruct(templateStart, templateParams)
+		if err != nil {
+			return p.skipToNextEntity()
+		}
+		return nil
 	case TokenUsing:
-		return p.parseTemplatedUsing(templateStart, templateParams)
+		err := p.parseTemplatedUsing(templateStart, templateParams)
+		if err != nil {
+			return p.skipToNextEntity()
+		}
+		return nil
 	default:
 		// Template function
-		return p.parseTemplatedFunction(templateStart, templateParams)
+		err := p.parseTemplatedFunction(templateStart, templateParams)
+		if err != nil {
+			return p.skipToNextEntity()
+		}
+		return nil
 	}
+}
+
+// skipToNextEntity attempts to recover from template parsing errors by skipping to the next entity
+func (p *Parser) skipToNextEntity() error {
+	// Skip tokens until we find a semicolon, closing brace, or the start of a new entity
+	for !p.tokenCache.isAtEnd() {
+		token := p.tokenCache.peek()
+
+		// Stop at semicolon (end of declaration)
+		if token.Type == TokenSemicolon {
+			p.tokenCache.advance() // consume the semicolon
+			return nil
+		}
+
+		// Stop at closing brace
+		if token.Type == TokenRightBrace {
+			return nil
+		}
+
+		// Stop at tokens that typically start new entities
+		if token.Type == TokenClass || token.Type == TokenStruct || token.Type == TokenEnum ||
+			token.Type == TokenNamespace || token.Type == TokenTemplate ||
+			token.Type == TokenTypedef || token.Type == TokenUsing {
+			return nil
+		}
+
+		p.tokenCache.advance()
+	}
+
+	return nil // End of file reached
 }
 
 // parseTemplatedClass handles template class declarations
@@ -70,7 +119,11 @@ func (p *Parser) parseTemplatedClass(templateStart int, templateParams string) e
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected class name")
+		if p.tokenCache.isAtEnd() {
+			return p.formatErrorAtCurrentPosition("expected class name, but reached end of file")
+		} else {
+			return p.formatErrorAtCurrentPosition("expected class name")
+		}
 	}
 
 	nameToken := p.tokenCache.advance()
@@ -125,7 +178,7 @@ func (p *Parser) parseTemplatedStruct(templateStart int, templateParams string) 
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected struct name")
+		return p.formatErrorAtCurrentPosition("expected struct name")
 	}
 
 	nameToken := p.tokenCache.advance()
@@ -179,7 +232,7 @@ func (p *Parser) parseTemplatedUsing(templateStart int, templateParams string) e
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected identifier after using")
+		return p.formatErrorAtCurrentPosition("expected identifier after using")
 	}
 
 	nameToken := p.tokenCache.advance()
@@ -187,7 +240,7 @@ func (p *Parser) parseTemplatedUsing(templateStart int, templateParams string) e
 	p.tokenCache.skipWhitespace()
 
 	if !p.tokenCache.match(TokenEquals) {
-		return fmt.Errorf("expected '=' in using declaration")
+		return p.formatErrorAtCurrentPosition("expected '=' in using declaration")
 	}
 
 	// Parse the rest until semicolon

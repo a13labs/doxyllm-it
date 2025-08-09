@@ -34,12 +34,12 @@ func (p *Parser) parseDefine(start int) error {
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() {
-		return fmt.Errorf("expected identifier after #define")
+		return p.formatErrorAtCurrentPosition("expected identifier after #define")
 	}
 
 	nameToken := p.tokenCache.peek()
 	if nameToken.Type != TokenIdentifier {
-		return fmt.Errorf("expected identifier after #define, got %v", nameToken.Type)
+		return p.formatError("expected identifier after #define", nameToken)
 	}
 	p.tokenCache.advance()
 

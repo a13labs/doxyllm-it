@@ -57,7 +57,7 @@ func (p *Parser) parseUsing() error {
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() {
-		return fmt.Errorf("expected identifier after using")
+		return p.formatErrorAtCurrentPosition("expected identifier after using")
 	}
 
 	// Check for 'namespace' keyword
@@ -65,34 +65,62 @@ func (p *Parser) parseUsing() error {
 		return p.parseUsingNamespace(start)
 	}
 
-	// Regular using declaration
+	// Parse the full qualified name (could include ::)
+	var fullNameBuilder strings.Builder
+
+	// First identifier is required
 	if p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected identifier after using")
+		return p.formatErrorAtCurrentPosition("expected identifier after using")
 	}
 
 	nameToken := p.tokenCache.advance()
+	fullNameBuilder.WriteString(nameToken.Value)
+
+	// Handle qualified names like std::data
+	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenDoubleColon {
+		fullNameBuilder.WriteString("::")
+		p.tokenCache.advance()
+
+		if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
+			break
+		}
+
+		nextToken := p.tokenCache.advance()
+		fullNameBuilder.WriteString(nextToken.Value)
+		nameToken = nextToken // Update nameToken to be the last identifier
+	}
 
 	p.tokenCache.skipWhitespace()
 
-	if !p.tokenCache.match(TokenEquals) {
-		return fmt.Errorf("expected '=' in using declaration")
-	}
+	var signature string
+	var entityType ast.EntityType
 
-	// Parse the rest until semicolon
-	var typeValue strings.Builder
-	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenSemicolon {
-		typeValue.WriteString(p.tokenCache.peek().Value)
-		p.tokenCache.advance()
+	// Check if this is a type alias (using name = type) or a using declaration (using std::name)
+	if p.tokenCache.peek().Type == TokenEquals {
+		// Type alias: using name = type
+		p.tokenCache.advance() // consume '='
+
+		// Parse the rest until semicolon
+		var typeValue strings.Builder
+		for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenSemicolon {
+			typeValue.WriteString(p.tokenCache.peek().Value)
+			p.tokenCache.advance()
+		}
+
+		signature = fmt.Sprintf("using %s = %s", nameToken.Value, typeValue.String())
+		entityType = ast.EntityUsing
+	} else {
+		// Using declaration: using std::name
+		signature = fmt.Sprintf("using %s", fullNameBuilder.String())
+		entityType = ast.EntityUsing
 	}
 
 	if p.tokenCache.match(TokenSemicolon) {
 		// consumed semicolon
 	}
 
-	signature := fmt.Sprintf("using %s = %s", nameToken.Value, typeValue.String())
-
 	entity := &ast.Entity{
-		Type:        ast.EntityUsing,
+		Type:        entityType,
 		Name:        nameToken.Value,
 		FullName:    p.buildFullName(nameToken.Value),
 		Signature:   signature,
@@ -111,7 +139,7 @@ func (p *Parser) parseUsingNamespace(start int) error {
 	p.tokenCache.skipWhitespace()
 
 	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return fmt.Errorf("expected namespace name after using namespace")
+		return p.formatErrorAtCurrentPosition("expected namespace name after using namespace")
 	}
 
 	nameToken := p.tokenCache.advance()
