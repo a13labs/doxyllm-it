@@ -441,3 +441,269 @@ func ExampleDocument_usage() {
 	issues := doc.Validate()
 	_ = len(issues) // Should be fewer issues now
 }
+
+func TestValidateReconstructedCode(t *testing.T) {
+	// Test with well-formed template code
+	originalContent := `#pragma once
+#include <vector>
+
+template <typename T>
+class Container {
+public:
+    void add(const T& item);
+private:
+    std::vector<T> items;
+};
+
+namespace Utils {
+    template <typename T>
+    void sort(Container<T>& container);
+}`
+
+	doc, err := NewFromContent("test.hpp", originalContent)
+	if err != nil {
+		t.Fatalf("Failed to create document: %v", err)
+	}
+
+	// Test validation with the same content (should pass)
+	reconstructedContent, err := doc.SaveToString()
+	if err != nil {
+		t.Fatalf("Failed to reconstruct: %v", err)
+	}
+
+	// Debug: print the reconstructed content to see what's happening
+	t.Logf("Original content:\n%s", originalContent)
+	t.Logf("Reconstructed content:\n%s", reconstructedContent)
+
+	err = doc.validateReconstructedCode(reconstructedContent)
+	if err != nil {
+		t.Errorf("Expected validation to pass for reconstructed content, got: %v", err)
+	}
+}
+
+func TestValidateReconstructedCodeWithMissingBraces(t *testing.T) {
+	originalContent := `namespace Test {
+    class MyClass {
+    public:
+        void method();
+    };
+}`
+
+	doc, err := NewFromContent("test.hpp", originalContent)
+	if err != nil {
+		t.Fatalf("Failed to create document: %v", err)
+	}
+
+	// Missing closing brace
+	invalidContent := `namespace Test {
+    class MyClass {
+    public:
+        void method();
+    };`
+
+	err = doc.validateReconstructedCode(invalidContent)
+	if err == nil {
+		t.Error("Expected validation to fail for missing braces")
+	}
+
+	if !containsString(err.Error(), "brace") {
+		t.Errorf("Expected error message to mention braces, got: %v", err)
+	}
+}
+
+func TestValidateReconstructedCodeWithMissingIncludes(t *testing.T) {
+	originalContent := `#pragma once
+#include <iostream>
+#include <vector>
+
+class MyClass {
+public:
+    void method();
+};`
+
+	doc, err := NewFromContent("test.hpp", originalContent)
+	if err != nil {
+		t.Fatalf("Failed to create document: %v", err)
+	}
+
+	// Missing includes
+	invalidContent := `#pragma once
+
+class MyClass {
+public:
+    void method();
+};`
+
+	err = doc.validateReconstructedCode(invalidContent)
+	if err == nil {
+		t.Error("Expected validation to fail for missing includes")
+	}
+
+	if !containsString(err.Error(), "include") {
+		t.Errorf("Expected error message to mention includes, got: %v", err)
+	}
+}
+
+func TestValidateReconstructedCodeWithContentLoss(t *testing.T) {
+	originalContent := `template <typename T>
+class Container {
+public:
+    void add(const T& item);
+    void remove(const T& item);
+    size_t size() const;
+};`
+
+	doc, err := NewFromContent("test.hpp", originalContent)
+	if err != nil {
+		t.Fatalf("Failed to create document: %v", err)
+	}
+
+	// Missing method
+	invalidContent := `template <typename T>
+class Container {
+public:
+    void add(const T& item);
+    size_t size() const;
+};`
+
+	// Debug the content lengths and method counts
+	t.Logf("Original content length: %d", len(originalContent))
+	t.Logf("Invalid content length: %d", len(invalidContent))
+	t.Logf("Original content:\n%s", originalContent)
+	t.Logf("Invalid content:\n%s", invalidContent)
+
+	err = doc.validateReconstructedCode(invalidContent)
+	if err == nil {
+		t.Error("Expected validation to fail for content loss")
+		return
+	}
+
+	if !containsString(err.Error(), "content") {
+		t.Errorf("Expected error message to mention content loss, got: %v", err)
+	}
+}
+
+func TestDocumentWithTemplateValidation(t *testing.T) {
+	// Test document operations with template-heavy content
+	templateContent := `template <typename T, size_t N>
+class FixedArray {
+public:
+    template <typename U>
+    void fill(const U& value);
+    
+    T& operator[](size_t index);
+    const T& operator[](size_t index) const;
+    
+    size_t size() const { return N; }
+};
+
+template <typename... Args>
+void print(Args... args);`
+
+	doc, err := NewFromContent("template_test.hpp", templateContent)
+	if err != nil {
+		t.Fatalf("Failed to create document: %v", err)
+	}
+
+	// Should parse without errors
+	if doc.GetTree() == nil {
+		t.Error("Expected parse tree to be created for template content")
+	}
+
+	// Should validate without critical errors
+	issues := doc.Validate()
+	for _, issue := range issues {
+		if issue.Severity == "critical" {
+			t.Errorf("Unexpected critical validation issue: %s", issue.Message)
+		}
+	}
+
+	// Should preserve template entities in reconstruction
+	reconstructed, err := doc.SaveToString()
+	if err != nil {
+		t.Fatalf("Failed to reconstruct: %v", err)
+	}
+
+	if !containsString(reconstructed, "template") {
+		t.Error("Expected reconstructed content to preserve template declarations")
+	}
+
+	if !containsString(reconstructed, "FixedArray") {
+		t.Error("Expected reconstructed content to preserve template class")
+	}
+
+	if !containsString(reconstructed, "Args...") {
+		t.Error("Expected reconstructed content to preserve variadic template")
+	}
+}
+
+func TestDocumentWithPreprocessorValidation(t *testing.T) {
+	// Test document operations with preprocessor directives
+	preprocessorContent := `#pragma once
+#include <iostream>
+#include "my_header.h"
+
+#define MAX_SIZE 1024
+#ifdef DEBUG
+#define LOG(x) std::cout << x << std::endl
+#else
+#define LOG(x)
+#endif
+
+class MyClass {
+public:
+    void method();
+};`
+
+	doc, err := NewFromContent("preprocessor_test.hpp", preprocessorContent)
+	if err != nil {
+		t.Fatalf("Failed to create document: %v", err)
+	}
+
+	// Should parse without errors
+	if doc.GetTree() == nil {
+		t.Error("Expected parse tree to be created for preprocessor content")
+	}
+
+	// Should validate without critical errors
+	issues := doc.Validate()
+	for _, issue := range issues {
+		if issue.Severity == "critical" {
+			t.Errorf("Unexpected critical validation issue: %s", issue.Message)
+		}
+	}
+
+	// Should preserve preprocessor directives in reconstruction
+	reconstructed, err := doc.SaveToString()
+	if err != nil {
+		t.Fatalf("Failed to reconstruct: %v", err)
+	}
+
+	if !containsString(reconstructed, "#pragma once") {
+		t.Error("Expected reconstructed content to preserve #pragma once")
+	}
+
+	if !containsString(reconstructed, "#include") {
+		t.Error("Expected reconstructed content to preserve #include directives")
+	}
+
+	if !containsString(reconstructed, "#define") {
+		t.Error("Expected reconstructed content to preserve #define directives")
+	}
+}
+
+// Helper function to check if string contains substring
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) &&
+		(s == substr || (len(s) > len(substr) &&
+			(stringContains(s, substr))))
+}
+
+func stringContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

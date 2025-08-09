@@ -196,7 +196,7 @@ groups:
     description: "A test group for documentation"
     files:
       - "*.hpp"
-    generateDefgroup: true
+    generateDefGroup: true
 `
 
 	configPath := filepath.Join(tempDir, ".doxyllm.yaml")
@@ -231,7 +231,7 @@ groups:
 		if group.Name != "testgroup" {
 			t.Errorf("Expected group name 'testgroup', got '%s'", group.Name)
 		}
-		if !group.GenerateDefgroup {
+		if !group.GenerateDefGroup {
 			t.Error("Expected generateDefgroup to be true")
 		}
 	}
@@ -286,7 +286,7 @@ func TestGetGroupForFile(t *testing.T) {
 				Name:             "headers",
 				Title:            "Header Files",
 				Files:            []string{"*.hpp", "*.h"},
-				GenerateDefgroup: true,
+				GenerateDefGroup: true,
 			},
 			"utils": {
 				Name:  "utils",

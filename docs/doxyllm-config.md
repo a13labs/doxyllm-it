@@ -1,6 +1,6 @@
-# .doxyllm Configuration File Examples
+# .doxyllm.yaml Configuration File Examples
 
-The `.doxyllm` file supports two formats:
+The `.doxyllm.yaml` file supports two formats:
 
 ## 1. YAML Format (Recommended for multi-file projects)
 
@@ -43,7 +43,7 @@ This format is automatically detected when YAML parsing fails.
 
 ## Usage
 
-Place a `.doxyllm` file in the same directory as your source files. The tool will:
+Place a `.doxyllm.yaml` file in the same directory as your source files. The tool will:
 
 1. Try to parse as YAML first
 2. Fall back to plain text if YAML parsing fails

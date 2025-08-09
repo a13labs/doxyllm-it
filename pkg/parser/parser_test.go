@@ -1,12 +1,183 @@
 package parser
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
 	"doxyllm-it/pkg/ast"
+	"doxyllm-it/pkg/formatter"
 )
+
+// TestInlineCommentParsing tests parsing of inline comments with < character preservation
+func TestInlineCommentParsing(t *testing.T) {
+	content := `struct Point {
+    int x; /**< The x-coordinate of the point. */
+    int y; /**< The y-coordinate of the point. */
+    float z; /**< The z-coordinate of the point. */
+};`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Should have 1 struct at root level
+	if len(tree.Root.Children) != 1 {
+		t.Errorf("Expected 1 root entity, got %d", len(tree.Root.Children))
+		return
+	}
+
+	structEntity := tree.Root.Children[0]
+	if structEntity.Type != ast.EntityStruct {
+		t.Errorf("Expected struct, got %v", structEntity.Type)
+		return
+	}
+
+	// Get fields (excluding access specifiers)
+	fields := getNonAccessSpecifierChildren(structEntity)
+	if len(fields) != 3 {
+		t.Errorf("Expected 3 fields, got %d", len(fields))
+		return
+	}
+
+	// Test each field has correct inline comment with < preserved
+	expectedComments := []string{
+		"< The x-coordinate of the point.",
+		"< The y-coordinate of the point.",
+		"< The z-coordinate of the point.",
+	}
+
+	for i, field := range fields {
+		if field.Comment == nil {
+			t.Errorf("Field %d (%s) should have a comment", i, field.Name)
+			continue
+		}
+
+		if field.Comment.Brief != expectedComments[i] {
+			t.Errorf("Field %d (%s) comment brief = %q, want %q",
+				i, field.Name, field.Comment.Brief, expectedComments[i])
+		}
+
+		// Verify original raw comment is preserved
+		if !strings.Contains(field.Comment.Raw, "/**<") {
+			t.Errorf("Field %d (%s) raw comment should contain '/**<', got: %q",
+				i, field.Name, field.Comment.Raw)
+		}
+	}
+}
+
+// TestInlineCommentAssociation tests that inline comments are associated with the correct entity
+func TestInlineCommentAssociation(t *testing.T) {
+	content := `struct TestStruct {
+    int first; /**< First field comment. */
+    int second; /**< Second field comment. */
+    int third; /**< Third field comment. */
+};`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	structEntity := tree.Root.Children[0]
+	fields := getNonAccessSpecifierChildren(structEntity)
+
+	expectedNames := []string{"first", "second", "third"}
+	expectedComments := []string{
+		"< First field comment.",
+		"< Second field comment.",
+		"< Third field comment.",
+	}
+
+	for i, field := range fields {
+		if field.Name != expectedNames[i] {
+			t.Errorf("Field %d name = %q, want %q", i, field.Name, expectedNames[i])
+		}
+
+		if field.Comment == nil {
+			t.Errorf("Field %s should have a comment", field.Name)
+			continue
+		}
+
+		if field.Comment.Brief != expectedComments[i] {
+			t.Errorf("Field %s comment = %q, want %q",
+				field.Name, field.Comment.Brief, expectedComments[i])
+		}
+	}
+}
+
+// TestMixedCommentStyles tests parsing of both block and inline comments
+func TestMixedCommentStyles(t *testing.T) {
+	content := `/**
+ * @brief A test structure with mixed comment styles.
+ */
+struct MixedComments {
+    /**
+     * @brief A field with block comment.
+     */
+    int blockCommented;
+    
+    int inlineCommented; /**< A field with inline comment. */
+};`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	structEntity := tree.Root.Children[0]
+
+	// Check struct comment
+	if structEntity.Comment == nil {
+		t.Error("Struct should have a comment")
+	} else if !strings.Contains(structEntity.Comment.Brief, "test structure") {
+		t.Errorf("Struct comment brief = %q, should contain 'test structure'", structEntity.Comment.Brief)
+	}
+
+	fields := getNonAccessSpecifierChildren(structEntity)
+	if len(fields) != 2 {
+		t.Errorf("Expected 2 fields, got %d", len(fields))
+		return
+	}
+
+	// First field should have block comment (no < prefix)
+	if fields[0].Comment == nil {
+		t.Error("First field should have a comment")
+	} else if strings.HasPrefix(fields[0].Comment.Brief, "<") {
+		t.Errorf("Block comment should not start with '<', got: %q", fields[0].Comment.Brief)
+	}
+
+	// Second field should have inline comment (with < prefix)
+	if fields[1].Comment == nil {
+		t.Error("Second field should have a comment")
+	} else if !strings.HasPrefix(fields[1].Comment.Brief, "<") {
+		t.Errorf("Inline comment should start with '<', got: %q", fields[1].Comment.Brief)
+	}
+}
+
+// Helper functions for tests
+func getNonAccessSpecifierChildren(entity *ast.Entity) []*ast.Entity {
+	var result []*ast.Entity
+	for _, child := range entity.Children {
+		if child.Type != ast.EntityAccessSpecifier {
+			result = append(result, child)
+		}
+	}
+	return result
+}
+
+func getAccessSpecifiers(entity *ast.Entity) []*ast.Entity {
+	var result []*ast.Entity
+	for _, child := range entity.Children {
+		if child.Type == ast.EntityAccessSpecifier {
+			result = append(result, child)
+		}
+	}
+	return result
+}
 
 func TestBasicNamespaceParsing(t *testing.T) {
 	content := `namespace TestNamespace {
@@ -44,20 +215,27 @@ func TestBasicNamespaceParsing(t *testing.T) {
 		t.Errorf("Expected class TestClass, got %s %s", class.Type, class.Name)
 	}
 
-	// Class should have 2 members
-	if len(class.Children) != 2 {
-		t.Errorf("Expected 2 children in class, got %d", len(class.Children))
+	// Get only non-access-specifier children (actual members)
+	members := getNonAccessSpecifierChildren(class)
+	if len(members) != 2 {
+		t.Errorf("Expected 2 members in class, got %d", len(members))
 	}
 
 	// Check access levels
-	method := class.Children[0]
+	method := members[0]
 	if method.AccessLevel != ast.AccessPublic {
 		t.Errorf("Expected public method, got %s", method.AccessLevel)
 	}
 
-	field := class.Children[1]
+	field := members[1]
 	if field.AccessLevel != ast.AccessPrivate {
 		t.Errorf("Expected private field, got %s", field.AccessLevel)
+	}
+
+	// Verify access specifiers are present
+	accessSpecs := getAccessSpecifiers(class)
+	if len(accessSpecs) != 2 {
+		t.Errorf("Expected 2 access specifiers, got %d", len(accessSpecs))
 	}
 }
 
@@ -80,8 +258,11 @@ protected:
 	}
 
 	class := tree.Root.Children[0]
-	if len(class.Children) != 5 {
-		t.Errorf("Expected 5 children, got %d", len(class.Children))
+
+	// Get only non-access-specifier children (actual members)
+	members := getNonAccessSpecifierChildren(class)
+	if len(members) != 5 {
+		t.Errorf("Expected 5 members, got %d", len(members))
 	}
 
 	// Check access levels in order
@@ -93,9 +274,23 @@ protected:
 		ast.AccessProtected, // protectedMethod
 	}
 
-	for i, child := range class.Children {
-		if child.AccessLevel != expectedAccess[i] {
-			t.Errorf("Child %d: expected %s, got %s", i, expectedAccess[i], child.AccessLevel)
+	for i, member := range members {
+		if member.AccessLevel != expectedAccess[i] {
+			t.Errorf("Member %d: expected %s, got %s", i, expectedAccess[i], member.AccessLevel)
+		}
+	}
+
+	// Verify access specifiers are present
+	accessSpecs := getAccessSpecifiers(class)
+	if len(accessSpecs) != 3 {
+		t.Errorf("Expected 3 access specifiers, got %d", len(accessSpecs))
+	}
+
+	// Verify access specifiers have correct names
+	expectedAccessSpecNames := []string{"public", "private", "protected"}
+	for i, spec := range accessSpecs {
+		if i < len(expectedAccessSpecNames) && spec.Name != expectedAccessSpecNames[i] {
+			t.Errorf("Access specifier %d: expected %s, got %s", i, expectedAccessSpecNames[i], spec.Name)
 		}
 	}
 }
@@ -132,6 +327,242 @@ struct TemplateStruct {
 	templateStruct := tree.Root.Children[1]
 	if templateStruct.Type != ast.EntityStruct || templateStruct.Name != "TemplateStruct" {
 		t.Errorf("Expected template struct TemplateStruct, got %s %s", templateStruct.Type, templateStruct.Name)
+	}
+}
+
+func TestAdvancedTemplateParsing(t *testing.T) {
+	content := `// Test template functions
+template <typename T>
+T add(T a, T b) {
+    return a + b;
+}
+
+template <typename T, typename U>
+auto multiply(T a, U b) -> decltype(a * b);
+
+// Test template using declarations
+template <typename T>
+using Vector = std::vector<T>;
+
+template <class Key, class Value>
+using Map = std::unordered_map<Key, Value>;
+
+// Test complex template class
+template <typename T, size_t N = 10>
+class Container {
+public:
+    template <typename U>
+    void insert(const U& item);
+};`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Filter out comment entities to get only the actual code entities
+	var codeEntities []*ast.Entity
+	for _, child := range tree.Root.Children {
+		if child.Type != ast.EntityComment {
+			codeEntities = append(codeEntities, child)
+		}
+	}
+
+	// Should have: 2 template functions + 2 template using + 1 template class = 5 entities
+	if len(codeEntities) != 5 {
+		t.Errorf("Expected 5 code entities, got %d", len(codeEntities))
+		for i, child := range tree.Root.Children {
+			t.Logf("Child %d: %s %s", i, child.Type, child.Name)
+		}
+	}
+
+	// Check template function
+	templateFunc := codeEntities[0]
+	if templateFunc.Type != ast.EntityFunction || templateFunc.Name != "add" {
+		t.Errorf("Expected template function add, got %s %s", templateFunc.Type, templateFunc.Name)
+	}
+
+	// Check auto return template function
+	autoFunc := codeEntities[1]
+	if autoFunc.Type != ast.EntityFunction || autoFunc.Name != "multiply" {
+		t.Errorf("Expected template function multiply, got %s %s", autoFunc.Type, autoFunc.Name)
+		t.Logf("Debug: autoFunc signature: %s", autoFunc.Signature)
+	}
+
+	// Check template using declarations
+	templateUsing1 := codeEntities[2]
+	if templateUsing1.Type != ast.EntityUsing || templateUsing1.Name != "Vector" {
+		t.Errorf("Expected template using Vector, got %s %s", templateUsing1.Type, templateUsing1.Name)
+	}
+
+	templateUsing2 := codeEntities[3]
+	if templateUsing2.Type != ast.EntityUsing || templateUsing2.Name != "Map" {
+		t.Errorf("Expected template using Map, got %s %s", templateUsing2.Type, templateUsing2.Name)
+	}
+
+	// Check template class with default parameter
+	templateClass := codeEntities[4]
+	if templateClass.Type != ast.EntityClass || templateClass.Name != "Container" {
+		t.Errorf("Expected template class Container, got %s %s", templateClass.Type, templateClass.Name)
+	}
+
+	// Check that template class has the member template function (ignoring access specifiers)
+	members := getNonAccessSpecifierChildren(templateClass)
+	if len(members) != 1 {
+		t.Errorf("Expected 1 member in template class, got %d", len(members))
+	}
+
+	memberFunc := members[0]
+	if memberFunc.Type != ast.EntityMethod || memberFunc.Name != "insert" {
+		t.Errorf("Expected member template method insert, got %s %s", memberFunc.Type, memberFunc.Name)
+	}
+}
+
+func TestPreprocessorDirectiveParsing(t *testing.T) {
+	content := `#pragma once
+#include <iostream>
+#include "local_header.h"
+
+#define MAX_SIZE 1024
+#ifdef DEBUG
+#define LOG(x) std::cout << x << std::endl
+#else
+#define LOG(x)
+#endif
+
+// File-level comment
+/* Multi-line comment
+   about the file */
+
+namespace MyNamespace {
+    class MyClass {
+    public:
+        void method();
+    };
+}`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Count preprocessor directives and other entities
+	preprocessorCount := 0
+	commentCount := 0
+	namespaceCount := 0
+
+	for _, child := range tree.Root.Children {
+		switch child.Type {
+		case ast.EntityPreprocessor:
+			preprocessorCount++
+		case ast.EntityComment:
+			commentCount++
+		case ast.EntityNamespace:
+			namespaceCount++
+		}
+	}
+
+	// Should have preprocessor directives preserved
+	if preprocessorCount == 0 {
+		t.Error("Expected preprocessor directives to be parsed, got none")
+	}
+
+	// Should have comments preserved
+	if commentCount == 0 {
+		t.Error("Expected file-level comments to be parsed, got none")
+	}
+
+	// Should have namespace
+	if namespaceCount != 1 {
+		t.Errorf("Expected 1 namespace, got %d", namespaceCount)
+	}
+
+	// Verify specific preprocessor directives exist
+	foundPragma := false
+	foundInclude := false
+	foundDefine := false
+
+	for _, child := range tree.Root.Children {
+		if child.Type == ast.EntityPreprocessor {
+			if strings.Contains(child.Signature, "#pragma once") {
+				foundPragma = true
+			}
+			if strings.Contains(child.Signature, "#include <iostream>") {
+				foundInclude = true
+			}
+			if strings.Contains(child.Signature, "#define MAX_SIZE") {
+				foundDefine = true
+			}
+		}
+	}
+
+	if !foundPragma {
+		t.Error("Expected #pragma once directive to be preserved")
+	}
+	if !foundInclude {
+		t.Error("Expected #include directive to be preserved")
+	}
+	if !foundDefine {
+		t.Error("Expected #define directive to be preserved")
+	}
+}
+
+func TestMultiLineTemplateSignatures(t *testing.T) {
+	content := `template <
+    typename T,
+    typename U = int,
+    size_t N = 100
+>
+class MultiLineTemplate {
+public:
+    void method();
+};
+
+template <
+    class Iterator,
+    class Distance
+>
+void advance(Iterator& it, Distance n);`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	if len(tree.Root.Children) != 2 {
+		t.Errorf("Expected 2 root entities, got %d", len(tree.Root.Children))
+		for i, child := range tree.Root.Children {
+			t.Logf("Entity %d: %s %s (signature: %s)", i, child.Type, child.Name, child.Signature)
+		}
+	}
+
+	// Check multi-line template class
+	templateClass := tree.Root.Children[0]
+	if templateClass.Type != ast.EntityClass || templateClass.Name != "MultiLineTemplate" {
+		t.Errorf("Expected multi-line template class MultiLineTemplate, got %s %s", templateClass.Type, templateClass.Name)
+	}
+
+	// Verify the signature contains template parameters
+	if !strings.Contains(templateClass.Signature, "template") {
+		t.Error("Expected class signature to contain template declaration")
+	}
+
+	// Check multi-line template function
+	if len(tree.Root.Children) >= 2 {
+		templateFunc := tree.Root.Children[1]
+		if templateFunc.Type != ast.EntityFunction || templateFunc.Name != "advance" {
+			t.Errorf("Expected multi-line template function advance, got %s %s", templateFunc.Type, templateFunc.Name)
+		}
+
+		// Verify the signature contains template parameters
+		if !strings.Contains(templateFunc.Signature, "template") {
+			t.Error("Expected function signature to contain template declaration")
+		}
+	} else {
+		t.Error("Expected to find template function, but it's missing")
 	}
 }
 
@@ -179,31 +610,32 @@ public:
 
 	// Check class methods
 	class := tree.Root.Children[4] // Last entity should be the class
-	if len(class.Children) != 5 {
-		t.Errorf("Expected 5 class members, got %d", len(class.Children))
+	members := getNonAccessSpecifierChildren(class)
+	if len(members) != 5 {
+		t.Errorf("Expected 5 class members, got %d", len(members))
 	}
 
-	constructor := class.Children[0]
+	constructor := members[0]
 	if constructor.Type != ast.EntityConstructor {
 		t.Errorf("Expected constructor, got %s", constructor.Type)
 	}
 
-	destructor := class.Children[1]
+	destructor := members[1]
 	if destructor.Type != ast.EntityDestructor || destructor.Name != "TestClass" {
 		t.Errorf("Expected destructor TestClass, got %s %s", destructor.Type, destructor.Name)
 	}
 
-	constMethod := class.Children[2]
+	constMethod := members[2]
 	if !constMethod.IsConst {
 		t.Errorf("Expected const method to have IsConst=true")
 	}
 
-	staticMethod := class.Children[3]
+	staticMethod := members[3]
 	if !staticMethod.IsStatic {
 		t.Errorf("Expected static method to have IsStatic=true")
 	}
 
-	virtualMethod := class.Children[4]
+	virtualMethod := members[4]
 	if !virtualMethod.IsVirtual {
 		t.Errorf("Expected virtual method to have IsVirtual=true")
 	}
@@ -248,11 +680,12 @@ private:
 
 	// Check class fields
 	class := tree.Root.Children[4] // Last entity
-	if len(class.Children) != 4 {
-		t.Errorf("Expected 4 class fields, got %d", len(class.Children))
+	members := getNonAccessSpecifierChildren(class)
+	if len(members) != 4 {
+		t.Errorf("Expected 4 class fields, got %d", len(members))
 	}
 
-	publicField := class.Children[0]
+	publicField := members[0]
 	if publicField.Type != ast.EntityField {
 		t.Errorf("Expected field, got %s", publicField.Type)
 	}
@@ -260,12 +693,12 @@ private:
 		t.Errorf("Expected public field, got %s", publicField.AccessLevel)
 	}
 
-	staticField := class.Children[1]
+	staticField := members[1]
 	if !staticField.IsStatic {
 		t.Errorf("Expected static field to have IsStatic=true")
 	}
 
-	constField := class.Children[3]
+	constField := members[3]
 	if !constField.IsConst {
 		t.Errorf("Expected const field to have IsConst=true")
 	}
@@ -369,6 +802,462 @@ namespace TestNamespace {
 	}
 }
 
+func TestMultiLineFunctionDeclarations(t *testing.T) {
+	content := `namespace test {
+    // Multi-line function declaration
+    inline void
+    multiline_function(int param1, int param2)
+    {
+        return;
+    }
+    
+    // Regular single-line function
+    void single_line_function(int param);
+    
+    // Template with multi-line
+    template<typename T>
+    T
+    template_multiline(const T& value)
+    {
+        return value;
+    }
+}`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Get the namespace
+	ns := tree.Root.Children[0]
+	if ns.Type != ast.EntityNamespace || ns.Name != "test" {
+		t.Errorf("Expected namespace test, got %s %s", ns.Type, ns.Name)
+	}
+
+	// Get functions (excluding comments)
+	var functions []*ast.Entity
+	for _, child := range ns.Children {
+		if child.Type == ast.EntityFunction {
+			functions = append(functions, child)
+		}
+	}
+
+	if len(functions) != 3 {
+		t.Errorf("Expected 3 functions, got %d", len(functions))
+		for i, child := range ns.Children {
+			t.Logf("Child %d: %s %s", i, child.Type, child.Name)
+		}
+	}
+
+	// Check multi-line function
+	multilineFunc := functions[0]
+	if multilineFunc.Name != "multiline_function" {
+		t.Errorf("Expected multiline_function, got %s", multilineFunc.Name)
+	}
+	// Signature should NOT contain the function body
+	if strings.Contains(multilineFunc.Signature, "return;") {
+		t.Errorf("Function signature should not contain body, got: %s", multilineFunc.Signature)
+	}
+	// Should have body text stored
+	if multilineFunc.OriginalText == "" {
+		t.Errorf("Expected function body to be stored in OriginalText")
+	}
+
+	// Check single-line function
+	singleFunc := functions[1]
+	if singleFunc.Name != "single_line_function" {
+		t.Errorf("Expected single_line_function, got %s", singleFunc.Name)
+	}
+	// Should end with semicolon and not have body
+	if !strings.HasSuffix(singleFunc.Signature, ";") {
+		t.Errorf("Declaration-only function should end with semicolon: %s", singleFunc.Signature)
+	}
+
+	// Check template multi-line function
+	templateFunc := functions[2]
+	if templateFunc.Name != "template_multiline" {
+		t.Errorf("Expected template_multiline, got %s", templateFunc.Name)
+	}
+	if !templateFunc.IsTemplate {
+		t.Errorf("Expected function to be marked as template")
+	}
+	// Should have template in signature but not body
+	if !strings.Contains(templateFunc.Signature, "template") {
+		t.Errorf("Template function signature should contain template: %s", templateFunc.Signature)
+	}
+	if strings.Contains(templateFunc.Signature, "return value;") {
+		t.Errorf("Template function signature should not contain body: %s", templateFunc.Signature)
+	}
+}
+
+func TestNestedNamespaceDeclarations(t *testing.T) {
+	content := `namespace outer::inner {
+    void nested_function();
+}
+
+namespace single {
+    namespace double {
+        namespace triple {
+            class NestedClass {};
+        }
+    }
+}
+
+namespace int::float::auto {
+    void keyword_function();
+}`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	if len(tree.Root.Children) != 3 {
+		t.Errorf("Expected 3 root namespaces, got %d", len(tree.Root.Children))
+	}
+
+	// Check first nested namespace (C++17 style)
+	outerInner := tree.Root.Children[0]
+	if outerInner.Type != ast.EntityNamespace || outerInner.Name != "outer::inner" {
+		t.Errorf("Expected namespace outer::inner, got %s %s", outerInner.Type, outerInner.Name)
+	}
+
+	// Check function inside nested namespace
+	if len(outerInner.Children) != 1 {
+		t.Errorf("Expected 1 child in outer::inner namespace, got %d", len(outerInner.Children))
+	}
+
+	nestedFunc := outerInner.Children[0]
+	if nestedFunc.Type != ast.EntityFunction || nestedFunc.Name != "nested_function" {
+		t.Errorf("Expected function nested_function, got %s %s", nestedFunc.Type, nestedFunc.Name)
+	}
+
+	// Check full name includes nested namespace
+	expectedFullName := "outer::inner::nested_function"
+	if nestedFunc.FullName != expectedFullName {
+		t.Errorf("Expected full name %s, got %s", expectedFullName, nestedFunc.FullName)
+	}
+
+	// Check second namespace structure (traditional nested style)
+	single := tree.Root.Children[1]
+	if single.Type != ast.EntityNamespace || single.Name != "single" {
+		t.Errorf("Expected namespace single, got %s %s", single.Type, single.Name)
+	}
+
+	// Check nested namespace inside single
+	if len(single.Children) != 1 {
+		t.Errorf("Expected 1 child in single namespace, got %d", len(single.Children))
+	}
+
+	double := single.Children[0]
+	if double.Type != ast.EntityNamespace || double.Name != "double" {
+		t.Errorf("Expected namespace double, got %s %s", double.Type, double.Name)
+	}
+
+	// Check triple namespace
+	if len(double.Children) != 1 {
+		t.Errorf("Expected 1 child in double namespace, got %d", len(double.Children))
+	}
+
+	triple := double.Children[0]
+	if triple.Type != ast.EntityNamespace || triple.Name != "triple" {
+		t.Errorf("Expected namespace triple, got %s %s", triple.Type, triple.Name)
+	}
+
+	// Check class inside triple
+	if len(triple.Children) != 1 {
+		t.Errorf("Expected 1 child in triple namespace, got %d", len(triple.Children))
+	}
+
+	nestedClass := triple.Children[0]
+	if nestedClass.Type != ast.EntityClass || nestedClass.Name != "NestedClass" {
+		t.Errorf("Expected class NestedClass, got %s %s", nestedClass.Type, nestedClass.Name)
+	}
+
+	// Check third namespace (C++17 with keywords)
+	keywordNamespace := tree.Root.Children[2]
+	if keywordNamespace.Type != ast.EntityNamespace || keywordNamespace.Name != "int::float::auto" {
+		t.Errorf("Expected namespace int::float::auto, got %s %s", keywordNamespace.Type, keywordNamespace.Name)
+	}
+
+	// Check function inside keyword namespace
+	if len(keywordNamespace.Children) != 1 {
+		t.Errorf("Expected 1 child in int::float::auto namespace, got %d", len(keywordNamespace.Children))
+	}
+
+	keywordFunc := keywordNamespace.Children[0]
+	if keywordFunc.Type != ast.EntityFunction || keywordFunc.Name != "keyword_function" {
+		t.Errorf("Expected function keyword_function, got %s %s", keywordFunc.Type, keywordFunc.Name)
+	}
+
+	// Check full name includes nested keyword namespace
+	expectedKeywordFullName := "int::float::auto::keyword_function"
+	if keywordFunc.FullName != expectedKeywordFullName {
+		t.Errorf("Expected full name %s, got %s", expectedKeywordFullName, keywordFunc.FullName)
+	}
+}
+
+func TestFunctionBodySeparation(t *testing.T) {
+	content := `class TestClass {
+public:
+    // Constructor with body
+    TestClass(int value) : member_(value) {
+        initialize();
+    }
+    
+    // Method with body
+    void method_with_body() {
+        int x = 42;
+        process(x);
+    }
+    
+    // Method declaration only
+    void method_declaration_only();
+    
+    // Inline method
+    inline int get_value() const {
+        return member_;
+    }
+    
+private:
+    int member_;
+};`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Get the class
+	class := tree.Root.Children[0]
+	if class.Type != ast.EntityClass || class.Name != "TestClass" {
+		t.Errorf("Expected class TestClass, got %s %s", class.Type, class.Name)
+	}
+
+	// Get non-access-specifier and non-comment children
+	members := []*ast.Entity{}
+	for _, child := range class.Children {
+		if child.Type != ast.EntityAccessSpecifier && child.Type != ast.EntityComment {
+			members = append(members, child)
+		}
+	}
+
+	// Should have: constructor, 3 methods, 1 field = 5 members
+	if len(members) != 5 {
+		t.Errorf("Expected 5 members, got %d", len(members))
+		for i, member := range members {
+			t.Logf("Member %d: %s %s", i, member.Type, member.Name)
+		}
+	}
+
+	// Check constructor
+	constructor := members[0]
+	if constructor.Type != ast.EntityConstructor {
+		t.Errorf("Expected constructor, got %s", constructor.Type)
+	}
+	// Constructor signature should not contain the body
+	if strings.Contains(constructor.Signature, "initialize()") {
+		t.Errorf("Constructor signature should not contain body: %s", constructor.Signature)
+	}
+	// Should have body stored
+	if constructor.OriginalText == "" {
+		t.Errorf("Constructor should have body stored in OriginalText")
+	}
+
+	// Check method with body
+	methodWithBody := members[1]
+	if methodWithBody.Name != "method_with_body" {
+		t.Errorf("Expected method_with_body, got %s", methodWithBody.Name)
+	}
+	// Signature should not contain body
+	if strings.Contains(methodWithBody.Signature, "int x = 42") {
+		t.Errorf("Method signature should not contain body: %s", methodWithBody.Signature)
+	}
+	// Should have body stored
+	if methodWithBody.OriginalText == "" {
+		t.Errorf("Method should have body stored in OriginalText")
+	}
+
+	// Check method declaration only
+	methodDecl := members[2]
+	if methodDecl.Name != "method_declaration_only" {
+		t.Errorf("Expected method_declaration_only, got %s", methodDecl.Name)
+	}
+	// Should end with semicolon
+	if !strings.HasSuffix(methodDecl.Signature, ";") {
+		t.Errorf("Declaration-only method should end with semicolon: %s", methodDecl.Signature)
+	}
+	// Should not have body
+	if methodDecl.OriginalText != "" {
+		t.Errorf("Declaration-only method should not have body: %s", methodDecl.OriginalText)
+	}
+
+	// Check inline method
+	inlineMethod := members[3]
+	if inlineMethod.Name != "get_value" {
+		t.Errorf("Expected get_value, got %s", inlineMethod.Name)
+	}
+	if !inlineMethod.IsInline {
+		t.Errorf("Expected method to be marked as inline")
+	}
+	// Signature should not contain body
+	if strings.Contains(inlineMethod.Signature, "return member_") {
+		t.Errorf("Inline method signature should not contain body: %s", inlineMethod.Signature)
+	}
+}
+
+func TestComplexInlineFunctions(t *testing.T) {
+	content := `namespace mgl::io {
+    // Multi-line inline function like in io.hpp
+    inline void
+    read_buffer(const istream_ref& file, uint8_buffer& buffer, size_t size, size_t offset = 0)
+    {
+        ASSERT(file->good() && !file->eof(), "read_buffer: file is not open");
+        ASSERT(size <= buffer.size(), "read_bytes: size is greater than buffer size");
+        file->read(reinterpret_cast<char*>(buffer.data() + offset), size);
+    }
+    
+    // Another inline function
+    inline bool is_valid(const path& p) {
+        return !p.empty();
+    }
+}`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Get the namespace
+	ns := tree.Root.Children[0]
+	if ns.Type != ast.EntityNamespace || ns.Name != "mgl::io" {
+		t.Errorf("Expected namespace mgl::io, got %s %s", ns.Type, ns.Name)
+	}
+
+	// Get functions
+	var functions []*ast.Entity
+	for _, child := range ns.Children {
+		if child.Type == ast.EntityFunction {
+			functions = append(functions, child)
+		}
+	}
+
+	if len(functions) != 2 {
+		t.Errorf("Expected 2 functions, got %d", len(functions))
+		for i, child := range ns.Children {
+			t.Logf("Child %d: %s %s", i, child.Type, child.Name)
+		}
+	}
+
+	// Check first function (the problematic one from io.hpp)
+	readBuffer := functions[0]
+	if readBuffer.Name != "read_buffer" {
+		t.Errorf("Expected read_buffer, got %s", readBuffer.Name)
+	}
+	if !readBuffer.IsInline {
+		t.Errorf("Expected function to be marked as inline")
+	}
+
+	// Signature should not contain function body
+	if strings.Contains(readBuffer.Signature, "ASSERT(") {
+		t.Errorf("Function signature should not contain body: %s", readBuffer.Signature)
+	}
+	if strings.Contains(readBuffer.Signature, "file->read(") {
+		t.Errorf("Function signature should not contain body: %s", readBuffer.Signature)
+	}
+
+	// Should have body stored
+	if readBuffer.OriginalText == "" {
+		t.Errorf("Function should have body stored in OriginalText")
+	}
+
+	// Body should contain the actual implementation
+	if !strings.Contains(readBuffer.OriginalText, "ASSERT(") {
+		t.Errorf("Function body should contain implementation: %s", readBuffer.OriginalText)
+	}
+
+	// Check second function
+	isValid := functions[1]
+	if isValid.Name != "is_valid" {
+		t.Errorf("Expected is_valid, got %s", isValid.Name)
+	}
+	if !isValid.IsInline {
+		t.Errorf("Expected function to be marked as inline")
+	}
+}
+
+// Test for the specific brace mismatch issue we fixed
+func TestBraceCountingValidation(t *testing.T) {
+	content := `namespace test {
+    void func1() {
+        int x = 1;
+    }
+    
+    inline void func2() {
+        if (true) {
+            return;
+        }
+    }
+    
+    class TestClass {
+    public:
+        void method() {
+            // nested braces
+            {
+                int y = 2;
+            }
+        }
+    };
+}`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Use the formatter to reconstruct the code
+	formatter := formatter.New()
+	reconstructed := formatter.ReconstructCode(tree)
+
+	// Count braces in the reconstructed code
+	openBraces := strings.Count(reconstructed, "{")
+	closeBraces := strings.Count(reconstructed, "}")
+
+	if openBraces != closeBraces {
+		t.Errorf("Brace mismatch in reconstructed code: %d opening braces, %d closing braces", openBraces, closeBraces)
+		t.Logf("Reconstructed code:\n%s", reconstructed)
+	}
+
+	// Verify that we have the expected entities
+	ns := tree.Root.Children[0]
+	if ns.Type != ast.EntityNamespace || ns.Name != "test" {
+		t.Errorf("Expected namespace test, got %s %s", ns.Type, ns.Name)
+	}
+
+	// Count different entity types
+	var functions, classes int
+	for _, child := range ns.Children {
+		switch child.Type {
+		case ast.EntityFunction:
+			functions++
+		case ast.EntityClass:
+			classes++
+		}
+	}
+
+	if functions != 2 {
+		t.Errorf("Expected 2 functions, got %d", functions)
+	}
+	if classes != 1 {
+		t.Errorf("Expected 1 class, got %d", classes)
+	}
+}
+
 func TestComplexNesting(t *testing.T) {
 	content := `namespace Outer {
     namespace Inner {
@@ -420,12 +1309,13 @@ func TestComplexNesting(t *testing.T) {
 	}
 
 	// Check nested class members
-	if len(nestedClass.Children) != 2 {
-		t.Errorf("Expected 2 members in NestedClass, got %d", len(nestedClass.Children))
+	members := getNonAccessSpecifierChildren(nestedClass)
+	if len(members) != 2 {
+		t.Errorf("Expected 2 members in NestedClass, got %d", len(members))
 	}
 
 	// Check full names
-	method := nestedClass.Children[0]
+	method := members[0]
 	expectedFullName := "Outer::Inner::NestedClass::method"
 	if method.FullName != expectedFullName {
 		t.Errorf("Expected full name %s, got %s", expectedFullName, method.FullName)
@@ -469,16 +1359,17 @@ private:
 
 	// Check complex struct with explicit access specifiers
 	complexStruct := tree.Root.Children[1]
-	if len(complexStruct.Children) != 2 {
-		t.Errorf("Expected 2 members in ComplexStruct, got %d", len(complexStruct.Children))
+	members := getNonAccessSpecifierChildren(complexStruct)
+	if len(members) != 2 {
+		t.Errorf("Expected 2 members in ComplexStruct, got %d", len(members))
 	}
 
-	method := complexStruct.Children[0]
+	method := members[0]
 	if method.AccessLevel != ast.AccessPublic {
 		t.Errorf("Expected public method, got %s", method.AccessLevel)
 	}
 
-	privateData := complexStruct.Children[1]
+	privateData := members[1]
 	if privateData.AccessLevel != ast.AccessPrivate {
 		t.Errorf("Expected private field, got %s", privateData.AccessLevel)
 	}
@@ -505,14 +1396,15 @@ func TestFullNameGeneration(t *testing.T) {
 	a := tree.Root.Children[0]
 	b := a.Children[0]
 	c := b.Children[0]
-	method := c.Children[0]
+	members := getNonAccessSpecifierChildren(c)
+	method := members[0]
 
 	expectedFullName := "A::B::C::method"
 	if method.FullName != expectedFullName {
 		t.Errorf("Expected full name %s, got %s", expectedFullName, method.FullName)
 	}
 
-	field := c.Children[1]
+	field := members[1]
 	expectedFieldFullName := "A::B::C::field"
 	if field.FullName != expectedFieldFullName {
 		t.Errorf("Expected full name %s, got %s", expectedFieldFullName, field.FullName)
@@ -559,32 +1451,6 @@ namespace Test {
 
 	if ns == nil {
 		t.Errorf("Expected to find namespace Test")
-	}
-}
-
-func TestRegexMatching(t *testing.T) {
-	testCases := []string{
-		"TestClass();",
-		"~TestClass();",
-		"void publicMethod() const;",
-		"static void staticMethod();",
-		"virtual void virtualMethod() override;",
-		"TCB_SPAN_CONSTEXPR11 span(pointer ptr, size_type count);",
-		"constexpr size_type size() const noexcept { return storage_.size; }",
-		"TCB_SPAN_NODISCARD constexpr bool empty() const noexcept { return size() == 0; }",
-		"TCB_SPAN_ARRAY_CONSTEXPR reverse_iterator rbegin() const noexcept;",
-	}
-
-	for _, testCase := range testCases {
-		fmt.Printf("Testing: %s\n", testCase)
-		isFunction := functionRegex.MatchString(testCase)
-		fmt.Printf("  isFunction: %t\n", isFunction)
-
-		if isFunction {
-			matches := functionRegex.FindStringSubmatch(testCase)
-			fmt.Printf("  Matches: %v\n", matches)
-		}
-		fmt.Println()
 	}
 }
 
@@ -753,88 +1619,6 @@ private:
 	}
 }
 
-func TestDefineRegexMatching(t *testing.T) {
-	testCases := []struct {
-		line     string
-		expected bool
-		name     string
-		value    string
-	}{
-		{
-			line:     "#define MAX_SIZE 100",
-			expected: true,
-			name:     "MAX_SIZE",
-			value:    "100",
-		},
-		{
-			line:     "  #  define  SPACED  42  ",
-			expected: true,
-			name:     "SPACED",
-			value:    "42",
-		},
-		{
-			line:     "#define FEATURE_ENABLED",
-			expected: true,
-			name:     "FEATURE_ENABLED",
-			value:    "",
-		},
-		{
-			line:     "#define MIN(a, b) ((a) < (b) ? (a) : (b))",
-			expected: true,
-			name:     "MIN",
-			value:    "(a, b) ((a) < (b) ? (a) : (b))",
-		},
-		{
-			line:     "// #define COMMENTED_OUT",
-			expected: false,
-		},
-		{
-			line:     "#include <iostream>",
-			expected: false,
-		},
-		{
-			line:     "void function();",
-			expected: false,
-		},
-		{
-			line:     "#undef SOMETHING",
-			expected: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.line, func(t *testing.T) {
-			parser := New()
-			isDefine := parser.isDefine(strings.TrimSpace(tc.line))
-
-			if isDefine != tc.expected {
-				t.Errorf("isDefine(%q) = %v, expected %v", tc.line, isDefine, tc.expected)
-			}
-
-			if tc.expected {
-				matches := defineRegex.FindStringSubmatch(strings.TrimSpace(tc.line))
-				if len(matches) < 2 {
-					t.Errorf("Expected regex to match %q but got no matches", tc.line)
-					return
-				}
-
-				actualName := matches[1]
-				if actualName != tc.name {
-					t.Errorf("Expected name %q, got %q", tc.name, actualName)
-				}
-
-				actualValue := ""
-				if len(matches) >= 3 {
-					actualValue = strings.TrimSpace(matches[2])
-				}
-				if actualValue != tc.value {
-					t.Errorf("Expected value %q, got %q", tc.value, actualValue)
-				}
-			}
-		})
-	}
-}
-
 func TestDefineAccessibility(t *testing.T) {
 	content := `#define GLOBAL_DEFINE 1
 
@@ -989,64 +1773,6 @@ void setMAX();`,
 	}
 }
 
-func TestDefineResolutionHelpers(t *testing.T) {
-	parser := New()
-	parser.defines = map[string]string{
-		"MAX_SIZE":  "100",
-		"API":       "__declspec(dllexport)",
-		"HANDLE":    "void*",
-		"MAX":       "42",
-		"MAX_LIMIT": "1000", // Should not interfere with MAX
-	}
-
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{
-			input:    "API void function();",
-			expected: "__declspec(dllexport) void function();",
-		},
-		{
-			input:    "HANDLE getValue();",
-			expected: "void* getValue();",
-		},
-		{
-			input:    "int size = MAX_SIZE;",
-			expected: "int size = 100;",
-		},
-		{
-			input:    "int max = MAX;",
-			expected: "int max = 42;",
-		},
-		{
-			input:    "int limit = MAX_LIMIT;",
-			expected: "int limit = 1000;",
-		},
-		{
-			input:    "int MAXIMUM = 999;", // Should not replace MAX in MAXIMUM
-			expected: "int MAXIMUM = 999;",
-		},
-		{
-			input:    "void setMAX_SIZE();", // Should not replace MAX_SIZE in setMAX_SIZE
-			expected: "void setMAX_SIZE();",
-		},
-		{
-			input:    "API HANDLE createHandle();",
-			expected: "__declspec(dllexport) void* createHandle();",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := parser.resolveDefines(tt.input)
-			if result != tt.expected {
-				t.Errorf("resolveDefines(%q) = %q, expected %q", tt.input, result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestConditionalCompilationIgnored(t *testing.T) {
 	content := `#define FEATURE_ENABLED 1
 
@@ -1167,4 +1893,146 @@ func collectAllEntities(entity *ast.Entity) []*ast.Entity {
 		entities = append(entities, collectAllEntities(child)...)
 	}
 	return entities
+}
+
+func TestTemplateEntityCreation(t *testing.T) {
+	content := `template <typename T>
+class TemplatedClass;
+
+template <typename T>
+void templateFunction(T value);
+
+template <typename K, typename V>
+using TemplateMap = std::map<K, V>;`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Verify that templates are attached to their entities
+	for _, entity := range tree.Root.Children {
+		if !strings.Contains(entity.Signature, "template") {
+			t.Errorf("Entity %s (%s) missing template in signature: %s", entity.Name, entity.Type, entity.Signature)
+		}
+	}
+
+	// Test specific template constructs
+	if len(tree.Root.Children) != 3 {
+		t.Errorf("Expected 3 templated entities, got %d", len(tree.Root.Children))
+	}
+}
+
+func TestPreprocessorDirectivePreservation(t *testing.T) {
+	content := `#pragma once
+#include <vector>
+#define VERSION "1.0"
+
+class MyClass {
+public:
+    void method();
+};`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Count different entity types
+	counts := make(map[ast.EntityType]int)
+	for _, entity := range tree.Root.Children {
+		counts[entity.Type]++
+	}
+
+	// Should have preprocessor entities
+	if counts[ast.EntityPreprocessor] == 0 {
+		t.Error("Expected preprocessor directives to be preserved as entities")
+	}
+
+	// Should still have class
+	if counts[ast.EntityClass] != 1 {
+		t.Errorf("Expected 1 class entity, got %d", counts[ast.EntityClass])
+	}
+}
+
+func TestComplexTemplateScenarios(t *testing.T) {
+	content := `// Variadic template
+template <typename... Args>
+void variadic_function(Args... args);
+
+// Template specialization declaration
+template <>
+void specialized_function<int>(int value);
+
+// Template with non-type parameters
+template <int N, typename T = double>
+struct FixedArray {
+    T data[N];
+};
+
+// Nested template in namespace
+namespace Utils {
+    template <typename T>
+    class Container {
+    public:
+        template <typename U>
+        void add(const U& item);
+    };
+}`
+
+	parser := New()
+	tree, err := parser.Parse("test.hpp", content)
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	// Should parse variadic templates, specializations, and nested templates
+	variadicFound := false
+	specializationFound := false
+	fixedArrayFound := false
+	namespaceFound := false
+
+	for _, entity := range tree.Root.Children {
+		switch entity.Name {
+		case "variadic_function":
+			variadicFound = true
+			if !strings.Contains(entity.Signature, "Args...") {
+				t.Error("Variadic template function signature missing parameter pack")
+			}
+		case "specialized_function":
+			specializationFound = true
+		case "FixedArray":
+			fixedArrayFound = true
+			if !strings.Contains(entity.Signature, "int N") {
+				t.Error("Non-type template parameter missing from signature")
+			}
+		case "Utils":
+			namespaceFound = true
+			// Check nested template class
+			if len(entity.Children) > 0 {
+				containerClass := entity.Children[0]
+				if containerClass.Name == "Container" && len(containerClass.Children) > 0 {
+					templateMethod := containerClass.Children[0]
+					if templateMethod.Name == "add" && !strings.Contains(templateMethod.Signature, "template") {
+						t.Error("Nested template method missing template declaration")
+					}
+				}
+			}
+		}
+	}
+
+	if !variadicFound {
+		t.Error("Variadic template function not found")
+	}
+	if !specializationFound {
+		t.Error("Template specialization not found")
+	}
+	if !fixedArrayFound {
+		t.Error("Template with non-type parameters not found")
+	}
+	if !namespaceFound {
+		t.Error("Namespace with nested templates not found")
+	}
 }

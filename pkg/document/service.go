@@ -9,6 +9,7 @@ import (
 
 	"doxyllm-it/pkg/ast"
 	"doxyllm-it/pkg/llm"
+	"doxyllm-it/pkg/parser"
 )
 
 // LLMService defines the interface for LLM-based documentation generation
@@ -46,7 +47,7 @@ type GroupConfig struct {
 	Title            string   `yaml:"title"`            // Group title/brief description
 	Description      string   `yaml:"description"`      // Detailed group description
 	Files            []string `yaml:"files"`            // Files that belong to this group
-	GenerateDefgroup bool     `yaml:"generateDefgroup"` // Whether to generate @defgroup in header files
+	GenerateDefGroup bool     `yaml:"generateDefGroup"` // Whether to generate @defgroup in header files
 }
 
 // ProcessingResult contains the result of document processing
@@ -148,7 +149,7 @@ func (s *DocumentationService) ProcessEntitiesNeedingGroupUpdate(ctx context.Con
 
 // AddDefgroupToDocument adds a @defgroup comment to the beginning of a document
 func (s *DocumentationService) AddDefgroupToDocument(doc *Document, group *GroupConfig) error {
-	if group == nil || !group.GenerateDefgroup {
+	if group == nil || !group.GenerateDefGroup {
 		return nil
 	}
 
@@ -159,13 +160,10 @@ func (s *DocumentationService) AddDefgroupToDocument(doc *Document, group *Group
 	}
 
 	// Generate @defgroup comment
-	_ = s.generateDefgroupComment(group)
+	defgroupComment := s.generateDefgroupComment(group)
 
-	// TODO: Implement insertion of defgroup at file beginning
-	// This would require extending the Document interface to support
-	// inserting content at arbitrary positions
-
-	return fmt.Errorf("defgroup insertion not yet implemented in document abstraction")
+	// Inject the defgroup comment at the beginning of the file
+	return doc.PrependFileComment(defgroupComment)
 }
 
 // generateEntityDocumentation generates documentation for a single entity
@@ -184,7 +182,7 @@ func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, 
 		EntityName:        entity.GetFullPath(),
 		EntityType:        entityType,
 		Context:           context,
-		AdditionalContext: "", // TODO: Add support for .doxyllm context
+		AdditionalContext: "", // TODO: Add support for .doxyllm.yaml context
 	}
 
 	// Generate documentation using LLM
@@ -193,8 +191,12 @@ func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, 
 		return fmt.Errorf("LLM generation failed: %w", err)
 	}
 
-	// Parse the generated comment into structured format
-	comment := s.parseGeneratedComment(result.Comment)
+	// Parse the generated structured comment using the Doxygen parser
+	// The result.Comment is already a structured Doxygen comment with proper @tparam tags
+	comment := parser.ParseDoxygenComment(result.Comment)
+	if comment == nil {
+		return fmt.Errorf("failed to parse generated comment")
+	}
 
 	// Add group information if specified
 	if group != nil {
@@ -286,6 +288,7 @@ func (s *DocumentationService) parseGeneratedComment(commentText string) *ast.Do
 	comment := &ast.DoxygenComment{
 		Raw:        commentText,
 		Params:     make(map[string]string),
+		TParams:    make(map[string]string),
 		CustomTags: make(map[string]string),
 		Ingroup:    make([]string, 0),
 	}

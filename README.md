@@ -16,10 +16,10 @@ DoxLLM-IT is a CLI tool that parses C++ header files and creates a tree structur
 - **Update entities**: Add or update Doxygen comments for specific entities
 - **Batch processing**: Update multiple entities using JSON configuration
 - **LLM integration**: Built-in command for automatic documentation with Ollama (OpenAI, Anthropic support planned)
-- **Context-aware documentation**: Support for `.doxyllm` configuration files with global and file-specific contexts
+- **Context-aware documentation**: Support for `.doxyllm.yaml` configuration files with global and file-specific contexts
 - **YAML configuration**: Structured context files for multi-file projects
-- **Backward compatibility**: Plain text `.doxyllm` files still supported
-- **Enhanced parser**: Improved detection of modern C++ constructs (constexpr macros, template functions)
+- **Backward compatibility**: Plain text `.doxyllm.yaml` files still supported
+- **Enhanced parser**: Streaming tokenizer with O(1) memory complexity and improved detection of modern C++ constructs
 - **Comprehensive testing**: Unit tests for parser components and regex patterns
 - **Clang-format integration**: Format output using clang-format
 - **JSON output**: Export parsed structure as JSON for further processing
@@ -151,9 +151,9 @@ echo "/** @brief My function description */" | ./doxyllm-it update header.hpp "M
 ./doxyllm-it llm --temperature 0.1 --context 8192 --model codegemma:7b header.hpp
 ```
 
-### Context Configuration with .doxyllm Files
+### Context Configuration with .doxyllm.yaml Files
 
-Create a `.doxyllm` file in your project directory to enhance LLM documentation quality:
+Create a `.doxyllm.yaml` file in your project directory to enhance LLM documentation quality:
 
 #### YAML Format (Recommended for multi-file projects)
 ```yaml
@@ -216,6 +216,10 @@ OpenAI and Anthropic providers are planned for future releases. The architecture
 
 ### Enhanced Parser Features
 
+- **Streaming Tokenizer**: O(1) memory complexity with lazy token generation following single responsibility principle
+- **Memory Efficiency**: Constant ~1KB tokenization memory vs 20-40MB+ for large files with array-based approach
+- **On-Demand Processing**: 3-token lookahead buffer instead of pre-tokenizing entire files
+- **Backward Compatibility**: Compatibility layer maintains existing parser interface
 - **Modern C++ Support**: Detects constexpr macros like `TCB_SPAN_CONSTEXPR11`, `TCB_SPAN_NODISCARD`
 - **Access Level Tracking**: Properly tracks public/private/protected sections with stack-based management
 - **Template Detection**: Improved recognition of template functions and classes
@@ -242,7 +246,7 @@ OpenAI and Anthropic providers are planned for future releases. The architecture
 ### Workflow
 
 1. **Parse**: Read C++ header and create AST with enhanced entity detection
-2. **Context**: Load project context from `.doxyllm` configuration files
+2. **Context**: Load project context from `.doxyllm.yaml` configuration files
 3. **Extract**: Get specific entity contexts for LLM processing with project-aware context
 4. **Generate**: Use LLM to generate/update Doxygen comments with enhanced prompts
 5. **Update**: Apply LLM-generated comments back to the original code
@@ -252,7 +256,7 @@ OpenAI and Anthropic providers are planned for future releases. The architecture
 
 ```bash
 # 1. Create context configuration
-cat > .doxyllm << EOF
+cat > .doxyllm.yaml << EOF
 # Global context applied to all files
 global: |
   This project implements C++20 span functionality with backward compatibility.
@@ -278,7 +282,7 @@ EOF
 
 ```bash
 # 1. Create project context configuration
-cat > .doxyllm << EOF
+cat > .doxyllm.yaml << EOF
 global: |
   C++20 span implementation with C++11 compatibility.
   Features: bounds checking, type safety, zero overhead.

@@ -38,6 +38,41 @@ Type: %s
 
 Generate focused descriptive content for this entity (description only, no tags).`
 
+const fieldPromptTemplate = `You are a C++ documentation expert. Generate a very concise description for a struct/class field.
+
+CRITICAL REQUIREMENTS:
+- Generate ONLY a brief description (ONE sentence, under 60 characters)
+- Do NOT include Doxygen tags, comment markers, or < symbols
+- Start with "The" (e.g., "The x-coordinate of the point")
+- Be specific and concise
+- Examples of good responses:
+  * "The width of the rectangle"
+  * "The player's health points"  
+  * "The file handle for reading"
+
+%s
+
+Context:
+` + "```cpp\n%s\n```" + `
+
+TARGET FIELD: %s
+
+Generate ONE concise sentence (under 60 characters, no < symbols).`
+
+// getPromptTemplate returns the appropriate prompt template based on entity type
+func (p *OllamaProvider) getPromptTemplate(entityType string) string {
+	switch entityType {
+	case "field", "member":
+		return fieldPromptTemplate
+	default:
+		// Use custom template if provided, otherwise default
+		if p.config.PromptTemplate != "" {
+			return p.config.PromptTemplate
+		}
+		return defaultOllamaPromptTemplate
+	}
+}
+
 // NewOllamaProvider creates a new Ollama provider instance
 func NewOllamaProvider(config *Config) *OllamaProvider {
 	return &OllamaProvider{
@@ -70,21 +105,30 @@ func (p *OllamaProvider) GenerateComment(ctx context.Context, request CommentReq
 		contextSection = fmt.Sprintf("ADDITIONAL PROJECT CONTEXT:\n%s\n", request.AdditionalContext)
 	}
 
-	// Determine which prompt template to use
-	promptTemplate := defaultOllamaPromptTemplate
-	if p.config.PromptTemplate != "" {
-		promptTemplate = p.config.PromptTemplate
-	}
+	// Get the appropriate prompt template based on entity type
+	promptTemplate := p.getPromptTemplate(request.EntityType)
 
-	// Create the prompt
-	prompt := fmt.Sprintf(
-		promptTemplate,
-		request.EntityName,
-		contextSection,
-		request.Context,
-		request.EntityName,
-		request.EntityType,
-	)
+	// Create the prompt based on entity type
+	var prompt string
+	if request.EntityType == "field" || request.EntityType == "member" {
+		// Use simplified prompt for fields
+		prompt = fmt.Sprintf(
+			promptTemplate,
+			contextSection,
+			request.Context,
+			request.EntityName,
+		)
+	} else {
+		// Use full prompt for other entities
+		prompt = fmt.Sprintf(
+			promptTemplate,
+			request.EntityName,
+			contextSection,
+			request.Context,
+			request.EntityName,
+			request.EntityType,
+		)
+	}
 
 	// Prepare request options
 	options := make(map[string]interface{})
@@ -227,6 +271,12 @@ func (p *OllamaProvider) cleanResponse(response string) string {
 	description = strings.TrimPrefix(description, "```")
 	description = strings.TrimSuffix(description, "```")
 
+	// Handle case where LLM returned a complete Doxygen comment despite instructions
+	if strings.Contains(description, "/**") || strings.Contains(description, "@brief") || strings.Contains(description, "@param") || strings.Contains(description, "@tparam") {
+		// Extract just the description content from the complete comment
+		description = p.extractDescriptionFromDoxygenComment(description)
+	}
+
 	// Remove common unwanted prefixes from some models
 	unwantedPrefixes := []string{
 		"This is a C++ documentation expert.",
@@ -242,4 +292,47 @@ func (p *OllamaProvider) cleanResponse(response string) string {
 	}
 
 	return strings.TrimSpace(description)
+}
+
+// extractDescriptionFromDoxygenComment extracts plain description text from a complete Doxygen comment
+func (p *OllamaProvider) extractDescriptionFromDoxygenComment(comment string) string {
+	// Remove comment markers
+	comment = strings.ReplaceAll(comment, "/**", "")
+	comment = strings.ReplaceAll(comment, "*/", "")
+
+	lines := strings.Split(comment, "\n")
+	var descriptionLines []string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		line = strings.TrimPrefix(line, "*")
+		line = strings.TrimSpace(line)
+
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+
+		// Extract content from @brief tag
+		if strings.HasPrefix(line, "@brief ") {
+			briefContent := strings.TrimPrefix(line, "@brief ")
+			briefContent = strings.Trim(briefContent, `"`) // Remove quotes if present
+			if briefContent != "" {
+				descriptionLines = append(descriptionLines, briefContent)
+			}
+			continue
+		}
+
+		// Skip Doxygen tags (@param, @tparam, @return, etc.)
+		if strings.HasPrefix(line, "@") {
+			continue
+		}
+
+		// Include regular description lines
+		if line != "" {
+			descriptionLines = append(descriptionLines, line)
+		}
+	}
+
+	return strings.Join(descriptionLines, " ")
 }
