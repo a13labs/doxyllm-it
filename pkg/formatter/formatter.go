@@ -514,6 +514,11 @@ func (f *Formatter) GetEntitySummary(entity *ast.Entity) string {
 func (f *Formatter) buildCompleteSignature(entity *ast.Entity) string {
 	var parts []string
 
+	// Add extern modifier if present
+	if entity.IsExtern {
+		parts = append(parts, "extern")
+	}
+
 	// Add static modifier if present
 	if entity.IsStatic {
 		parts = append(parts, "static")
@@ -532,6 +537,9 @@ func (f *Formatter) buildCompleteSignature(entity *ast.Entity) string {
 	// Add constexpr modifier if present (for fields/variables)
 	if entity.IsConstexpr {
 		parts = append(parts, "constexpr")
+	} else if entity.IsConst && (entity.Type == ast.EntityVariable || entity.Type == ast.EntityField) {
+		// Add const modifier for variables/fields (but not for constexpr which already implies const)
+		parts = append(parts, "const")
 	}
 
 	// Add the base signature

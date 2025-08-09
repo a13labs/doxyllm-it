@@ -142,6 +142,7 @@ type Entity struct {
 	IsStatic             bool            // Whether entity is static
 	IsConst              bool            // Whether entity is const
 	IsConstexpr          bool            // Whether entity is constexpr
+	IsExtern             bool            // Whether entity is extern
 	IsVirtual            bool            // Whether method is virtual
 	IsPure               bool            // Whether method is pure virtual
 	IsInline             bool            // Whether function is inline
