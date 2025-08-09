@@ -157,6 +157,16 @@ loop:
 			identifiersSeen++
 			p.tokenCache.advance()
 			p.tokenCache.skipWhitespaceAndNewlines() // Handle newlines between return type and function name
+		case TokenOperator:
+			// Handle operator overloads
+			identifiersSeen++
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespaceAndNewlines()
+			// Also skip the operator symbol
+			if !p.tokenCache.isAtEnd() && !p.isValidIdentifierToken(p.tokenCache.peek()) {
+				p.tokenCache.advance() // consume operator symbol (+, -, etc.)
+				p.tokenCache.skipWhitespaceAndNewlines()
+			}
 		case TokenLeftParen:
 			// Found opening parenthesis, this looks like a function
 			return identifiersSeen >= 1
@@ -231,11 +241,22 @@ func (p *Parser) parseFunctionSignature() (signature string, name string, isMeth
 			tokenValue = p.resolveDefine(token.Value)
 		}
 
-		sig.WriteString(tokenValue)
-
 		// Track the function name (last identifier before '(')
 		if token.Type == TokenIdentifier && beforeParen {
 			funcName = token.Value
+			sig.WriteString(tokenValue) // add to signature
+		} else if token.Type == TokenOperator && beforeParen {
+			// Handle operator overloads - we need to look ahead for the operator symbol
+			funcName = "operator"
+			sig.WriteString("operator") // add operator keyword to signature
+			p.tokenCache.advance() // consume 'operator'
+			if !p.tokenCache.isAtEnd() {
+				operatorToken := p.tokenCache.peek()
+				funcName += operatorToken.Value
+				sig.WriteString(operatorToken.Value) // add symbol to signature
+				p.tokenCache.advance() // consume operator symbol
+				continue // skip the normal advance at the end of loop
+			}
 		} else if token.Type == TokenTilde && beforeParen {
 			// Handle destructor names
 			isDestructor = true
@@ -243,6 +264,9 @@ func (p *Parser) parseFunctionSignature() (signature string, name string, isMeth
 			if nextToken.Type == TokenIdentifier {
 				funcName = nextToken.Value // Just the class name, not including ~
 			}
+			sig.WriteString(tokenValue) // add to signature
+		} else {
+			sig.WriteString(tokenValue) // add to signature for other cases
 		}
 
 		p.tokenCache.advance()
