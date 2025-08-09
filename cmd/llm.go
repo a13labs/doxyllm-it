@@ -265,7 +265,9 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 		if err != nil {
 			fmt.Printf("  ⚠️  Failed to update groups: %v\n", err)
 		} else {
+			// Merge counts so progress output remains intuitive
 			result.EntitiesUpdated += groupResult.EntitiesUpdated
+			result.EntitiesProcessed += groupResult.EntitiesProcessed
 			result.UpdatedEntities = append(result.UpdatedEntities, groupResult.UpdatedEntities...)
 		}
 	}

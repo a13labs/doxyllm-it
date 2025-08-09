@@ -122,19 +122,21 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 		}
 
 	case ast.EntityClass, ast.EntityStruct, ast.EntityEnum:
-		// These entities have bodies with children
-		if len(entity.Children) > 0 {
-			// Check if signature already contains opening brace
-			if !strings.HasSuffix(strings.TrimSpace(entity.Signature), "{") {
+		// Always emit body braces if the signature represents a definition (ends with '{')
+		trimmedSig := strings.TrimSpace(entity.Signature)
+		if strings.HasSuffix(trimmedSig, "{") || len(entity.Children) > 0 {
+			// If signature does not already include opening brace, add it inline
+			if !strings.HasSuffix(trimmedSig, "{") {
 				result.WriteString(" {")
 			}
 			result.WriteString("\n")
 
-			// Add children
+			// Emit children (if any)
 			for _, child := range entity.Children {
 				result.WriteString(f.reconstructEntity(child, depth+1))
 			}
 
+			// Closing brace
 			result.WriteString(indent + "}")
 		}
 

@@ -44,8 +44,26 @@ func (p *Parser) parseClassOrStruct(entityType ast.EntityType) error {
 	if inheritance != "" {
 		signature += " : " + inheritance
 	}
+	
+	// Allow newline and comments before opening brace
+	p.tokenCache.skipWhitespaceAndNewlines()
+	for {
+		if p.tokenCache.isAtEnd() { break }
+		tok := p.tokenCache.peek()
+		if tok.Type == TokenLineComment || tok.Type == TokenBlockComment || tok.Type == TokenDoxygenComment {
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespaceAndNewlines()
+			continue
+		}
+		break
+	}
+	// Check for opening brace (definition) or semicolon (forward declaration)
 	if p.tokenCache.match(TokenLeftBrace) {
 		signature += " {"
+	} else if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenSemicolon {
+		// This is a forward declaration - consume the semicolon but don't add it to signature
+		// The formatter will handle adding the semicolon during reconstruction
+		p.tokenCache.advance()
 	}
 
 	entity := &ast.Entity{
@@ -130,6 +148,18 @@ func (p *Parser) parseClassOrStructWithMacro(entityType ast.EntityType) error {
 	signature := fmt.Sprintf("%s %s %s", macroValue, keyword.Value, nameToken.Value)
 	if inheritance != "" {
 		signature += " : " + inheritance
+	}
+	// Allow newline and comments before opening brace
+	p.tokenCache.skipWhitespaceAndNewlines()
+	for {
+		if p.tokenCache.isAtEnd() { break }
+		tok := p.tokenCache.peek()
+		if tok.Type == TokenLineComment || tok.Type == TokenBlockComment || tok.Type == TokenDoxygenComment {
+			p.tokenCache.advance()
+			p.tokenCache.skipWhitespaceAndNewlines()
+			continue
+		}
+		break
 	}
 	if p.tokenCache.match(TokenLeftBrace) {
 		signature += " {"

@@ -14,14 +14,27 @@ func (p *Parser) parseTypedef() error {
 
 	// Parse until we find the identifier and semicolon
 	var signature strings.Builder
-	signature.WriteString("typedef ")
+	signature.WriteString("typedef")
 
 	var name string
 	lastIdentifier := ""
+	previousWasSpace := false
 
 	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenSemicolon {
 		token := p.tokenCache.peek()
-		signature.WriteString(token.Value)
+		
+		if token.Type == TokenWhitespace {
+			if !previousWasSpace {
+				signature.WriteString(" ")
+				previousWasSpace = true
+			}
+		} else {
+			if !previousWasSpace && signature.Len() > 0 {
+				signature.WriteString(" ")
+			}
+			signature.WriteString(token.Value)
+			previousWasSpace = false
+		}
 
 		if token.Type == TokenIdentifier {
 			lastIdentifier = token.Value
