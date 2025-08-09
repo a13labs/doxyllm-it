@@ -47,7 +47,7 @@ type GroupConfig struct {
 	Title            string   `yaml:"title"`            // Group title/brief description
 	Description      string   `yaml:"description"`      // Detailed group description
 	Files            []string `yaml:"files"`            // Files that belong to this group
-	GenerateDefgroup bool     `yaml:"generateDefGroup"` // Whether to generate @defgroup in header files
+	GenerateDefGroup bool     `yaml:"generateDefGroup"` // Whether to generate @defgroup in header files
 }
 
 // ProcessingResult contains the result of document processing
@@ -149,7 +149,7 @@ func (s *DocumentationService) ProcessEntitiesNeedingGroupUpdate(ctx context.Con
 
 // AddDefgroupToDocument adds a @defgroup comment to the beginning of a document
 func (s *DocumentationService) AddDefgroupToDocument(doc *Document, group *GroupConfig) error {
-	if group == nil || !group.GenerateDefgroup {
+	if group == nil || !group.GenerateDefGroup {
 		return nil
 	}
 

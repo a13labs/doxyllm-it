@@ -234,7 +234,7 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 	}
 
 	// Add @defgroup if needed
-	if group != nil && group.GenerateDefgroup {
+	if group != nil && group.GenerateDefGroup {
 		err := docService.AddDefgroupToDocument(doc, group)
 		if err != nil {
 			fmt.Printf("  ⚠️  Failed to add defgroup: %v\n", err)
