@@ -94,11 +94,20 @@ func (p *Parser) parseDefine(start int) error {
 	p.defines[defineName] = defineValue
 
 	// Create preprocessor entity
+	var signature string
+	if strings.HasPrefix(defineValue, "(") {
+		// Function-like macro: no space between name and parameters
+		signature = fmt.Sprintf("#define %s%s", defineName, defineValue)
+	} else {
+		// Object-like macro: add space between name and value
+		signature = fmt.Sprintf("#define %s %s", defineName, defineValue)
+	}
+
 	entity := &ast.Entity{
 		Type:        ast.EntityPreprocessor,
 		Name:        defineName,
 		FullName:    defineName,
-		Signature:   fmt.Sprintf("#define %s %s", defineName, defineValue),
+		Signature:   signature,
 		AccessLevel: p.getCurrentAccessLevel(),
 		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 	}

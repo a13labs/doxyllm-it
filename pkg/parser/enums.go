@@ -27,7 +27,7 @@ func (p *Parser) parseEnum() error {
 
 	nameToken := p.tokenCache.advance()
 
-	p.tokenCache.skipWhitespace()
+	p.tokenCache.skipWhitespaceAndNewlines()
 
 	// Parse underlying type if present
 	underlyingType := ""
@@ -35,7 +35,7 @@ func (p *Parser) parseEnum() error {
 		underlyingType = p.parseType()
 	}
 
-	p.tokenCache.skipWhitespace()
+	p.tokenCache.skipWhitespaceAndNewlines()
 
 	// Build signature and handle body
 	signature := "enum"

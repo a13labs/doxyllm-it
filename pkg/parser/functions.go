@@ -148,6 +148,7 @@ func (p *Parser) isFunction() bool {
 	// Look for pattern: [return_type] function_name(
 	identifiersSeen := 0
 
+loop:
 	for !p.tokenCache.isAtEnd() && identifiersSeen < 6 { // increased limit to handle more complex types
 		token := p.tokenCache.peek()
 
@@ -185,7 +186,7 @@ func (p *Parser) isFunction() bool {
 			p.tokenCache.advance()
 			p.tokenCache.skipWhitespaceAndNewlines()
 		default:
-			break
+			break loop
 		}
 	}
 
