@@ -94,8 +94,8 @@ func TestScopeTree(t *testing.T) {
 		t.Errorf("Root should not be nil")
 	}
 
-	if tree.Root.Type != EntityUnknown {
-		t.Errorf("Root type should be EntityUnknown, got %v", tree.Root.Type)
+	if tree.Root.Type != EntityRoot {
+		t.Errorf("Root type should be EntityRoot, got %v", tree.Root.Type)
 	}
 
 	// Test finding root entity

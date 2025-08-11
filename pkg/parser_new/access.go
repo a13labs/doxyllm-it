@@ -43,9 +43,53 @@ func (p *Parser) parseAccessSpecifier() error {
 	return nil
 }
 
-// parseCloseBrace handles closing braces
+// parseOpenBrace handles opening braces - creates scope entity and enters it
+func (p *Parser) parseOpenBrace() error {
+	start := p.tokenCache.getCurrentPosition()
+	p.tokenCache.advance() // consume '{'
+
+	// Create explicit scope open entity
+	openBrace := &ast.Entity{
+		Type:        ast.EntityScopeOpen,
+		Name:        "{",
+		Signature:   "{",
+		AccessLevel: p.getCurrentAccessLevel(),
+		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
+		Children:    make([]*ast.Entity, 0),
+	}
+
+	// Add to current scope
+	currentScope := p.getCurrentScope()
+	if currentScope != nil {
+		currentScope.AddChild(openBrace)
+	}
+
+	// Enter the new scope - the opening brace entity becomes the new scope
+	p.enterScope(openBrace)
+
+	return nil
+}
+
+// parseCloseBrace handles closing braces - creates scope close entity and exits scope
 func (p *Parser) parseCloseBrace() error {
+	start := p.tokenCache.getCurrentPosition()
 	p.tokenCache.advance() // consume '}'
+
+	// Create explicit scope close entity
+	closeBrace := &ast.Entity{
+		Type:        ast.EntityScopeClose,
+		Name:        "}",
+		Signature:   "}",
+		AccessLevel: p.getCurrentAccessLevel(),
+		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
+		Children:    make([]*ast.Entity, 0),
+	}
+
+	// Add to current scope before exiting
+	currentScope := p.getCurrentScope()
+	if currentScope != nil {
+		currentScope.AddChild(closeBrace)
+	}
 
 	// Check for optional semicolon after brace (for class/struct)
 	if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenSemicolon {

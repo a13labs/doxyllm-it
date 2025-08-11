@@ -45,33 +45,14 @@ func (p *Parser) parseNamespace() error {
 	// Build signature
 	signature := fmt.Sprintf("namespace %s", namespaceName)
 
-	// Look for opening brace, which might be on the same line or next line
-	if p.tokenCache.match(TokenLeftBrace) {
-		signature += " {"
-	} else {
-		// The brace might be on the next line, so we need to look ahead
-		// Save current position to check for brace
-		checkpoint := p.tokenCache.getCurrentPosition()
-
-		// Skip any whitespace/newlines to find the brace
-		for !p.tokenCache.isAtEnd() && (p.tokenCache.peek().Type == TokenWhitespace || p.tokenCache.peek().Type == TokenNewline) {
-			p.tokenCache.advance()
-		}
-
-		if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenLeftBrace {
-			p.tokenCache.advance() // consume the brace
-			signature += " {"
-		} else {
-			// No brace found, restore position
-			p.tokenCache.setPosition(checkpoint)
-		}
-	}
+	// Note: Opening braces are now handled by the main parser dispatch
+	// We don't look for braces here anymore
 
 	entity := &ast.Entity{
 		Type:        ast.EntityNamespace,
 		Name:        namespaceName,
 		FullName:    p.buildFullName(namespaceName),
-		Signature:   signature,
+		Signature:   signature, // Clean signature without braces
 		AccessLevel: p.getCurrentAccessLevel(),
 		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 		Children:    make([]*ast.Entity, 0),
@@ -79,10 +60,8 @@ func (p *Parser) parseNamespace() error {
 
 	p.addEntity(entity)
 
-	// Enter scope if we found opening brace
-	if strings.Contains(signature, "{") {
-		p.enterScope(entity)
-	}
+	// The opening brace (if present) will be handled by the main parser
+	// and will create its own scope
 
 	return nil
 }

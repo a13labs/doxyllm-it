@@ -23,28 +23,36 @@ type Range struct {
 type EntityType int
 
 const (
-	EntityUnknown EntityType = iota
+	EntityRoot EntityType = iota
 	EntityNamespace
 	EntityClass
 	EntityStruct
-	EntityEnum
 	EntityFunction
 	EntityMethod
 	EntityConstructor
 	EntityDestructor
 	EntityVariable
 	EntityField
+	EntityEnum
+	EntityEnumValue
 	EntityTypedef
 	EntityUsing
+	EntityDefine
 	EntityMacro
+	EntityAccessSpecifier
 	EntityTemplate
+	EntityUnion
 	EntityPreprocessor
 	EntityComment
-	EntityAccessSpecifier
+	EntityScopeOpen
+	EntityScopeClose
+	EntityUnknown
 )
 
 func (et EntityType) String() string {
 	switch et {
+	case EntityRoot:
+		return "root"
 	case EntityNamespace:
 		return "namespace"
 	case EntityClass:
@@ -79,6 +87,12 @@ func (et EntityType) String() string {
 		return "comment"
 	case EntityAccessSpecifier:
 		return "access"
+	case EntityScopeOpen:
+		return "scope-open"
+	case EntityScopeClose:
+		return "scope-close"
+	case EntityUnknown:
+		return "unknown"
 	default:
 		return "unknown"
 	}
@@ -252,7 +266,7 @@ type ScopeTree struct {
 // NewScopeTree creates a new scope tree
 func NewScopeTree(filename, content string) *ScopeTree {
 	root := &Entity{
-		Type:         EntityUnknown,
+		Type:         EntityRoot,
 		Name:         "",
 		FullName:     "",
 		Children:     make([]*Entity, 0),

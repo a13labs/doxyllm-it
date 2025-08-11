@@ -4,6 +4,7 @@ package parser_new
 import (
 	ast "doxyllm-it/pkg/ast_new"
 	"fmt"
+	"os"
 )
 
 // Parser implements a token-driven parser for C++ headers with streaming tokenizer backend
@@ -34,6 +35,23 @@ func New() *Parser {
 	return &Parser{
 		defines: make(map[string]string),
 	}
+}
+
+// ParseContent is a convenience function to parse content from a string
+func ParseContent(filename, content string) (*ast.ScopeTree, error) {
+	parser := New()
+	return parser.Parse(filename, content)
+}
+
+// ParseFile is a convenience function to parse content from a file
+func ParseFile(filename string) (*ast.ScopeTree, error) {
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file %s: %w", filename, err)
+	}
+
+	parser := New()
+	return parser.Parse(filename, string(content))
 }
 
 // Parse parses tokens into an AST using streaming tokenizer with compatibility layer
@@ -93,6 +111,8 @@ func (p *Parser) parseTopLevel() error {
 		return p.parseUsing()
 	case TokenPublic, TokenPrivate, TokenProtected:
 		return p.parseAccessSpecifier()
+	case TokenLeftBrace:
+		return p.parseOpenBrace()
 	case TokenRightBrace:
 		return p.parseCloseBrace()
 	case TokenIdentifier:

@@ -74,8 +74,13 @@ class TestClass {
 // Helper functions for tests
 func getNonAccessSpecifierChildren(entity *ast.Entity) []*ast.Entity {
 	var result []*ast.Entity
+
+	// Look through all children
 	for _, child := range entity.Children {
-		if child.Type != ast.EntityAccessSpecifier {
+		if child.Type == ast.EntityScopeOpen {
+			// Recursively get non-access-specifier children from scope-open
+			result = append(result, getNonAccessSpecifierChildren(child)...)
+		} else if child.Type != ast.EntityAccessSpecifier && child.Type != ast.EntityScopeClose {
 			result = append(result, child)
 		}
 	}
@@ -84,8 +89,13 @@ func getNonAccessSpecifierChildren(entity *ast.Entity) []*ast.Entity {
 
 func getAccessSpecifiers(entity *ast.Entity) []*ast.Entity {
 	var result []*ast.Entity
+
+	// Look through all children
 	for _, child := range entity.Children {
-		if child.Type == ast.EntityAccessSpecifier {
+		if child.Type == ast.EntityScopeOpen {
+			// Recursively get access specifiers from scope-open
+			result = append(result, getAccessSpecifiers(child)...)
+		} else if child.Type == ast.EntityAccessSpecifier {
 			result = append(result, child)
 		}
 	}
@@ -108,9 +118,9 @@ func TestBasicNamespaceParsing(t *testing.T) {
 		t.Fatalf("Failed to parse: %v", err)
 	}
 
-	// Should have 1 namespace at root level
-	if len(tree.Root.Children) != 1 {
-		t.Errorf("Expected 1 root entity, got %d", len(tree.Root.Children))
+	// Should have namespace + scope-open at root level
+	if len(tree.Root.Children) != 2 {
+		t.Errorf("Expected 2 root entities (namespace + scope-open), got %d", len(tree.Root.Children))
 	}
 
 	ns := tree.Root.Children[0]
@@ -118,18 +128,34 @@ func TestBasicNamespaceParsing(t *testing.T) {
 		t.Errorf("Expected namespace TestNamespace, got %s %s", ns.Type, ns.Name)
 	}
 
-	// Namespace should have 1 class
-	if len(ns.Children) != 1 {
-		t.Errorf("Expected 1 child in namespace, got %d", len(ns.Children))
+	// Root should also have a scope-open entity
+	scopeOpen := tree.Root.Children[1]
+	if scopeOpen.Type != ast.EntityScopeOpen {
+		t.Errorf("Expected scope-open entity, got %s", scopeOpen.Type)
 	}
 
-	class := ns.Children[0]
+	// The class should be inside the scope-open
+	if len(scopeOpen.Children) == 0 {
+		t.Fatalf("Scope-open should have children")
+	}
+
+	class := scopeOpen.Children[0]
 	if class.Type != ast.EntityClass || class.Name != "TestClass" {
 		t.Errorf("Expected class TestClass, got %s %s", class.Type, class.Name)
 	}
 
-	// Get only non-access-specifier children (actual members)
-	members := getNonAccessSpecifierChildren(class)
+	// The class members should be in the class's scope-open (which follows the class)
+	if len(scopeOpen.Children) < 2 {
+		t.Fatalf("Expected class scope-open after class")
+	}
+
+	classScopeOpen := scopeOpen.Children[1]
+	if classScopeOpen.Type != ast.EntityScopeOpen {
+		t.Errorf("Expected class scope-open, got %s", classScopeOpen.Type)
+	}
+
+	// Get only non-access-specifier children (actual members) from class scope
+	members := getNonAccessSpecifierChildren(classScopeOpen)
 	if len(members) != 2 {
 		t.Errorf("Expected 2 members in class, got %d", len(members))
 	}
@@ -145,8 +171,8 @@ func TestBasicNamespaceParsing(t *testing.T) {
 		t.Errorf("Expected private field, got %s", field.AccessLevel)
 	}
 
-	// Verify access specifiers are present
-	accessSpecs := getAccessSpecifiers(class)
+	// Verify access specifiers are present in the class scope
+	accessSpecs := getAccessSpecifiers(classScopeOpen)
 	if len(accessSpecs) != 2 {
 		t.Errorf("Expected 2 access specifiers, got %d", len(accessSpecs))
 	}
@@ -170,10 +196,24 @@ protected:
 		t.Fatalf("Failed to parse: %v", err)
 	}
 
-	class := tree.Root.Children[0]
+	// Find the class - it should be in root's first scope-open (since there's no namespace)
+	if len(tree.Root.Children) < 2 {
+		t.Fatalf("Expected at least class + scope-open at root")
+	}
 
-	// Get only non-access-specifier children (actual members)
-	members := getNonAccessSpecifierChildren(class)
+	class := tree.Root.Children[0]
+	if class.Type != ast.EntityClass {
+		t.Fatalf("Expected class as first child, got %s", class.Type)
+	}
+
+	// The class members should be in the class's scope-open (which follows the class)
+	classScopeOpen := tree.Root.Children[1]
+	if classScopeOpen.Type != ast.EntityScopeOpen {
+		t.Fatalf("Expected class scope-open, got %s", classScopeOpen.Type)
+	}
+
+	// Get only non-access-specifier children (actual members) from class scope
+	members := getNonAccessSpecifierChildren(classScopeOpen)
 	if len(members) != 5 {
 		t.Errorf("Expected 5 members, got %d", len(members))
 	}
@@ -193,8 +233,8 @@ protected:
 		}
 	}
 
-	// Verify access specifiers are present
-	accessSpecs := getAccessSpecifiers(class)
+	// Verify access specifiers are present in class scope
+	accessSpecs := getAccessSpecifiers(classScopeOpen)
 	if len(accessSpecs) != 3 {
 		t.Errorf("Expected 3 access specifiers, got %d", len(accessSpecs))
 	}
@@ -500,9 +540,9 @@ public:
 		t.Fatalf("Failed to parse: %v", err)
 	}
 
-	// Should have 4 global functions + 1 class
-	if len(tree.Root.Children) != 5 {
-		t.Errorf("Expected 5 root entities, got %d", len(tree.Root.Children))
+	// Should have 4 global functions + 1 class + 1 scope-open
+	if len(tree.Root.Children) != 6 {
+		t.Errorf("Expected 6 root entities, got %d", len(tree.Root.Children))
 	}
 
 	// Check global functions
@@ -521,9 +561,13 @@ public:
 		t.Errorf("Expected inline function to have IsInline=true")
 	}
 
-	// Check class methods
-	class := tree.Root.Children[4] // Last entity should be the class
-	members := getNonAccessSpecifierChildren(class)
+	// Check class methods - class is at index 4, scope-open is at index 5
+	classScopeOpen := tree.Root.Children[5]
+	if classScopeOpen.Type != ast.EntityScopeOpen {
+		t.Fatalf("Expected class scope-open, got %s", classScopeOpen.Type)
+	}
+
+	members := getNonAccessSpecifierChildren(classScopeOpen)
 	if len(members) != 5 {
 		t.Errorf("Expected 5 class members, got %d", len(members))
 	}
@@ -591,9 +635,23 @@ private:
 		t.Errorf("Expected const variable to have IsConst=true")
 	}
 
-	// Check class fields
-	class := tree.Root.Children[4] // Last entity
-	members := getNonAccessSpecifierChildren(class)
+	// Check class fields - find the class and its scope-open
+	var classScopeOpen *ast.Entity
+	for i, child := range tree.Root.Children {
+		if child.Type == ast.EntityClass && child.Name == "TestClass" {
+			// The scope-open should be the next child
+			if i+1 < len(tree.Root.Children) && tree.Root.Children[i+1].Type == ast.EntityScopeOpen {
+				classScopeOpen = tree.Root.Children[i+1]
+				break
+			}
+		}
+	}
+
+	if classScopeOpen == nil {
+		t.Fatalf("Could not find class scope-open")
+	}
+
+	members := getNonAccessSpecifierChildren(classScopeOpen)
 	if len(members) != 4 {
 		t.Errorf("Expected 4 class fields, got %d", len(members))
 	}

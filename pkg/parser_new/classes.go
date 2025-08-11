@@ -59,22 +59,20 @@ func (p *Parser) parseClassOrStruct(entityType ast.EntityType) error {
 		}
 		break
 	}
-	// Check for opening brace (definition) or semicolon (forward declaration)
+	// Check for semicolon (forward declaration)
 	isForwardDeclaration := false
-	if p.tokenCache.match(TokenLeftBrace) {
-		signature += " {"
-	} else if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenSemicolon {
-		// This is a forward declaration - consume the semicolon but don't add it to signature
-		// The formatter will handle adding the semicolon during reconstruction
+	if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenSemicolon {
+		// This is a forward declaration - consume the semicolon
 		isForwardDeclaration = true
 		p.tokenCache.advance()
 	}
+	// Note: Opening braces are now handled by the main parser dispatch
 
 	entity := &ast.Entity{
 		Type:                 entityType,
 		Name:                 nameToken.Value,
 		FullName:             p.buildFullName(nameToken.Value),
-		Signature:            signature,
+		Signature:            signature, // Clean signature without braces
 		AccessLevel:          p.getCurrentAccessLevel(),
 		IsForwardDeclaration: isForwardDeclaration,
 		SourceRange:          p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
@@ -83,10 +81,11 @@ func (p *Parser) parseClassOrStruct(entityType ast.EntityType) error {
 
 	p.addEntity(entity)
 
-	// Enter scope if we found opening brace
-	if strings.Contains(signature, "{") {
-		p.enterScope(entity)
-		// Set default access level for the new scope
+	// For non-forward declarations, the opening brace (if present) will be handled
+	// by the main parser and create its own scope. We need to associate this entity
+	// with that scope when it's created.
+	if !isForwardDeclaration {
+		// Set default access level for class entities (will apply when scope is entered)
 		if entityType == ast.EntityClass {
 			p.accessStack = append(p.accessStack, ast.AccessPrivate) // class default
 		} else {
