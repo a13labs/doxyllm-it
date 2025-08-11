@@ -8,28 +8,27 @@ import (
 )
 
 // parseNamespace handles namespace declarations
-func (p *Parser) parseNamespace() error {
-	start := p.tokenCache.getCurrentPosition()
-	p.tokenCache.advance() // consume 'namespace'
+func (p *Parser) parseNamespace() (*ast.Entity, error) {
+	p.tokenizer.NextToken() // consume 'namespace'
 
-	p.tokenCache.skipWhitespace()
+	p.tokenizer.SkipWhitespace()
 
-	if p.tokenCache.isAtEnd() || !p.isValidIdentifierToken(p.tokenCache.peek()) {
-		return p.formatErrorAtCurrentPosition("expected namespace name")
+	if p.tokenizer.IsAtEnd() || !p.isValidIdentifierToken(p.tokenizer.PeekToken(0)) {
+		return nil, p.formatErrorAtCurrentPosition("expected namespace name")
 	}
 
 	// Parse namespace name (could be nested like mgl::io)
 	var nameBuilder strings.Builder
-	nameBuilder.WriteString(p.tokenCache.advance().Value) // first identifier
+	nameBuilder.WriteString(p.tokenizer.NextToken().Value) // first identifier
 
 	// Check for :: followed by more identifiers (nested namespace)
-	for !p.tokenCache.isAtEnd() {
-		p.tokenCache.skipWhitespace()
-		if p.tokenCache.peek().Type == TokenDoubleColon {
-			nameBuilder.WriteString(p.tokenCache.advance().Value) // add ::
-			p.tokenCache.skipWhitespace()
-			if p.isValidIdentifierToken(p.tokenCache.peek()) {
-				nameBuilder.WriteString(p.tokenCache.advance().Value) // add next identifier
+	for !p.tokenizer.IsAtEnd() {
+		p.tokenizer.SkipWhitespace()
+		if p.tokenizer.PeekToken(0).Type == TokenDoubleColon {
+			nameBuilder.WriteString(p.tokenizer.NextToken().Value) // add ::
+			p.tokenizer.SkipWhitespace()
+			if p.isValidIdentifierToken(p.tokenizer.PeekToken(0)) {
+				nameBuilder.WriteString(p.tokenizer.NextToken().Value) // add next identifier
 			} else {
 				break
 			}
@@ -40,7 +39,7 @@ func (p *Parser) parseNamespace() error {
 
 	namespaceName := nameBuilder.String()
 
-	p.tokenCache.skipWhitespace()
+	p.tokenizer.SkipWhitespace()
 
 	// Build signature
 	signature := fmt.Sprintf("namespace %s", namespaceName)
@@ -49,19 +48,11 @@ func (p *Parser) parseNamespace() error {
 	// We don't look for braces here anymore
 
 	entity := &ast.Entity{
-		Type:        ast.EntityNamespace,
-		Name:        namespaceName,
-		FullName:    p.buildFullName(namespaceName),
-		Signature:   signature, // Clean signature without braces
-		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
-		Children:    make([]*ast.Entity, 0),
+		Type:      ast.EntityNamespace,
+		Name:      namespaceName,
+		Signature: signature, // Clean signature without braces
+		Children:  make([]*ast.Entity, 0),
 	}
 
-	p.addEntity(entity)
-
-	// The opening brace (if present) will be handled by the main parser
-	// and will create its own scope
-
-	return nil
+	return entity, nil
 }

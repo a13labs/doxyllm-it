@@ -7,8 +7,8 @@ import (
 func TestEntityTypes(t *testing.T) {
 	// Test comment entity
 	commentEntity := &Entity{
-		Type:         EntityComment,
-		OriginalText: "// Line comment",
+		Type: EntityComment,
+		Body: "// Line comment",
 	}
 	if commentEntity.Type != EntityComment {
 		t.Errorf("Expected EntityComment, got %v", commentEntity.Type)
@@ -43,11 +43,11 @@ func TestEntityPaths(t *testing.T) {
 	}
 	namespace.AddChild(class)
 
-	method := &Entity{
-		Type: EntityMethod,
-		Name: "myMethod",
+	function := &Entity{
+		Type: EntityFunction,
+		Name: "myFunction",
 	}
-	class.AddChild(method)
+	class.AddChild(function)
 
 	// Test paths
 	if root.GetFullPath() != "" {
@@ -62,8 +62,8 @@ func TestEntityPaths(t *testing.T) {
 		t.Errorf("Class path should be 'MyNamespace::MyClass', got %s", class.GetFullPath())
 	}
 
-	if method.GetFullPath() != "MyNamespace::MyClass::myMethod" {
-		t.Errorf("Method path should be 'MyNamespace::MyClass::myMethod', got %s", method.GetFullPath())
+	if function.GetFullPath() != "MyNamespace::MyClass::myFunction" {
+		t.Errorf("Function path should be 'MyNamespace::MyClass::myFunction', got %s", function.GetFullPath())
 	}
 
 	// Test scope
@@ -73,8 +73,8 @@ func TestEntityPaths(t *testing.T) {
 	if !namespace.IsGlobal() {
 		t.Errorf("Namespace should be global since its parent is the unnamed root")
 	}
-	if method.GetScope() != "MyNamespace::MyClass" {
-		t.Errorf("Method scope should be 'MyNamespace::MyClass', got %s", method.GetScope())
+	if function.GetScope() != "MyNamespace::MyClass" {
+		t.Errorf("Function scope should be 'MyNamespace::MyClass', got %s", function.GetScope())
 	}
 }
 

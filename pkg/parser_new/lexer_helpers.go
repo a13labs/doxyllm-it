@@ -29,12 +29,12 @@ func (p *Parser) skipSpecifiers() {
 		TokenExplicit, TokenFriend,
 	}
 
-	for !p.tokenCache.isAtEnd() {
+	for !p.tokenizer.IsAtEnd() {
 		found := false
 		for _, spec := range specifiers {
-			if p.tokenCache.check(spec) {
-				p.tokenCache.advance()
-				p.tokenCache.skipWhitespace()
+			if p.tokenizer.Match(spec) {
+				p.tokenizer.NextToken()
+				p.tokenizer.SkipWhitespace()
 				found = true
 				break
 			}
@@ -49,12 +49,12 @@ func (p *Parser) skipSpecifiers() {
 func (p *Parser) parseType() string {
 	var typeStr strings.Builder
 
-	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenLeftBrace && p.tokenCache.peek().Type != TokenSemicolon {
-		if p.tokenCache.peek().Type == TokenLeftBrace {
+	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type != TokenLeftBrace && p.tokenizer.PeekToken(0).Type != TokenSemicolon {
+		if p.tokenizer.PeekToken(0).Type == TokenLeftBrace {
 			break
 		}
-		typeStr.WriteString(p.tokenCache.peek().Value)
-		p.tokenCache.advance()
+		typeStr.WriteString(p.tokenizer.PeekToken(0).Value)
+		p.tokenizer.NextToken()
 	}
 
 	return strings.TrimSpace(typeStr.String())

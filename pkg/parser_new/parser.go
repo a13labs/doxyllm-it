@@ -9,7 +9,7 @@ import (
 
 // Parser implements a token-driven parser for C++ headers with streaming tokenizer backend
 type Parser struct {
-	tokenCache  *TokenCache // Token cache abstraction
+	tokenizer   *Tokenizer // The tokenizer used to generate tokens
 	tree        *ast.ScopeTree
 	scopeStack  []*ast.Entity
 	accessStack []ast.AccessLevel
@@ -23,11 +23,20 @@ func (p *Parser) formatError(message string, token Token) error {
 
 // formatErrorAtCurrentPosition creates an error message with current position information
 func (p *Parser) formatErrorAtCurrentPosition(message string) error {
-	if p.tokenCache.isAtEnd() {
+	if p.tokenizer.IsAtEnd() {
 		return fmt.Errorf("%s at end of file", message)
 	}
-	token := p.tokenCache.peek()
+	token := p.tokenizer.PeekToken(0)
 	return p.formatError(message, token)
+}
+
+// formatErrorAtCurrentPosition creates an error message with current position information
+func (p *Parser) formatErrorAtCurrentPositionf(format string, args ...interface{}) error {
+	if p.tokenizer.IsAtEnd() {
+		return fmt.Errorf(format+" at end of file", args...)
+	}
+	token := p.tokenizer.PeekToken(0)
+	return p.formatError(fmt.Sprintf(format, args...), token)
 }
 
 // New creates a new token-driven parser
@@ -62,33 +71,35 @@ func (p *Parser) Parse(filename, content string) (*ast.ScopeTree, error) {
 	p.accessStack = []ast.AccessLevel{ast.AccessPublic} // Global scope is public
 
 	// Initialize streaming tokenizer
-	var err error
-	p.tokenCache, err = NewTokenCache(content)
-	if err != nil {
-		return nil, err
+	p.tokenizer = NewTokenizer(content)
+	if p.tokenizer.HasErrors() {
+		errors := p.tokenizer.GetErrors()
+		if len(errors) > 0 {
+			return nil, fmt.Errorf("tokenizer error: %s", errors[0].Value)
+		}
 	}
 
-	// Parse tokens
-	for !p.tokenCache.isAtEnd() {
-		if err := p.parseTopLevel(); err != nil {
+	for !p.tokenizer.IsAtEnd() {
+		e, err := p.parseNext()
+		if err != nil {
 			return nil, err
 		}
+		if e == nil {
+			continue // skip empty entities
+		}
+		p.addEntity(e)
 	}
 
 	return p.tree, nil
 }
 
-// parseTopLevel parses top-level declarations
-func (p *Parser) parseTopLevel() error {
-	// Skip whitespace and newlines
-	p.tokenCache.skipWhitespaceAndNewlines()
+// parseNext parses top-level declarations
+func (p *Parser) parseNext() (*ast.Entity, error) {
 
-	if p.tokenCache.isAtEnd() {
-		return nil
-	}
+	p.tokenizer.SkipWhitespaceAndNewlines()
 
 	// Handle different token types
-	token := p.tokenCache.peek()
+	token := p.tokenizer.PeekToken(0)
 
 	switch token.Type {
 	case TokenHash:
@@ -111,35 +122,132 @@ func (p *Parser) parseTopLevel() error {
 		return p.parseUsing()
 	case TokenPublic, TokenPrivate, TokenProtected:
 		return p.parseAccessSpecifier()
-	case TokenLeftBrace:
-		return p.parseOpenBrace()
 	case TokenRightBrace:
-		return p.parseCloseBrace()
+		return nil, p.parseCloseBrace()
 	case TokenIdentifier:
-		// Check if this identifier is a macro that should be resolved
-		if _, exists := p.defines[token.Value]; exists {
-			// Look ahead to see if after macro resolution we have a keyword
-			offset := 1
-			nextToken := p.tokenCache.peekAhead(offset)
-			// Skip whitespace in lookahead
-			for nextToken.Type == TokenWhitespace {
-				offset++
-				nextToken = p.tokenCache.peekAhead(offset)
-			}
-
-			switch nextToken.Type {
-			case TokenClass:
-				return p.parseClassWithMacro()
-			case TokenStruct:
-				return p.parseStructWithMacro()
-			case TokenEnum:
-				return p.parseEnumWithMacro()
-			}
-		}
-		// Fall through to default if not a macro or not followed by keyword
-		return p.parseFunctionOrVariable()
+		return p.parseIdentifier()
 	default:
-		// Try to parse as function or variable
-		return p.parseFunctionOrVariable()
+		return p.parseIdentifier()
 	}
 }
+
+func (p *Parser) parseIdentifier() (*ast.Entity, error) {
+	defines := make([]string, 0)
+
+	offset := 0 // Start looking after the identifier
+	numIdentifiers := 0
+	for !p.tokenizer.IsAtEnd() {
+		nextToken := p.tokenizer.PeekToken(offset)
+		switch nextToken.Type {
+		case TokenWhitespace, TokenNewline:
+			offset++
+		case TokenIdentifier:
+			if _, exists := p.defines[nextToken.Value]; exists {
+				defines = append(defines, nextToken.Value)
+			}
+			numIdentifiers++
+			offset++ // Keep looking for the next token
+		case TokenVoid, TokenInt, TokenDouble, TokenChar, TokenFloat, TokenBool, TokenStar, TokenAmpersand:
+			// These are valid types, continue
+			offset++ // Keep looking for the next token
+		case TokenOperator, TokenDoubleColon, TokenLess:
+			if numIdentifiers == 0 {
+				return nil, p.formatErrorAtCurrentPositionf("There must be some identifiers before a '%s'", nextToken.Value)
+			}
+			offset++
+		case TokenLeftParen:
+			// Found a (, it must be a function
+			e, err := p.parseFunction()
+			if err != nil {
+				return nil, err
+			}
+			e.Defines = defines
+			return e, nil
+		case TokenSemicolon:
+			// Found a ';' , it must be variable(s)
+			e, err := p.parseVariable()
+			if err != nil {
+				return nil, err
+			}
+			e.Defines = defines
+			return e, nil
+		case TokenClass, TokenStruct, TokenEnum:
+			// Found a class keyword after identifier, parse as class
+			if offset != len(defines) {
+				return nil, p.formatErrorAtCurrentPositionf("All identifiers before a class must be a macro")
+			}
+			// consume all tokens until now since we found a class
+			for i := 0; i < offset; i++ {
+				p.tokenizer.NextToken()
+			}
+
+			var e *ast.Entity
+			var err error
+			switch nextToken.Type {
+			case TokenClass:
+				e, err = p.parseClass()
+			case TokenEnum:
+				e, err = p.parseEnum()
+			case TokenStruct:
+				e, err = p.parseStruct()
+			default:
+				return nil, p.formatErrorAtCurrentPositionf("unexpected token '%s' after identifier", nextToken.Value)
+			}
+
+			if err != nil {
+				return nil, err
+			}
+
+			e.Defines = defines
+			return e, nil
+		default:
+			return nil, p.formatErrorAtCurrentPositionf("unexpected token '%s' after identifier", nextToken.Value)
+		}
+	}
+	return nil, p.formatErrorAtCurrentPositionf("unexpected end of input after identifier")
+}
+
+// // advance returns the current token and moves to the next
+// func (p *Parser) advance() (Token, error) {
+// 	if p.tokenizer.isAtEnd() {
+// 		return Token{}, fmt.Errorf("unexpected end of input")
+// 	}
+// 	return p.tokenizer.NextToken(), nil
+// }
+
+// // isAtEnd checks if we're at the end of tokens
+// func (p *Parser) isAtEnd() bool {
+// 	return p.tokenizer.isAtEnd()
+// }
+
+// // peek returns the current token without advancing
+// func (p *Parser) peek() Token {
+// 	return p.tokenizer.PeekToken(1)
+// }
+
+// // peekAhead looks ahead by offset tokens
+// func (p *Parser) peekAhead(offset int) Token {
+// 	return p.tokenizer.PeekToken(offset)
+// }
+
+// // check returns true if current token is of given type
+// func (p *Parser) check(tokenType TokenType) bool {
+// 	if p.tokenizer.isAtEnd() {
+// 		return false
+// 	}
+// 	return p.tokenizer.PeekToken(1).Type == tokenType
+// }
+
+// // skipWhitespace skips whitespace tokens
+// func (p *Parser) skipWhitespace() {
+// 	for !p.tokenizer.isAtEnd() && p.tokenizer.PeekToken(1).Type == TokenWhitespace {
+// 		p.tokenizer.NextToken()
+// 	}
+// }
+
+// // skipWhitespaceAndNewlines skips whitespace and newline tokens
+// func (p *Parser) skipWhitespaceAndNewlines() {
+// 	for !p.tokenizer.isAtEnd() && (p.tokenizer.PeekToken(1).Type == TokenWhitespace || p.tokenizer.PeekToken(1).Type == TokenNewline) {
+// 		p.tokenizer.NextToken()
+// 	}
+// }

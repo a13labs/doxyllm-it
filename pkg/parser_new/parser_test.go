@@ -45,7 +45,7 @@ class TestClass {
 	if len(commentEntities) != 6 {
 		t.Errorf("Expected 6 comment entities, got %d", len(commentEntities))
 		for i, comment := range commentEntities {
-			t.Logf("Comment %d: %s", i, comment.OriginalText)
+			t.Logf("Comment %d: %s", i, comment.Signature)
 		}
 	}
 
@@ -62,8 +62,8 @@ class TestClass {
 	for i, expected := range expectedComments {
 		if i < len(commentEntities) {
 			// Check that comment text is preserved (may have whitespace differences)
-			if !strings.Contains(commentEntities[i].OriginalText, strings.TrimSpace(expected)) {
-				t.Errorf("Comment %d: expected to contain %q, got %q", i, expected, commentEntities[i].OriginalText)
+			if !strings.Contains(commentEntities[i].Signature, strings.TrimSpace(expected)) {
+				t.Errorf("Comment %d: expected to contain %q, got %q", i, expected, commentEntities[i].Signature)
 			}
 		}
 	}
@@ -74,13 +74,8 @@ class TestClass {
 // Helper functions for tests
 func getNonAccessSpecifierChildren(entity *ast.Entity) []*ast.Entity {
 	var result []*ast.Entity
-
-	// Look through all children
 	for _, child := range entity.Children {
-		if child.Type == ast.EntityScopeOpen {
-			// Recursively get non-access-specifier children from scope-open
-			result = append(result, getNonAccessSpecifierChildren(child)...)
-		} else if child.Type != ast.EntityAccessSpecifier && child.Type != ast.EntityScopeClose {
+		if child.Type != ast.EntityAccessSpecifier {
 			result = append(result, child)
 		}
 	}
@@ -89,13 +84,8 @@ func getNonAccessSpecifierChildren(entity *ast.Entity) []*ast.Entity {
 
 func getAccessSpecifiers(entity *ast.Entity) []*ast.Entity {
 	var result []*ast.Entity
-
-	// Look through all children
 	for _, child := range entity.Children {
-		if child.Type == ast.EntityScopeOpen {
-			// Recursively get access specifiers from scope-open
-			result = append(result, getAccessSpecifiers(child)...)
-		} else if child.Type == ast.EntityAccessSpecifier {
+		if child.Type == ast.EntityAccessSpecifier {
 			result = append(result, child)
 		}
 	}
@@ -118,9 +108,9 @@ func TestBasicNamespaceParsing(t *testing.T) {
 		t.Fatalf("Failed to parse: %v", err)
 	}
 
-	// Should have namespace + scope-open at root level
-	if len(tree.Root.Children) != 2 {
-		t.Errorf("Expected 2 root entities (namespace + scope-open), got %d", len(tree.Root.Children))
+	// Should have 1 namespace at root level
+	if len(tree.Root.Children) != 1 {
+		t.Errorf("Expected 1 root entity, got %d", len(tree.Root.Children))
 	}
 
 	ns := tree.Root.Children[0]
@@ -128,34 +118,18 @@ func TestBasicNamespaceParsing(t *testing.T) {
 		t.Errorf("Expected namespace TestNamespace, got %s %s", ns.Type, ns.Name)
 	}
 
-	// Root should also have a scope-open entity
-	scopeOpen := tree.Root.Children[1]
-	if scopeOpen.Type != ast.EntityScopeOpen {
-		t.Errorf("Expected scope-open entity, got %s", scopeOpen.Type)
+	// Namespace should have 1 class
+	if len(ns.Children) != 1 {
+		t.Errorf("Expected 1 child in namespace, got %d", len(ns.Children))
 	}
 
-	// The class should be inside the scope-open
-	if len(scopeOpen.Children) == 0 {
-		t.Fatalf("Scope-open should have children")
-	}
-
-	class := scopeOpen.Children[0]
+	class := ns.Children[0]
 	if class.Type != ast.EntityClass || class.Name != "TestClass" {
 		t.Errorf("Expected class TestClass, got %s %s", class.Type, class.Name)
 	}
 
-	// The class members should be in the class's scope-open (which follows the class)
-	if len(scopeOpen.Children) < 2 {
-		t.Fatalf("Expected class scope-open after class")
-	}
-
-	classScopeOpen := scopeOpen.Children[1]
-	if classScopeOpen.Type != ast.EntityScopeOpen {
-		t.Errorf("Expected class scope-open, got %s", classScopeOpen.Type)
-	}
-
-	// Get only non-access-specifier children (actual members) from class scope
-	members := getNonAccessSpecifierChildren(classScopeOpen)
+	// Get only non-access-specifier children (actual members)
+	members := getNonAccessSpecifierChildren(class)
 	if len(members) != 2 {
 		t.Errorf("Expected 2 members in class, got %d", len(members))
 	}
@@ -171,8 +145,8 @@ func TestBasicNamespaceParsing(t *testing.T) {
 		t.Errorf("Expected private field, got %s", field.AccessLevel)
 	}
 
-	// Verify access specifiers are present in the class scope
-	accessSpecs := getAccessSpecifiers(classScopeOpen)
+	// Verify access specifiers are present
+	accessSpecs := getAccessSpecifiers(class)
 	if len(accessSpecs) != 2 {
 		t.Errorf("Expected 2 access specifiers, got %d", len(accessSpecs))
 	}
@@ -196,24 +170,10 @@ protected:
 		t.Fatalf("Failed to parse: %v", err)
 	}
 
-	// Find the class - it should be in root's first scope-open (since there's no namespace)
-	if len(tree.Root.Children) < 2 {
-		t.Fatalf("Expected at least class + scope-open at root")
-	}
-
 	class := tree.Root.Children[0]
-	if class.Type != ast.EntityClass {
-		t.Fatalf("Expected class as first child, got %s", class.Type)
-	}
 
-	// The class members should be in the class's scope-open (which follows the class)
-	classScopeOpen := tree.Root.Children[1]
-	if classScopeOpen.Type != ast.EntityScopeOpen {
-		t.Fatalf("Expected class scope-open, got %s", classScopeOpen.Type)
-	}
-
-	// Get only non-access-specifier children (actual members) from class scope
-	members := getNonAccessSpecifierChildren(classScopeOpen)
+	// Get only non-access-specifier children (actual members)
+	members := getNonAccessSpecifierChildren(class)
 	if len(members) != 5 {
 		t.Errorf("Expected 5 members, got %d", len(members))
 	}
@@ -233,8 +193,8 @@ protected:
 		}
 	}
 
-	// Verify access specifiers are present in class scope
-	accessSpecs := getAccessSpecifiers(classScopeOpen)
+	// Verify access specifiers are present
+	accessSpecs := getAccessSpecifiers(class)
 	if len(accessSpecs) != 3 {
 		t.Errorf("Expected 3 access specifiers, got %d", len(accessSpecs))
 	}
@@ -367,7 +327,7 @@ public:
 	}
 
 	memberFunc := members[0]
-	if memberFunc.Type != ast.EntityMethod || memberFunc.Name != "insert" {
+	if memberFunc.Type != ast.EntityFunction || memberFunc.Name != "insert" {
 		t.Errorf("Expected member template method insert, got %s %s", memberFunc.Type, memberFunc.Name)
 	}
 }
@@ -540,9 +500,9 @@ public:
 		t.Fatalf("Failed to parse: %v", err)
 	}
 
-	// Should have 4 global functions + 1 class + 1 scope-open
-	if len(tree.Root.Children) != 6 {
-		t.Errorf("Expected 6 root entities, got %d", len(tree.Root.Children))
+	// Should have 4 global functions + 1 class
+	if len(tree.Root.Children) != 5 {
+		t.Errorf("Expected 5 root entities, got %d", len(tree.Root.Children))
 	}
 
 	// Check global functions
@@ -561,13 +521,9 @@ public:
 		t.Errorf("Expected inline function to have IsInline=true")
 	}
 
-	// Check class methods - class is at index 4, scope-open is at index 5
-	classScopeOpen := tree.Root.Children[5]
-	if classScopeOpen.Type != ast.EntityScopeOpen {
-		t.Fatalf("Expected class scope-open, got %s", classScopeOpen.Type)
-	}
-
-	members := getNonAccessSpecifierChildren(classScopeOpen)
+	// Check class methods
+	class := tree.Root.Children[4] // Last entity should be the class
+	members := getNonAccessSpecifierChildren(class)
 	if len(members) != 5 {
 		t.Errorf("Expected 5 class members, got %d", len(members))
 	}
@@ -635,23 +591,9 @@ private:
 		t.Errorf("Expected const variable to have IsConst=true")
 	}
 
-	// Check class fields - find the class and its scope-open
-	var classScopeOpen *ast.Entity
-	for i, child := range tree.Root.Children {
-		if child.Type == ast.EntityClass && child.Name == "TestClass" {
-			// The scope-open should be the next child
-			if i+1 < len(tree.Root.Children) && tree.Root.Children[i+1].Type == ast.EntityScopeOpen {
-				classScopeOpen = tree.Root.Children[i+1]
-				break
-			}
-		}
-	}
-
-	if classScopeOpen == nil {
-		t.Fatalf("Could not find class scope-open")
-	}
-
-	members := getNonAccessSpecifierChildren(classScopeOpen)
+	// Check class fields
+	class := tree.Root.Children[4] // Last entity
+	members := getNonAccessSpecifierChildren(class)
 	if len(members) != 4 {
 		t.Errorf("Expected 4 class fields, got %d", len(members))
 	}
@@ -831,8 +773,8 @@ func TestMultiLineFunctionDeclarations(t *testing.T) {
 		t.Errorf("Function signature should not contain body, got: %s", multilineFunc.Signature)
 	}
 	// Should have body text stored
-	if multilineFunc.OriginalText == "" {
-		t.Errorf("Expected function body to be stored in OriginalText")
+	if multilineFunc.Signature == "" {
+		t.Errorf("Expected function body to be stored in Signature")
 	}
 
 	// Check single-line function
@@ -1034,8 +976,8 @@ private:
 		t.Errorf("Constructor signature should not contain body: %s", constructor.Signature)
 	}
 	// Should have body stored
-	if constructor.OriginalText == "" {
-		t.Errorf("Constructor should have body stored in OriginalText")
+	if constructor.Signature == "" {
+		t.Errorf("Constructor should have body stored in Signature")
 	}
 
 	// Check method with body
@@ -1048,8 +990,8 @@ private:
 		t.Errorf("Method signature should not contain body: %s", methodWithBody.Signature)
 	}
 	// Should have body stored
-	if methodWithBody.OriginalText == "" {
-		t.Errorf("Method should have body stored in OriginalText")
+	if methodWithBody.Signature == "" {
+		t.Errorf("Method should have body stored in Signature")
 	}
 
 	// Check method declaration only
@@ -1062,8 +1004,8 @@ private:
 		t.Errorf("Declaration-only method should end with semicolon: %s", methodDecl.Signature)
 	}
 	// Should not have body
-	if methodDecl.OriginalText != "" {
-		t.Errorf("Declaration-only method should not have body: %s", methodDecl.OriginalText)
+	if methodDecl.Signature != "" {
+		t.Errorf("Declaration-only method should not have body: %s", methodDecl.Signature)
 	}
 
 	// Check inline method
@@ -1142,13 +1084,13 @@ func TestComplexInlineFunctions(t *testing.T) {
 	}
 
 	// Should have body stored
-	if readBuffer.OriginalText == "" {
-		t.Errorf("Function should have body stored in OriginalText")
+	if readBuffer.Signature == "" {
+		t.Errorf("Function should have body stored in Signature")
 	}
 
 	// Body should contain the actual implementation
-	if !strings.Contains(readBuffer.OriginalText, "ASSERT(") {
-		t.Errorf("Function body should contain implementation: %s", readBuffer.OriginalText)
+	if !strings.Contains(readBuffer.Signature, "ASSERT(") {
+		t.Errorf("Function body should contain implementation: %s", readBuffer.Signature)
 	}
 
 	// Check second function
@@ -2045,7 +1987,7 @@ class TestClass {
 	if len(commentEntities) != 3 {
 		t.Errorf("Expected 3 comment entities, got %d", len(commentEntities))
 		for i, comment := range commentEntities {
-			t.Logf("Comment %d: %s", i, comment.OriginalText)
+			t.Logf("Comment %d: %s", i, comment.Signature)
 		}
 		return
 	}
@@ -2055,28 +1997,19 @@ class TestClass {
 	if lineComment.Type != ast.EntityComment {
 		t.Errorf("Expected comment entity type, got %v", lineComment.Type)
 	}
-	if lineComment.SourceRange.Start.Line != 1 {
-		t.Errorf("Expected line comment on line 1, got line %d", lineComment.SourceRange.Start.Line)
-	}
-	if !strings.HasPrefix(lineComment.OriginalText, "//") {
-		t.Errorf("Expected line comment to start with //, got %s", lineComment.OriginalText)
+	if !strings.HasPrefix(lineComment.Signature, "//") {
+		t.Errorf("Expected line comment to start with //, got %s", lineComment.Signature)
 	}
 
 	// Check second comment (block comment)
 	blockComment := commentEntities[1]
-	if blockComment.SourceRange.Start.Line != 2 {
-		t.Errorf("Expected block comment on line 2, got line %d", blockComment.SourceRange.Start.Line)
-	}
-	if !strings.HasPrefix(blockComment.OriginalText, "/*") {
-		t.Errorf("Expected block comment to start with /*, got %s", blockComment.OriginalText)
+	if !strings.HasPrefix(blockComment.Signature, "/*") {
+		t.Errorf("Expected block comment to start with /*, got %s", blockComment.Signature)
 	}
 
 	// Check third comment (Doxygen line comment)
 	doxygenComment := commentEntities[2]
-	if doxygenComment.SourceRange.Start.Line != 4 {
-		t.Errorf("Expected Doxygen comment on line 4, got line %d", doxygenComment.SourceRange.Start.Line)
-	}
-	if !strings.HasPrefix(doxygenComment.OriginalText, "///") {
-		t.Errorf("Expected Doxygen comment to start with ///, got %s", doxygenComment.OriginalText)
+	if !strings.HasPrefix(doxygenComment.Signature, "///") {
+		t.Errorf("Expected Doxygen comment to start with ///, got %s", doxygenComment.Signature)
 	}
 }

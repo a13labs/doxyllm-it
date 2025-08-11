@@ -302,8 +302,8 @@ type Tokenizer struct {
 	width  int // width of last rune read
 
 	// Streaming tokenizer improvements
-	lookahead [3]Token // Small lookahead buffer for peek operations
-	lookPos   int      // Number of tokens in lookahead buffer
+	lookahead [10]Token // Small lookahead buffer for peek operations
+	lookPos   int       // Number of tokens in lookahead buffer
 
 	// Error handling
 	errors []Token
@@ -336,6 +336,34 @@ func (t *Tokenizer) NextToken() Token {
 	return t.scanToken()
 }
 
+func (t *Tokenizer) Match(types ...TokenType) bool {
+	for _, tokenType := range types {
+		if t.PeekToken(0).Type == tokenType {
+			t.NextToken()
+			return true
+		}
+	}
+	return false
+}
+
+func (t *Tokenizer) SkipWhitespace() {
+	for !t.IsAtEnd() {
+		if !unicode.IsSpace(t.peek()) {
+			break
+		}
+		t.next()
+	}
+}
+
+func (t *Tokenizer) SkipWhitespaceAndNewlines() {
+	for !t.IsAtEnd() {
+		if !unicode.IsSpace(t.peek()) && t.peek() != '\n' {
+			break
+		}
+		t.next()
+	}
+}
+
 // PeekToken returns the token at the specified offset without advancing
 // offset 0 = current token, 1 = next token, etc.
 func (t *Tokenizer) PeekToken(offset int) Token {
@@ -355,7 +383,33 @@ func (t *Tokenizer) PeekToken(offset int) Token {
 	return t.lookahead[offset]
 }
 
-// Tokenize processes the input and returns all tokens (for backward compatibility)
+// HasErrors returns true if there were tokenization errors
+func (t *Tokenizer) HasErrors() bool {
+	return len(t.errors) > 0
+}
+
+// GetErrors returns all tokenization errors
+func (t *Tokenizer) GetErrors() []Token {
+	return t.errors
+}
+
+// IsAtEnd checks if the tokenizer has reached the end of the input
+func (t *Tokenizer) IsAtEnd() bool {
+	return t.pos >= len(t.input)
+}
+
+func (t *Tokenizer) GetCurrentLine() int {
+	return t.line
+}
+
+func (t *Tokenizer) GetCurrentColumn() int {
+	return t.column
+}
+
+func (t *Tokenizer) GetCurrentOffset() int {
+	return t.pos
+}
+
 func (t *Tokenizer) Tokenize() []Token {
 	var tokens []Token
 	for {
@@ -366,16 +420,6 @@ func (t *Tokenizer) Tokenize() []Token {
 		}
 	}
 	return tokens
-}
-
-// HasErrors returns true if there were tokenization errors
-func (t *Tokenizer) HasErrors() bool {
-	return len(t.errors) > 0
-}
-
-// GetErrors returns all tokenization errors
-func (t *Tokenizer) GetErrors() []Token {
-	return t.errors
 }
 
 // scanToken scans and returns the next token from input

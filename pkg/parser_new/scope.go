@@ -4,7 +4,6 @@ import (
 	ast "doxyllm-it/pkg/ast_new"
 )
 
-// getCurrentScope returns the current scope entity
 func (p *Parser) getCurrentScope() *ast.Entity {
 	if len(p.scopeStack) == 0 {
 		return p.tree.Root
@@ -41,6 +40,9 @@ func (p *Parser) addEntity(entity *ast.Entity) {
 	scope := p.getCurrentScope()
 	entity.Parent = scope
 	scope.AddChild(entity)
+	if entity.Type == ast.EntityClass || entity.Type == ast.EntityStruct || entity.Type == ast.EntityNamespace {
+		p.enterScope(entity) // Enter new scope for class/struct/namespace
+	}
 	p.tree.AddEntity(entity)
 }
 
@@ -59,7 +61,16 @@ func (p *Parser) exitScope() {
 	}
 }
 
-// getRangeFromTokens creates a range from token indices
-func (p *Parser) getRangeFromTokens(start, end int) ast.Range {
-	return p.tokenCache.getRangeFromPositions(start, end)
+func (p *Parser) parseCloseBrace() error {
+	p.tokenizer.NextToken() // consume '}'
+
+	// Check for optional semicolon after brace (for class/struct)
+	if !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type == TokenSemicolon {
+		p.tokenizer.NextToken()
+	}
+
+	// Exit current scope
+	p.exitScope()
+
+	return nil
 }

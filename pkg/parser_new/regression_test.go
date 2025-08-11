@@ -189,7 +189,7 @@ func TestClassMethodScopeFixes(t *testing.T) {
 				// Filter for method entities in the class
 				var methods []*ast.Entity
 				for _, child := range class.Children {
-					if child.Type == ast.EntityFunction || child.Type == ast.EntityMethod {
+					if child.Type == ast.EntityFunction {
 						methods = append(methods, child)
 					}
 				}
@@ -253,7 +253,7 @@ func TestClassMethodScopeFixes(t *testing.T) {
 				// Filter for methods in the class
 				var methods []*ast.Entity
 				for _, child := range class.Children {
-					if child.Type == ast.EntityFunction || child.Type == ast.EntityMethod {
+					if child.Type == ast.EntityFunction {
 						methods = append(methods, child)
 					}
 				}
@@ -307,7 +307,7 @@ public:
 	// Filter for methods/functions in the class
 	var operators []*ast.Entity
 	for _, child := range class.Children {
-		if child.Type == ast.EntityFunction || child.Type == ast.EntityMethod {
+		if child.Type == ast.EntityFunction {
 			operators = append(operators, child)
 		}
 	}
@@ -319,7 +319,7 @@ public:
 	expectedOperators := []string{"operator+", "operator=", "operator==", "operator*"}
 	for i, expectedName := range expectedOperators {
 		op := operators[i]
-		if op.Type != ast.EntityFunction && op.Type != ast.EntityMethod {
+		if op.Type != ast.EntityFunction {
 			t.Errorf("Operator %d: expected function or method, got %s", i, op.Type)
 		}
 		if op.Name != expectedName {
@@ -409,14 +409,14 @@ func TestComplexZipFileScenario(t *testing.T) {
 	// Filter for methods/constructors/destructors in zip_file
 	var zipFileMethods []*ast.Entity
 	for _, child := range zipFile.Children {
-		if child.Type == ast.EntityFunction || child.Type == ast.EntityMethod || child.Type == ast.EntityConstructor || child.Type == ast.EntityDestructor {
+		if child.Type == ast.EntityFunction || child.Type == ast.EntityConstructor || child.Type == ast.EntityDestructor {
 			zipFileMethods = append(zipFileMethods, child)
 		}
 	}
 
 	// This is the key test - methods should be children of zip_file, not namespace
 	expectedMethods := []string{"zip_file", "zip_file", "exists", "read", "write", "is_zip"} // constructor, destructor, methods
-	expectedTypes := []ast.EntityType{ast.EntityConstructor, ast.EntityDestructor, ast.EntityMethod, ast.EntityMethod, ast.EntityMethod, ast.EntityMethod}
+	expectedTypes := []ast.EntityType{ast.EntityConstructor, ast.EntityDestructor, ast.EntityFunction, ast.EntityFunction, ast.EntityFunction, ast.EntityFunction}
 	if len(zipFileMethods) != len(expectedMethods) {
 		t.Errorf("Expected %d methods in zip_file, got %d", len(expectedMethods), len(zipFileMethods))
 		// Print what we actually got for debugging
@@ -451,7 +451,7 @@ func TestComplexZipFileScenario(t *testing.T) {
 	// Filter for methods in zip_reader
 	var zipReaderMethods []*ast.Entity
 	for _, child := range zipReader.Children {
-		if child.Type == ast.EntityFunction || child.Type == ast.EntityMethod {
+		if child.Type == ast.EntityFunction {
 			zipReaderMethods = append(zipReaderMethods, child)
 		}
 	}
@@ -520,7 +520,7 @@ func TestScopeRegressionScenarios(t *testing.T) {
 
 				var bMethods []*ast.Entity
 				for _, child := range b.Children {
-					if child.Type == ast.EntityFunction || child.Type == ast.EntityMethod {
+					if child.Type == ast.EntityFunction {
 						bMethods = append(bMethods, child)
 					}
 				}
@@ -540,7 +540,7 @@ func TestScopeRegressionScenarios(t *testing.T) {
 
 				var cMethods []*ast.Entity
 				for _, child := range c.Children {
-					if child.Type == ast.EntityFunction || child.Type == ast.EntityMethod {
+					if child.Type == ast.EntityFunction {
 						cMethods = append(cMethods, child)
 					}
 				}
@@ -581,7 +581,7 @@ public:
 				// Filter for methods only
 				var methods []*ast.Entity
 				for _, child := range class.Children {
-					if child.Type == ast.EntityFunction || child.Type == ast.EntityMethod {
+					if child.Type == ast.EntityFunction {
 						methods = append(methods, child)
 					}
 				}

@@ -8,17 +8,17 @@ import (
 )
 
 // parsePreprocessor handles preprocessor directives
-func (p *Parser) parsePreprocessor() error {
-	start := p.tokenCache.getCurrentPosition()
-	p.tokenCache.advance() // consume '#'
+func (p *Parser) parsePreprocessor() (*ast.Entity, error) {
+	start := p.tokenizer.GetCurrentOffset()
+	p.tokenizer.NextToken() // consume '#'
 
-	p.tokenCache.skipWhitespace()
+	p.tokenizer.SkipWhitespace()
 
-	if p.tokenCache.isAtEnd() {
-		return nil
+	if p.tokenizer.IsAtEnd() {
+		return nil, fmt.Errorf("unexpected end of input")
 	}
 
-	directive := p.tokenCache.peek()
+	directive := p.tokenizer.PeekToken(0)
 
 	if directive.Type == TokenIdentifier && directive.Value == "define" {
 		return p.parseDefine(start)
@@ -29,35 +29,35 @@ func (p *Parser) parsePreprocessor() error {
 }
 
 // parseDefine handles #define directives
-func (p *Parser) parseDefine(start int) error {
-	p.tokenCache.advance() // consume 'define'
-	p.tokenCache.skipWhitespace()
+func (p *Parser) parseDefine(start int) (*ast.Entity, error) {
+	p.tokenizer.NextToken() // consume 'define'
+	p.tokenizer.SkipWhitespace()
 
-	if p.tokenCache.isAtEnd() {
-		return p.formatErrorAtCurrentPosition("expected identifier after #define")
+	if p.tokenizer.IsAtEnd() {
+		return nil, p.formatErrorAtCurrentPosition("expected identifier after #define")
 	}
 
-	nameToken := p.tokenCache.peek()
+	nameToken := p.tokenizer.PeekToken(0)
 	if nameToken.Type != TokenIdentifier {
-		return p.formatError("expected identifier after #define", nameToken)
+		return nil, p.formatError("expected identifier after #define", nameToken)
 	}
-	p.tokenCache.advance()
+	p.tokenizer.NextToken()
 
 	// Collect the definition value until end of line or end of file
 	var value strings.Builder
 	depth := 0
 	lastWasSpace := false
 
-	for !p.tokenCache.isAtEnd() {
-		token := p.tokenCache.peek()
+	for !p.tokenizer.IsAtEnd() {
+		token := p.tokenizer.PeekToken(0)
 
 		// Handle multiline macros with backslash continuation
 		if token.Type == TokenBackslash {
-			p.tokenCache.advance()
+			p.tokenizer.NextToken()
 			// Skip the backslash and any following whitespace/newline
-			p.tokenCache.skipWhitespace()
-			if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenNewline {
-				p.tokenCache.advance()
+			p.tokenizer.SkipWhitespace()
+			if !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type == TokenNewline {
+				p.tokenizer.NextToken()
 			}
 			value.WriteString(" ") // Replace backslash-newline with space
 			lastWasSpace = true
@@ -85,7 +85,7 @@ func (p *Parser) parseDefine(start int) error {
 			value.WriteString(token.Value)
 			lastWasSpace = false
 		}
-		p.tokenCache.advance()
+		p.tokenizer.NextToken()
 	}
 
 	// Store the define
@@ -104,40 +104,34 @@ func (p *Parser) parseDefine(start int) error {
 	}
 
 	entity := &ast.Entity{
-		Type:        ast.EntityPreprocessor,
-		Name:        defineName,
-		FullName:    defineName,
-		Signature:   signature,
-		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
+		Type:      ast.EntityPreprocessor,
+		Name:      defineName,
+		FullName:  defineName,
+		Signature: signature,
 	}
 
-	p.addEntity(entity)
-	return nil
+	return entity, nil
 }
 
 // parseOtherPreprocessor handles other preprocessor directives
-func (p *Parser) parseOtherPreprocessor(start int) error {
+func (p *Parser) parseOtherPreprocessor(start int) (*ast.Entity, error) {
 	// Consume until end of line
 	var content strings.Builder
 	content.WriteString("#")
 
-	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenNewline {
-		content.WriteString(p.tokenCache.peek().Value)
-		p.tokenCache.advance()
+	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type != TokenNewline {
+		content.WriteString(p.tokenizer.PeekToken(0).Value)
+		p.tokenizer.NextToken()
 	}
 
 	entity := &ast.Entity{
-		Type:        ast.EntityPreprocessor,
-		Name:        strings.TrimSpace(content.String()),
-		FullName:    strings.TrimSpace(content.String()),
-		Signature:   content.String(),
-		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
+		Type:      ast.EntityPreprocessor,
+		Name:      strings.TrimSpace(content.String()),
+		FullName:  strings.TrimSpace(content.String()),
+		Signature: content.String(),
 	}
 
-	p.addEntity(entity)
-	return nil
+	return entity, nil
 }
 
 // resolveDefine recursively resolves defines to their final values

@@ -6,19 +6,6 @@ import (
 	"strings"
 )
 
-// Position represents a position in the source file
-type Position struct {
-	Line   int
-	Column int
-	Offset int
-}
-
-// Range represents a range in the source file
-type Range struct {
-	Start Position
-	End   Position
-}
-
 // EntityType represents the type of documentable entity
 type EntityType int
 
@@ -28,7 +15,6 @@ const (
 	EntityClass
 	EntityStruct
 	EntityFunction
-	EntityMethod
 	EntityConstructor
 	EntityDestructor
 	EntityVariable
@@ -44,8 +30,7 @@ const (
 	EntityUnion
 	EntityPreprocessor
 	EntityComment
-	EntityScopeOpen
-	EntityScopeClose
+	EntityIdentifier
 	EntityUnknown
 )
 
@@ -63,8 +48,6 @@ func (et EntityType) String() string {
 		return "enum"
 	case EntityFunction:
 		return "function"
-	case EntityMethod:
-		return "method"
 	case EntityConstructor:
 		return "constructor"
 	case EntityDestructor:
@@ -87,10 +70,8 @@ func (et EntityType) String() string {
 		return "comment"
 	case EntityAccessSpecifier:
 		return "access"
-	case EntityScopeOpen:
-		return "scope-open"
-	case EntityScopeClose:
-		return "scope-close"
+	case EntityIdentifier:
+		return "identifier"
 	case EntityUnknown:
 		return "unknown"
 	default:
@@ -131,6 +112,7 @@ type Entity struct {
 	AccessLevel AccessLevel // C++ access level (for class members)
 
 	// C++ language attributes
+	Defines              []string // List of macro definitions
 	IsStatic             bool     // Whether entity is static
 	IsConst              bool     // Whether entity is const
 	IsConstexpr          bool     // Whether entity is constexpr
@@ -151,12 +133,7 @@ type Entity struct {
 	Parent   *Entity   // Parent entity
 
 	// Source information
-	SourceRange  Range  // Range in source file
-	HeaderRange  Range  // Range of just the declaration/header
-	BodyRange    *Range // Range of body (for functions/classes with implementation)
-	OriginalText string // Original text including whitespace and comments
-	LeadingWS    string // Leading whitespace/comments before entity
-	TrailingWS   string // Trailing whitespace/comments after entity
+	Body string // Original text including whitespace and comments
 }
 
 // GetPath returns the hierarchical path to this entity
@@ -266,12 +243,10 @@ type ScopeTree struct {
 // NewScopeTree creates a new scope tree
 func NewScopeTree(filename, content string) *ScopeTree {
 	root := &Entity{
-		Type:         EntityRoot,
-		Name:         "",
-		FullName:     "",
-		Children:     make([]*Entity, 0),
-		SourceRange:  Range{Start: Position{Line: 1, Column: 1, Offset: 0}, End: Position{Line: strings.Count(content, "\n") + 1, Column: 1, Offset: len(content)}},
-		OriginalText: content,
+		Type:     EntityRoot,
+		Name:     "",
+		Children: make([]*Entity, 0),
+		Body:     content,
 	}
 
 	return &ScopeTree{

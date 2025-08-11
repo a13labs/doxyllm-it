@@ -1,74 +1,54 @@
 package parser_new
 
 import (
-	"strings"
-
 	ast "doxyllm-it/pkg/ast_new"
+	"strings"
 )
 
 // parseVariable handles variable declarations
-func (p *Parser) parseVariable() error {
-	start := p.tokenCache.getCurrentPosition()
+func (p *Parser) parseVariable() (*ast.Entity, error) {
 
 	// Parse specifiers first
 	var isStatic, isConst, isConstexpr, isExtern bool
 
-	// Parse variable specifiers
-	for !p.tokenCache.isAtEnd() {
-		token := p.tokenCache.peek()
-		if token.Type == TokenStatic {
-			isStatic = true
-			p.tokenCache.advance()
-			p.tokenCache.skipWhitespace()
-		} else if token.Type == TokenConst {
-			isConst = true
-			p.tokenCache.advance()
-			p.tokenCache.skipWhitespace()
-		} else if token.Type == TokenConstexpr {
-			isConstexpr = true
-			isConst = true // constexpr implies const
-			p.tokenCache.advance()
-			p.tokenCache.skipWhitespace()
-		} else if token.Type == TokenExtern {
-			isExtern = true
-			p.tokenCache.advance()
-			p.tokenCache.skipWhitespace()
-		} else if token.Type == TokenMutable {
-			p.tokenCache.advance() // consume but don't track mutable for now
-			p.tokenCache.skipWhitespace()
-		} else {
-			break
-		}
-	}
-
-	// Parse until semicolon
-	var signature strings.Builder
-	var name string
+	signature := strings.Builder{}
 	lastIdentifier := ""
-
-	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenSemicolon {
-		token := p.tokenCache.peek()
-
-		// Resolve defines in token values
-		tokenValue := token.Value
-		if token.Type == TokenIdentifier {
-			tokenValue = p.resolveDefine(token.Value)
-		}
-
-		signature.WriteString(tokenValue)
-
-		if token.Type == TokenIdentifier {
+	sigReady := false
+	for !p.tokenizer.IsAtEnd() && !sigReady {
+		token := p.tokenizer.PeekToken(0)
+		switch token.Type {
+		case TokenWhitespace, TokenNewline:
+			if signature.Len() == 0 {
+				p.tokenizer.NextToken() // skip whitespace at start of signature
+				continue
+			}
+			signature.WriteString(" ")
+		case TokenSemicolon:
+			signature.WriteString(token.Value)
+			p.tokenizer.NextToken()
+			sigReady = true
+			continue
+		case TokenExtern:
+			isExtern = true
+			signature.WriteString(token.Value)
+		case TokenStatic:
+			isStatic = true
+			signature.WriteString(token.Value)
+		case TokenConstexpr:
+			isConstexpr = true
+			signature.WriteString(token.Value)
+		case TokenIdentifier:
 			lastIdentifier = token.Value
+			signature.WriteString(token.Value)
+		default:
+			signature.WriteString(token.Value)
 		}
-
-		p.tokenCache.advance()
+		p.tokenizer.NextToken()
 	}
 
-	if p.tokenCache.match(TokenSemicolon) {
-		signature.WriteString(";")
+	if !sigReady {
+		return nil, p.formatErrorAtCurrentPosition("variable signature is incomplete")
 	}
-
-	name = lastIdentifier
 
 	entityType := ast.EntityVariable
 	if p.isInsideClass() {
@@ -77,17 +57,15 @@ func (p *Parser) parseVariable() error {
 
 	entity := &ast.Entity{
 		Type:        entityType,
-		Name:        name,
-		FullName:    p.buildFullName(name),
+		Name:        lastIdentifier,
+		FullName:    p.buildFullName(lastIdentifier),
 		Signature:   signature.String(),
 		AccessLevel: p.getCurrentAccessLevel(),
 		IsStatic:    isStatic,
 		IsConst:     isConst,
 		IsConstexpr: isConstexpr,
 		IsExtern:    isExtern,
-		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 	}
 
-	p.addEntity(entity)
-	return nil
+	return entity, nil
 }

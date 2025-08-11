@@ -8,191 +8,77 @@ import (
 )
 
 // parseClass handles class declarations
-func (p *Parser) parseClass() error {
+func (p *Parser) parseClass() (*ast.Entity, error) {
 	return p.parseClassOrStruct(ast.EntityClass)
 }
 
 // parseStruct handles struct declarations
-func (p *Parser) parseStruct() error {
+func (p *Parser) parseStruct() (*ast.Entity, error) {
 	return p.parseClassOrStruct(ast.EntityStruct)
 }
 
-// parseClassOrStruct handles both class and struct declarations
-func (p *Parser) parseClassOrStruct(entityType ast.EntityType) error {
-	start := p.tokenCache.getCurrentPosition()
-	keyword := p.tokenCache.advance() // consume 'class' or 'struct'
+func (p *Parser) parseClassOrStruct(entityType ast.EntityType) (*ast.Entity, error) {
+	signature := ""
 
-	p.tokenCache.skipWhitespace()
+	keyword := p.tokenizer.NextToken()
 
-	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return p.formatErrorAtCurrentPosition(fmt.Sprintf("expected %s name", keyword.Value))
+	p.tokenizer.SkipWhitespace()
+
+	if p.tokenizer.IsAtEnd() || p.tokenizer.PeekToken(0).Type != TokenIdentifier {
+		return nil, p.formatErrorAtCurrentPosition(fmt.Sprintf("expected %s name", keyword.Value))
 	}
 
-	nameToken := p.tokenCache.advance()
+	nameToken := p.tokenizer.NextToken()
+
+	// Build signature
+	signature = fmt.Sprintf("%s %s", keyword.Value, nameToken.Value)
 
 	// Parse inheritance if present
 	inheritance := ""
-	p.tokenCache.skipWhitespace()
-	if p.tokenCache.match(TokenColon) {
+	p.tokenizer.SkipWhitespaceAndNewlines()
+	if p.tokenizer.Match(TokenColon) {
 		inheritance = p.parseInheritance()
 	}
 
-	p.tokenCache.skipWhitespace()
+	p.tokenizer.SkipWhitespace()
 
-	// Build signature
-	signature := fmt.Sprintf("%s %s", keyword.Value, nameToken.Value)
 	if inheritance != "" {
-		signature += " : " + inheritance
+		signature += fmt.Sprintf(" : %s", inheritance)
 	}
 
-	// Allow newline and comments before opening brace
-	p.tokenCache.skipWhitespaceAndNewlines()
-	for {
-		if p.tokenCache.isAtEnd() {
-			break
-		}
-		tok := p.tokenCache.peek()
-		if tok.Type == TokenLineComment || tok.Type == TokenBlockComment || tok.Type == TokenDoxygenComment {
-			p.tokenCache.advance()
-			p.tokenCache.skipWhitespaceAndNewlines()
-			continue
-		}
-		break
-	}
+	p.tokenizer.SkipWhitespaceAndNewlines()
+
 	// Check for semicolon (forward declaration)
-	isForwardDeclaration := false
-	if !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenSemicolon {
-		// This is a forward declaration - consume the semicolon
-		isForwardDeclaration = true
-		p.tokenCache.advance()
-	}
-	// Note: Opening braces are now handled by the main parser dispatch
+	isForwardDeclaration := p.tokenizer.Match(TokenSemicolon)
 
 	entity := &ast.Entity{
 		Type:                 entityType,
 		Name:                 nameToken.Value,
-		FullName:             p.buildFullName(nameToken.Value),
 		Signature:            signature, // Clean signature without braces
-		AccessLevel:          p.getCurrentAccessLevel(),
 		IsForwardDeclaration: isForwardDeclaration,
-		SourceRange:          p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
 		Children:             make([]*ast.Entity, 0),
 	}
 
-	p.addEntity(entity)
-
-	// For non-forward declarations, the opening brace (if present) will be handled
-	// by the main parser and create its own scope. We need to associate this entity
-	// with that scope when it's created.
-	if !isForwardDeclaration {
-		// Set default access level for class entities (will apply when scope is entered)
-		if entityType == ast.EntityClass {
-			p.accessStack = append(p.accessStack, ast.AccessPrivate) // class default
-		} else {
-			p.accessStack = append(p.accessStack, ast.AccessPublic) // struct default
-		}
+	if isForwardDeclaration {
+		// Forward declaration - no body
+		return entity, nil
 	}
 
-	return nil
+	// Parse the class body
+	if !p.tokenizer.Match(TokenLeftBrace) {
+		return nil, p.formatErrorAtCurrentPosition("expected '{' to start class body")
+	}
+
+	return entity, nil
 }
 
 // parseInheritance parses class inheritance specification
 func (p *Parser) parseInheritance() string {
 	var inheritance strings.Builder
 
-	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenLeftBrace && p.tokenCache.peek().Type != TokenSemicolon {
-		inheritance.WriteString(p.tokenCache.peek().Value)
-		p.tokenCache.advance()
+	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type != TokenLeftBrace && p.tokenizer.PeekToken(0).Type != TokenSemicolon {
+		inheritance.WriteString(p.tokenizer.NextToken().Value)
 	}
 
 	return strings.TrimSpace(inheritance.String())
-}
-
-// parseClassWithMacro handles class declarations preceded by macros
-func (p *Parser) parseClassWithMacro() error {
-	return p.parseClassOrStructWithMacro(ast.EntityClass)
-}
-
-// parseStructWithMacro handles struct declarations preceded by macros
-func (p *Parser) parseStructWithMacro() error {
-	return p.parseClassOrStructWithMacro(ast.EntityStruct)
-}
-
-// parseClassOrStructWithMacro handles class/struct declarations preceded by macros
-func (p *Parser) parseClassOrStructWithMacro(entityType ast.EntityType) error {
-	start := p.tokenCache.getCurrentPosition()
-
-	// Resolve the macro
-	macroToken := p.tokenCache.advance()
-	macroValue := p.resolveDefine(macroToken.Value)
-
-	p.tokenCache.skipWhitespace()
-
-	// Now parse the class/struct normally but include the macro in the signature
-	keyword := p.tokenCache.advance() // consume 'class' or 'struct'
-
-	p.tokenCache.skipWhitespace()
-
-	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return p.formatErrorAtCurrentPosition(fmt.Sprintf("expected %s name", keyword.Value))
-	}
-
-	nameToken := p.tokenCache.advance()
-
-	// Parse inheritance if present
-	inheritance := ""
-	p.tokenCache.skipWhitespace()
-	if p.tokenCache.match(TokenColon) {
-		inheritance = p.parseInheritance()
-	}
-
-	p.tokenCache.skipWhitespace()
-
-	// Build signature with macro
-	signature := fmt.Sprintf("%s %s %s", macroValue, keyword.Value, nameToken.Value)
-	if inheritance != "" {
-		signature += " : " + inheritance
-	}
-	// Allow newline and comments before opening brace
-	p.tokenCache.skipWhitespaceAndNewlines()
-	for {
-		if p.tokenCache.isAtEnd() {
-			break
-		}
-		tok := p.tokenCache.peek()
-		if tok.Type == TokenLineComment || tok.Type == TokenBlockComment || tok.Type == TokenDoxygenComment {
-			p.tokenCache.advance()
-			p.tokenCache.skipWhitespaceAndNewlines()
-			continue
-		}
-		break
-	}
-	if p.tokenCache.match(TokenLeftBrace) {
-		signature += " {"
-	}
-
-	entity := &ast.Entity{
-		Type:        entityType,
-		Name:        nameToken.Value,
-		FullName:    p.buildFullName(nameToken.Value),
-		Signature:   signature,
-		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
-		Children:    make([]*ast.Entity, 0),
-	}
-
-	p.addEntity(entity)
-
-	// Enter scope if we found opening brace
-	if strings.Contains(signature, "{") {
-		p.enterScope(entity)
-		// Set default access level for the new scope
-		if entityType == ast.EntityClass {
-			p.accessStack = append(p.accessStack, ast.AccessPrivate) // class default
-		} else {
-			p.accessStack = append(p.accessStack, ast.AccessPublic) // struct default
-		}
-	}
-
-	return nil
 }

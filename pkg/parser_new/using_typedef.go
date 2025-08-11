@@ -8,116 +8,129 @@ import (
 )
 
 // parseTypedef handles typedef declarations
-func (p *Parser) parseTypedef() error {
-	start := p.tokenCache.getCurrentPosition()
-	p.tokenCache.advance() // consume 'typedef'
+func (p *Parser) parseTypedef() (*ast.Entity, error) {
+	p.tokenizer.NextToken() // consume 'typedef'
 
 	// Parse until we find the identifier and semicolon
 	var signature strings.Builder
 	signature.WriteString("typedef")
 
-	var name string
-	lastIdentifier := ""
-	previousWasSpace := false
+	childs := make([]*ast.Entity, 0)
+	var structEntity *ast.Entity
+	var err error
+	var lastIdentifier string
 
-	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenSemicolon {
-		token := p.tokenCache.peek()
-
-		if token.Type == TokenWhitespace {
-			if !previousWasSpace {
-				signature.WriteString(" ")
-				previousWasSpace = true
-			}
-		} else {
-			if !previousWasSpace && signature.Len() > 0 {
-				signature.WriteString(" ")
-			}
-			signature.WriteString(token.Value)
-			previousWasSpace = false
-		}
-
-		if token.Type == TokenIdentifier {
-			lastIdentifier = token.Value
-		}
-
-		p.tokenCache.advance()
+	entity := &ast.Entity{
+		Type:      ast.EntityTypedef,
+		Signature: signature.String(),
 	}
 
-	if p.tokenCache.match(TokenSemicolon) {
+	p.tokenizer.SkipWhitespace()
+
+	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type != TokenSemicolon {
+
+		p.tokenizer.SkipWhitespace()
+
+		if p.tokenizer.IsAtEnd() || p.tokenizer.PeekToken(0).Type == TokenSemicolon {
+			break
+		}
+
+		token := p.tokenizer.PeekToken(0)
+
+		switch token.Type {
+		case TokenIdentifier:
+			childs = append(childs, &ast.Entity{
+				Type:      ast.EntityIdentifier,
+				Name:      token.Value,
+				Signature: token.Value,
+			})
+			lastIdentifier = token.Value
+		case TokenStruct:
+			if structEntity != nil {
+				return nil, p.formatErrorAtCurrentPosition("multiple structs in typedef")
+			}
+			structEntity, err = p.parseStruct()
+			if err != nil {
+				return nil, err
+			}
+			signature.WriteString(" " + structEntity.Name)
+		}
+
+		p.tokenizer.NextToken()
+	}
+
+	entity.Name = lastIdentifier // The last identifier is typically the typedef name
+
+	if p.tokenizer.Match(TokenSemicolon) {
 		signature.WriteString(";")
 	}
 
-	name = lastIdentifier // The last identifier is typically the typedef name
-
-	entity := &ast.Entity{
-		Type:        ast.EntityTypedef,
-		Name:        name,
-		FullName:    p.buildFullName(name),
-		Signature:   signature.String(),
-		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
+	if structEntity != nil {
+		entity.AddChild(structEntity)
 	}
 
-	p.addEntity(entity)
-	return nil
+	for _, child := range childs {
+		entity.AddChild(child)
+	}
+
+	return entity, nil
 }
 
 // parseUsing handles using declarations
-func (p *Parser) parseUsing() error {
-	start := p.tokenCache.getCurrentPosition()
-	p.tokenCache.advance() // consume 'using'
+func (p *Parser) parseUsing() (*ast.Entity, error) {
+	p.tokenizer.NextToken() // consume 'using'
 
-	p.tokenCache.skipWhitespace()
+	p.tokenizer.SkipWhitespace()
 
-	if p.tokenCache.isAtEnd() {
-		return p.formatErrorAtCurrentPosition("expected identifier after using")
+	if p.tokenizer.IsAtEnd() {
+		return nil, p.formatErrorAtCurrentPosition("expected identifier after using")
 	}
 
 	// Check for 'namespace' keyword
-	if p.tokenCache.peek().Type == TokenNamespace {
-		return p.parseUsingNamespace(start)
+	if p.tokenizer.PeekToken(0).Type == TokenNamespace {
+		return p.parseUsingNamespace()
 	}
 
 	// Parse the full qualified name (could include ::)
 	var fullNameBuilder strings.Builder
 
 	// First identifier is required
-	if p.tokenCache.peek().Type != TokenIdentifier {
-		return p.formatErrorAtCurrentPosition("expected identifier after using")
+	if p.tokenizer.PeekToken(0).Type != TokenIdentifier {
+		return nil, p.formatErrorAtCurrentPosition("expected identifier after using")
 	}
 
-	nameToken := p.tokenCache.advance()
+	nameToken := p.tokenizer.NextToken()
 	fullNameBuilder.WriteString(nameToken.Value)
 
 	// Handle qualified names like std::data
-	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenDoubleColon {
+	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type == TokenDoubleColon {
 		fullNameBuilder.WriteString("::")
-		p.tokenCache.advance()
+		p.tokenizer.NextToken()
 
-		if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
+		if p.tokenizer.IsAtEnd() || p.tokenizer.PeekToken(0).Type != TokenIdentifier {
 			break
 		}
 
-		nextToken := p.tokenCache.advance()
+		nextToken := p.tokenizer.NextToken()
 		fullNameBuilder.WriteString(nextToken.Value)
 		nameToken = nextToken // Update nameToken to be the last identifier
 	}
 
-	p.tokenCache.skipWhitespace()
+	p.tokenizer.SkipWhitespace()
 
 	var signature string
 	var entityType ast.EntityType
 
 	// Check if this is a type alias (using name = type) or a using declaration (using std::name)
-	if p.tokenCache.peek().Type == TokenEquals {
+	if p.tokenizer.PeekToken(0).Type == TokenEquals {
 		// Type alias: using name = type
-		p.tokenCache.advance() // consume '='
+		p.tokenizer.NextToken() // consume '='
 
 		// Parse the rest until semicolon
 		var typeValue strings.Builder
-		for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type != TokenSemicolon {
-			typeValue.WriteString(p.tokenCache.peek().Value)
-			p.tokenCache.advance()
+		for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type != TokenSemicolon {
+			typeValue.WriteString(p.tokenizer.PeekToken(0).Value)
+			p.tokenizer.NextToken()
 		}
 
 		signature = fmt.Sprintf("using %s = %s", nameToken.Value, typeValue.String())
@@ -128,65 +141,58 @@ func (p *Parser) parseUsing() error {
 		entityType = ast.EntityUsing
 	}
 
-	if p.tokenCache.match(TokenSemicolon) {
+	if p.tokenizer.Match(TokenSemicolon) {
 		// consumed semicolon
 	}
 
 	entity := &ast.Entity{
-		Type:        entityType,
-		Name:        nameToken.Value,
-		FullName:    p.buildFullName(nameToken.Value),
-		Signature:   signature,
-		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
+		Type:      entityType,
+		Name:      nameToken.Value,
+		Signature: signature,
 	}
 
-	p.addEntity(entity)
-	return nil
+	return entity, nil
 }
 
 // parseUsingNamespace handles using namespace declarations
-func (p *Parser) parseUsingNamespace(start int) error {
-	p.tokenCache.advance() // consume 'namespace'
+func (p *Parser) parseUsingNamespace() (*ast.Entity, error) {
+	p.tokenizer.NextToken() // consume 'namespace'
 
-	p.tokenCache.skipWhitespace()
+	p.tokenizer.SkipWhitespace()
 
-	if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
-		return p.formatErrorAtCurrentPosition("expected namespace name after using namespace")
+	if p.tokenizer.IsAtEnd() || p.tokenizer.PeekToken(0).Type != TokenIdentifier {
+		return nil, p.formatErrorAtCurrentPosition("expected namespace name after using namespace")
 	}
 
-	nameToken := p.tokenCache.advance()
+	nameToken := p.tokenizer.NextToken()
 
 	// Parse qualified namespace name
 	var namespaceName strings.Builder
 	namespaceName.WriteString(nameToken.Value)
 
-	for !p.tokenCache.isAtEnd() && p.tokenCache.peek().Type == TokenDoubleColon {
+	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type == TokenDoubleColon {
 		namespaceName.WriteString("::")
-		p.tokenCache.advance()
+		p.tokenizer.NextToken()
 
-		if p.tokenCache.isAtEnd() || p.tokenCache.peek().Type != TokenIdentifier {
+		if p.tokenizer.IsAtEnd() || p.tokenizer.PeekToken(0).Type != TokenIdentifier {
 			break
 		}
 
-		namespaceName.WriteString(p.tokenCache.advance().Value)
+		namespaceName.WriteString(p.tokenizer.NextToken().Value)
 	}
 
-	if p.tokenCache.match(TokenSemicolon) {
+	if p.tokenizer.Match(TokenSemicolon) {
 		// consumed semicolon
 	}
 
 	signature := fmt.Sprintf("using namespace %s", namespaceName.String())
 
 	entity := &ast.Entity{
-		Type:        ast.EntityUsing,
-		Name:        namespaceName.String(),
-		FullName:    namespaceName.String(),
-		Signature:   signature,
-		AccessLevel: p.getCurrentAccessLevel(),
-		SourceRange: p.getRangeFromTokens(start, p.tokenCache.getCurrentPosition()-1),
+		Type:      ast.EntityUsing,
+		Name:      namespaceName.String(),
+		FullName:  namespaceName.String(),
+		Signature: signature,
 	}
 
-	p.addEntity(entity)
-	return nil
+	return entity, nil
 }
