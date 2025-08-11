@@ -96,7 +96,7 @@ func (p *Parser) Parse(filename, content string) (*ast.ScopeTree, error) {
 // parseNext parses top-level declarations
 func (p *Parser) parseNext() (*ast.Entity, error) {
 
-	p.tokenizer.SkipWhitespaceAndNewlines()
+	p.tokenizer.SkipWhitespace()
 
 	// Handle different token types
 	token := p.tokenizer.PeekToken(0)

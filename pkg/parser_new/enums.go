@@ -30,7 +30,7 @@ func (p *Parser) parseEnum() (*ast.Entity, error) {
 
 	nameToken := p.tokenizer.NextToken()
 
-	p.tokenizer.SkipWhitespaceAndNewlines()
+	p.tokenizer.SkipWhitespace()
 
 	// Parse underlying type if present
 	underlyingType := ""
@@ -38,7 +38,7 @@ func (p *Parser) parseEnum() (*ast.Entity, error) {
 		underlyingType = p.parseType()
 	}
 
-	p.tokenizer.SkipWhitespaceAndNewlines()
+	p.tokenizer.SkipWhitespace()
 
 	signature += " " + nameToken.Value
 	if underlyingType != "" {

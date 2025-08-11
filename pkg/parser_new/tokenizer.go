@@ -348,15 +348,6 @@ func (t *Tokenizer) Match(types ...TokenType) bool {
 
 func (t *Tokenizer) SkipWhitespace() {
 	for !t.IsAtEnd() {
-		if !unicode.IsSpace(t.peek()) {
-			break
-		}
-		t.next()
-	}
-}
-
-func (t *Tokenizer) SkipWhitespaceAndNewlines() {
-	for !t.IsAtEnd() {
 		if !unicode.IsSpace(t.peek()) && t.peek() != '\n' {
 			break
 		}

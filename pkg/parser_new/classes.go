@@ -35,7 +35,7 @@ func (p *Parser) parseClassOrStruct(entityType ast.EntityType) (*ast.Entity, err
 
 	// Parse inheritance if present
 	inheritance := ""
-	p.tokenizer.SkipWhitespaceAndNewlines()
+	p.tokenizer.SkipWhitespace()
 	if p.tokenizer.Match(TokenColon) {
 		inheritance = p.parseInheritance()
 	}
@@ -46,10 +46,13 @@ func (p *Parser) parseClassOrStruct(entityType ast.EntityType) (*ast.Entity, err
 		signature += fmt.Sprintf(" : %s", inheritance)
 	}
 
-	p.tokenizer.SkipWhitespaceAndNewlines()
+	p.tokenizer.SkipWhitespace()
 
 	// Check for semicolon (forward declaration)
 	isForwardDeclaration := p.tokenizer.Match(TokenSemicolon)
+	if !isForwardDeclaration && !p.tokenizer.Match(TokenLeftBrace) {
+		return nil, p.formatErrorAtCurrentPosition("expected semicolon for forward declaration or '{' to start class body")
+	}
 
 	entity := &ast.Entity{
 		Type:                 entityType,
@@ -57,16 +60,6 @@ func (p *Parser) parseClassOrStruct(entityType ast.EntityType) (*ast.Entity, err
 		Signature:            signature, // Clean signature without braces
 		IsForwardDeclaration: isForwardDeclaration,
 		Children:             make([]*ast.Entity, 0),
-	}
-
-	if isForwardDeclaration {
-		// Forward declaration - no body
-		return entity, nil
-	}
-
-	// Parse the class body
-	if !p.tokenizer.Match(TokenLeftBrace) {
-		return nil, p.formatErrorAtCurrentPosition("expected '{' to start class body")
 	}
 
 	return entity, nil

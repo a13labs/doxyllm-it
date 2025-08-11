@@ -12,7 +12,7 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 	p.tokenizer.NextToken() // consume 'template'
 
 	// Skip whitespace and newlines
-	p.tokenizer.SkipWhitespaceAndNewlines()
+	p.tokenizer.SkipWhitespace()
 
 	// Parse template parameters
 	if !p.tokenizer.Match(TokenLess) {
@@ -35,7 +35,7 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 		p.tokenizer.NextToken()
 	}
 
-	p.tokenizer.SkipWhitespaceAndNewlines()
+	p.tokenizer.SkipWhitespace()
 
 	token := p.tokenizer.PeekToken(0)
 

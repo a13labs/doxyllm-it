@@ -37,11 +37,15 @@ func (p *Parser) parseNamespace() (*ast.Entity, error) {
 		}
 	}
 
-	namespaceName := nameBuilder.String()
-
 	p.tokenizer.SkipWhitespace()
 
+	// The next token must be {
+	if !p.tokenizer.Match(TokenLeftBrace) {
+		return nil, p.formatErrorAtCurrentPosition("expected '{' after namespace")
+	}
+
 	// Build signature
+	namespaceName := nameBuilder.String()
 	signature := fmt.Sprintf("namespace %s", namespaceName)
 
 	// Note: Opening braces are now handled by the main parser dispatch
