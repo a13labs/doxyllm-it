@@ -69,7 +69,7 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 		return e, nil
 	default:
 		// Template function
-		e, err := p.parseIdentifier()
+		e, err := p.parseDefault()
 		if err != nil {
 			return nil, err
 		}

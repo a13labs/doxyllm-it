@@ -22,27 +22,23 @@ func (p *Parser) parseVariable() (*ast.Entity, error) {
 				p.tokenizer.NextToken() // skip whitespace at start of signature
 				continue
 			}
-			signature.WriteString(" ")
 		case TokenSemicolon:
-			signature.WriteString(token.Value)
 			p.tokenizer.NextToken()
 			sigReady = true
 			continue
 		case TokenExtern:
 			isExtern = true
-			signature.WriteString(token.Value)
 		case TokenStatic:
 			isStatic = true
-			signature.WriteString(token.Value)
 		case TokenConstexpr:
 			isConstexpr = true
-			signature.WriteString(token.Value)
+		case TokenConst:
+			isConst = true
 		case TokenIdentifier:
 			lastIdentifier = token.Value
-			signature.WriteString(token.Value)
 		default:
-			signature.WriteString(token.Value)
 		}
+		signature.WriteString(token.Value)
 		p.tokenizer.NextToken()
 	}
 

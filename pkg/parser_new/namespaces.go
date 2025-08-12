@@ -13,7 +13,7 @@ func (p *Parser) parseNamespace() (*ast.Entity, error) {
 
 	p.tokenizer.SkipWhitespace()
 
-	if p.tokenizer.IsAtEnd() || !p.isValidIdentifierToken(p.tokenizer.PeekToken(0)) {
+	if p.tokenizer.IsAtEnd() || p.tokenizer.PeekToken(0).Type != TokenIdentifier {
 		return nil, p.formatErrorAtCurrentPosition("expected namespace name")
 	}
 
@@ -27,7 +27,7 @@ func (p *Parser) parseNamespace() (*ast.Entity, error) {
 		if p.tokenizer.PeekToken(0).Type == TokenDoubleColon {
 			nameBuilder.WriteString(p.tokenizer.NextToken().Value) // add ::
 			p.tokenizer.SkipWhitespace()
-			if p.isValidIdentifierToken(p.tokenizer.PeekToken(0)) {
+			if p.tokenizer.PeekToken(0).Type == TokenIdentifier {
 				nameBuilder.WriteString(p.tokenizer.NextToken().Value) // add next identifier
 			} else {
 				break

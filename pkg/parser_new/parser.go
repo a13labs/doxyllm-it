@@ -125,19 +125,23 @@ func (p *Parser) parseNext() (*ast.Entity, error) {
 	case TokenRightBrace:
 		return nil, p.parseCloseBrace()
 	case TokenIdentifier:
-		return p.parseIdentifier()
+		return p.parseDefault()
 	default:
-		return p.parseIdentifier()
+		return p.parseDefault()
 	}
 }
 
-func (p *Parser) parseIdentifier() (*ast.Entity, error) {
+func (p *Parser) parseDefault() (*ast.Entity, error) {
 	defines := make([]string, 0)
 
 	offset := 0 // Start looking after the identifier
 	numIdentifiers := 0
 	for !p.tokenizer.IsAtEnd() {
 		nextToken := p.tokenizer.PeekToken(offset)
+		if IsKeyword(nextToken) {
+			offset++
+			continue
+		}
 		switch nextToken.Type {
 		case TokenWhitespace, TokenNewline:
 			offset++
@@ -147,14 +151,18 @@ func (p *Parser) parseIdentifier() (*ast.Entity, error) {
 			}
 			numIdentifiers++
 			offset++ // Keep looking for the next token
-		case TokenVoid, TokenInt, TokenDouble, TokenChar, TokenFloat, TokenBool, TokenStar, TokenAmpersand:
+		case TokenStar, TokenAmpersand, TokenLeftBracket, TokenRightBracket:
 			// These are valid types, continue
 			offset++ // Keep looking for the next token
-		case TokenOperator, TokenDoubleColon, TokenLess:
+		case TokenOperator, TokenDoubleColon, TokenLess, TokenEquals:
 			if numIdentifiers == 0 {
 				return nil, p.formatErrorAtCurrentPositionf("There must be some identifiers before a '%s'", nextToken.Value)
 			}
 			offset++
+		case TokenNumber, TokenString, TokenChar, TokenCharLiteral:
+			offset++
+		case TokenTilde:
+			offset++ // Tilde is valid, continue
 		case TokenLeftParen:
 			// Found a (, it must be a function
 			e, err := p.parseFunction()
@@ -206,48 +214,3 @@ func (p *Parser) parseIdentifier() (*ast.Entity, error) {
 	}
 	return nil, p.formatErrorAtCurrentPositionf("unexpected end of input after identifier")
 }
-
-// // advance returns the current token and moves to the next
-// func (p *Parser) advance() (Token, error) {
-// 	if p.tokenizer.isAtEnd() {
-// 		return Token{}, fmt.Errorf("unexpected end of input")
-// 	}
-// 	return p.tokenizer.NextToken(), nil
-// }
-
-// // isAtEnd checks if we're at the end of tokens
-// func (p *Parser) isAtEnd() bool {
-// 	return p.tokenizer.isAtEnd()
-// }
-
-// // peek returns the current token without advancing
-// func (p *Parser) peek() Token {
-// 	return p.tokenizer.PeekToken(1)
-// }
-
-// // peekAhead looks ahead by offset tokens
-// func (p *Parser) peekAhead(offset int) Token {
-// 	return p.tokenizer.PeekToken(offset)
-// }
-
-// // check returns true if current token is of given type
-// func (p *Parser) check(tokenType TokenType) bool {
-// 	if p.tokenizer.isAtEnd() {
-// 		return false
-// 	}
-// 	return p.tokenizer.PeekToken(1).Type == tokenType
-// }
-
-// // skipWhitespace skips whitespace tokens
-// func (p *Parser) skipWhitespace() {
-// 	for !p.tokenizer.isAtEnd() && p.tokenizer.PeekToken(1).Type == TokenWhitespace {
-// 		p.tokenizer.NextToken()
-// 	}
-// }
-
-// // skipWhitespaceAndNewlines skips whitespace and newline tokens
-// func (p *Parser) skipWhitespaceAndNewlines() {
-// 	for !p.tokenizer.isAtEnd() && (p.tokenizer.PeekToken(1).Type == TokenWhitespace || p.tokenizer.PeekToken(1).Type == TokenNewline) {
-// 		p.tokenizer.NextToken()
-// 	}
-// }

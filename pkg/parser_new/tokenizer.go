@@ -348,7 +348,7 @@ func (t *Tokenizer) Match(types ...TokenType) bool {
 
 func (t *Tokenizer) SkipWhitespace() {
 	for !t.IsAtEnd() {
-		if !unicode.IsSpace(t.peek()) && t.peek() != '\n' {
+		if !unicode.IsSpace(t.peek()) {
 			break
 		}
 		t.next()
@@ -411,6 +411,11 @@ func (t *Tokenizer) Tokenize() []Token {
 		}
 	}
 	return tokens
+}
+
+func IsKeyword(token Token) bool {
+	_, exists := keywords[token.Value]
+	return exists
 }
 
 // scanToken scans and returns the next token from input

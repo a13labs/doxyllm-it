@@ -12,10 +12,11 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 	// Parse specifiers and attributes first
 	var isStatic, isInline, isVirtual, isConst, isConstexpr bool
 
-	name := ""
+	lastIdentifier := ""
 	signature := strings.Builder{}
 	hasBody := false
 	numIdentifiers := 0
+	numKeywords := 0
 	inParameters := false
 	sigReady := false
 	// Since this is a function read all tokens until we find either ; or {
@@ -23,45 +24,39 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 		token := p.tokenizer.PeekToken(0)
 		switch token.Type {
 		case TokenWhitespace, TokenNewline:
-			if numIdentifiers == 0 {
+			if numIdentifiers == 0 && numKeywords == 0 {
 				p.tokenizer.NextToken() // skip whitespace at start of signature
 				continue
 			}
-			signature.WriteString(" ")
 		case TokenSemicolon, TokenLeftBrace:
 			if token.Type == TokenLeftBrace {
 				hasBody = true
 			}
-			signature.WriteString(token.Value)
-			p.tokenizer.NextToken()
 			sigReady = true
 			continue
 		case TokenLeftParen:
 			inParameters = true
-			signature.WriteString(token.Value)
-		case TokenStatic:
-			isStatic = true
-			signature.WriteString(token.Value)
-		case TokenInline:
-			isInline = true
-			signature.WriteString(token.Value)
-		case TokenVirtual:
-			isVirtual = true
-			signature.WriteString(token.Value)
-		case TokenConstexpr:
-			isConstexpr = true
-			signature.WriteString(token.Value)
 		case TokenIdentifier:
 			if !inParameters {
-				// first identifier that is not a macro is the name of the entity
-				if _, exists := p.defines[token.Value]; !exists && name == "" {
-					name = token.Value
-				}
 				numIdentifiers++
+				lastIdentifier = token.Value
 			}
-			signature.WriteString(token.Value)
 		default:
-			signature.WriteString(token.Value)
+			if IsKeyword(token) {
+				numKeywords++
+				switch token.Type {
+				case TokenStatic:
+					isStatic = true
+				case TokenInline:
+					isInline = true
+				case TokenVirtual:
+					isVirtual = true
+				case TokenConstexpr:
+					isConstexpr = true
+				case TokenConst:
+					isConst = true
+				}
+			}
 		}
 		signature.WriteString(token.Value)
 		p.tokenizer.NextToken()
@@ -100,18 +95,20 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 				bodyText = bodyBuilder.String()
 			}
 		}
+	} else {
+		// consume ;
+		p.tokenizer.NextToken()
 	}
 
 	entityType := ast.EntityFunction
-	entitySignature := signature.String()
-	entityName := p.buildFullName(name)
+	entitySignature := strings.TrimSpace(signature.String())
 
 	// Check for special method types
 	if strings.HasPrefix(entitySignature, "~") {
 		// Detect destructor by checking for ~ in signature
 		entityType = ast.EntityDestructor
 	} else {
-		if numIdentifiers == 1 {
+		if numIdentifiers == 1 && numKeywords == 0 {
 			// If there's exactly one identifier until the parameter list, this is a constructor
 			entityType = ast.EntityConstructor
 		}
@@ -119,8 +116,8 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 
 	entity := &ast.Entity{
 		Type:        entityType,
-		Name:        entityName,
-		FullName:    p.buildFullName(name),
+		Name:        lastIdentifier,
+		FullName:    p.buildFullName(lastIdentifier),
 		Signature:   entitySignature,
 		AccessLevel: p.getCurrentAccessLevel(),
 		IsStatic:    isStatic,

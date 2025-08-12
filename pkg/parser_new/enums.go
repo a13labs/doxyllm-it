@@ -2,6 +2,7 @@ package parser_new
 
 import (
 	"fmt"
+	"strings"
 
 	ast "doxyllm-it/pkg/ast_new"
 )
@@ -53,4 +54,19 @@ func (p *Parser) parseEnum() (*ast.Entity, error) {
 	}
 
 	return entity, nil
+}
+
+// parseType parses a type specification
+func (p *Parser) parseType() string {
+	var typeStr strings.Builder
+
+	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type != TokenLeftBrace && p.tokenizer.PeekToken(0).Type != TokenSemicolon {
+		if p.tokenizer.PeekToken(0).Type == TokenLeftBrace {
+			break
+		}
+		typeStr.WriteString(p.tokenizer.PeekToken(0).Value)
+		p.tokenizer.NextToken()
+	}
+
+	return strings.TrimSpace(typeStr.String())
 }
