@@ -41,7 +41,9 @@ func (p *Parser) addEntity(entity *ast.Entity) {
 	entity.Parent = scope
 	scope.AddChild(entity)
 	if entity.Type == ast.EntityClass || entity.Type == ast.EntityStruct || entity.Type == ast.EntityNamespace {
-		p.enterScope(entity) // Enter new scope for class/struct/namespace
+		if !entity.IsForwardDeclaration {
+			p.enterScope(entity) // Enter new scope for class/struct/namespace
+		}
 	}
 	p.tree.AddEntity(entity)
 }
@@ -71,6 +73,5 @@ func (p *Parser) parseCloseBrace() error {
 
 	// Exit current scope
 	p.exitScope()
-
 	return nil
 }

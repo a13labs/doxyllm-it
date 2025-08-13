@@ -19,6 +19,9 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 	numKeywords := 0
 	inParameters := false
 	sigReady := false
+	inInheritance := false
+	inSpecialization := false
+	isOperator := false
 	// Since this is a function read all tokens until we find either ; or {
 	for !p.tokenizer.IsAtEnd() && !sigReady {
 		token := p.tokenizer.PeekToken(0)
@@ -34,16 +37,27 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 			}
 			sigReady = true
 			continue
+		case TokenLess:
+			inSpecialization = true
+		case TokenColon:
+			inInheritance = true
 		case TokenLeftParen:
 			inParameters = true
 		case TokenIdentifier:
-			if !inParameters {
+			if !inParameters && !inInheritance && !inSpecialization && !isOperator {
 				numIdentifiers++
 				lastIdentifier = token.Value
 			}
 		default:
+			if IsSymbol(token) {
+				if isOperator && !inParameters && !inInheritance && !inSpecialization {
+					lastIdentifier += token.Value
+				}
+			}
 			if IsKeyword(token) {
-				numKeywords++
+				if !inParameters && !inInheritance && !inSpecialization {
+					numKeywords++
+				}
 				switch token.Type {
 				case TokenStatic:
 					isStatic = true
@@ -55,6 +69,9 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 					isConstexpr = true
 				case TokenConst:
 					isConst = true
+				case TokenOperator:
+					isOperator = true
+					lastIdentifier = token.Value // operator name is the keyword itself
 				}
 			}
 		}

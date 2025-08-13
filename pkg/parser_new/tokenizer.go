@@ -293,6 +293,52 @@ var keywords = map[string]TokenType{
 	"delete":    TokenDelete,
 }
 
+var symbols = map[string]TokenType{
+	"(":  TokenLeftParen,
+	")":  TokenRightParen,
+	"{":  TokenLeftBrace,
+	"}":  TokenRightBrace,
+	"[":  TokenLeftBracket,
+	"]":  TokenRightBracket,
+	";":  TokenSemicolon,
+	":":  TokenColon,
+	"::": TokenDoubleColon,
+	",":  TokenComma,
+	".":  TokenDot,
+	"->": TokenArrow,
+	"=":  TokenEquals,
+	"==": TokenDoubleEquals,
+	"!=": TokenNotEquals,
+	"<":  TokenLess,
+	">":  TokenGreater,
+	"<=": TokenLessEqual,
+	">=": TokenGreaterEqual,
+	"&":  TokenAmpersand,
+	"&&": TokenDoubleAmp,
+	"|":  TokenPipe,
+	"||": TokenDoublePipe,
+	"^":  TokenCaret,
+	"~":  TokenTilde,
+	"!":  TokenExclamation,
+	"?":  TokenQuestion,
+	"+":  TokenPlus,
+	"-":  TokenMinus,
+	"*":  TokenStar,
+	"/":  TokenSlash,
+	"%":  TokenPercent,
+	"++": TokenPlusPlus,
+	"--": TokenMinusMinus,
+	"+=": TokenPlusEquals,
+	"-=": TokenMinusEquals,
+	"*=": TokenStarEquals,
+	"/=": TokenSlashEquals,
+	"<<": TokenLeftShift,
+	">>": TokenRightShift,
+	"#":  TokenHash,
+	"##": TokenHashHash,
+	"\\": TokenBackslash,
+}
+
 // Streaming Tokenizer - provides tokens on-demand following single responsibility principle
 type Tokenizer struct {
 	input  string
@@ -348,10 +394,12 @@ func (t *Tokenizer) Match(types ...TokenType) bool {
 
 func (t *Tokenizer) SkipWhitespace() {
 	for !t.IsAtEnd() {
-		if !unicode.IsSpace(t.peek()) {
+		token := t.PeekToken(0)
+
+		if !(token.Type == TokenWhitespace || token.Type == TokenNewline) {
 			break
 		}
-		t.next()
+		t.NextToken()
 	}
 }
 
@@ -416,6 +464,19 @@ func (t *Tokenizer) Tokenize() []Token {
 func IsKeyword(token Token) bool {
 	_, exists := keywords[token.Value]
 	return exists
+}
+
+func IsSymbol(token Token) bool {
+	_, exists := symbols[token.Value]
+	return exists
+}
+
+func IsLiteral(token Token) bool {
+	return token.Type == TokenNumber || token.Type == TokenString || token.Type == TokenCharLiteral
+}
+
+func IsWhitespace(token Token) bool {
+	return token.Type == TokenWhitespace || token.Type == TokenNewline
 }
 
 // scanToken scans and returns the next token from input

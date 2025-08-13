@@ -1,7 +1,6 @@
 package parser_new
 
 import (
-	"fmt"
 	"strings"
 
 	ast "doxyllm-it/pkg/ast_new"
@@ -10,12 +9,7 @@ import (
 // parsePreprocessor handles preprocessor directives
 func (p *Parser) parsePreprocessor() (*ast.Entity, error) {
 	p.tokenizer.NextToken() // consume '#'
-
 	p.tokenizer.SkipWhitespace()
-
-	if p.tokenizer.IsAtEnd() {
-		return nil, fmt.Errorf("unexpected end of input")
-	}
 
 	directive := p.tokenizer.PeekToken(0)
 

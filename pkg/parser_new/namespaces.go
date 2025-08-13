@@ -1,7 +1,6 @@
 package parser_new
 
 import (
-	"fmt"
 	"strings"
 
 	ast "doxyllm-it/pkg/ast_new"
@@ -9,52 +8,40 @@ import (
 
 // parseNamespace handles namespace declarations
 func (p *Parser) parseNamespace() (*ast.Entity, error) {
-	p.tokenizer.NextToken() // consume 'namespace'
 
+	signature := strings.Builder{}
+	nameBuilder := strings.Builder{}
+	signature.WriteString("namespace ")
+	p.tokenizer.NextToken() // consume 'namespace'
 	p.tokenizer.SkipWhitespace()
 
-	if p.tokenizer.IsAtEnd() || p.tokenizer.PeekToken(0).Type != TokenIdentifier {
-		return nil, p.formatErrorAtCurrentPosition("expected namespace name")
-	}
-
-	// Parse namespace name (could be nested like mgl::io)
-	var nameBuilder strings.Builder
-	nameBuilder.WriteString(p.tokenizer.NextToken().Value) // first identifier
-
-	// Check for :: followed by more identifiers (nested namespace)
-	for !p.tokenizer.IsAtEnd() {
-		p.tokenizer.SkipWhitespace()
-		if p.tokenizer.PeekToken(0).Type == TokenDoubleColon {
-			nameBuilder.WriteString(p.tokenizer.NextToken().Value) // add ::
-			p.tokenizer.SkipWhitespace()
-			if p.tokenizer.PeekToken(0).Type == TokenIdentifier {
-				nameBuilder.WriteString(p.tokenizer.NextToken().Value) // add next identifier
-			} else {
-				break
-			}
-		} else {
+	sigReady := false
+	for !p.tokenizer.IsAtEnd() && !sigReady {
+		token := p.tokenizer.PeekToken(0)
+		if token.Type == TokenLeftBrace {
+			sigReady = true
 			break
 		}
+
+		nameBuilder.WriteString(token.Value)
+		p.tokenizer.NextToken()
 	}
 
-	p.tokenizer.SkipWhitespace()
-
-	// The next token must be {
-	if !p.tokenizer.Match(TokenLeftBrace) {
-		return nil, p.formatErrorAtCurrentPosition("expected '{' after namespace")
+	if !sigReady {
+		return nil, p.formatErrorAtCurrentPosition("expected '{' after namespace name")
 	}
 
-	// Build signature
-	namespaceName := nameBuilder.String()
-	signature := fmt.Sprintf("namespace %s", namespaceName)
+	// Consume the opening brace (entering a scope, this will be taken care addEntity)
+	p.tokenizer.NextToken()
 
-	// Note: Opening braces are now handled by the main parser dispatch
-	// We don't look for braces here anymore
+	namespaceName := strings.Trim(nameBuilder.String(), " ")
+	signature.WriteString(namespaceName)
 
 	entity := &ast.Entity{
 		Type:      ast.EntityNamespace,
 		Name:      namespaceName,
-		Signature: signature, // Clean signature without braces
+		FullName:  namespaceName,
+		Signature: signature.String(), // Clean signature without braces
 		Children:  make([]*ast.Entity, 0),
 	}
 

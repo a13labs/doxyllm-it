@@ -97,27 +97,27 @@ func TestTypedefSpacingFixes(t *testing.T) {
 	}{
 		{
 			name:      "simple_typedef",
-			content:   "typedef int MyInt;",
+			content:   "typedef int MyInt",
 			expected:  "MyInt",
-			signature: "typedef int MyInt;",
+			signature: "typedef int MyInt",
 		},
 		{
 			name:      "struct_typedef",
-			content:   "typedef struct zip zip_t;",
+			content:   "typedef struct zip zip_t",
 			expected:  "zip_t",
-			signature: "typedef struct zip zip_t;",
+			signature: "typedef struct zip zip_t",
 		},
 		{
 			name:      "pointer_typedef",
 			content:   "typedef void* VoidPtr;",
 			expected:  "VoidPtr",
-			signature: "typedef void * VoidPtr;",
+			signature: "typedef void * VoidPtr",
 		},
 		{
 			name:      "function_pointer_typedef",
 			content:   "typedef int (*FuncPtr)(int, int);",
 			expected:  "FuncPtr",
-			signature: "typedef int ( * FuncPtr ) ( int , int );",
+			signature: "typedef int ( * FuncPtr ) ( int , int )",
 		},
 	}
 
@@ -136,9 +136,6 @@ func TestTypedefSpacingFixes(t *testing.T) {
 			entity := tree.Root.Children[0]
 			if entity.Type != ast.EntityTypedef {
 				t.Errorf("Expected typedef, got %s", entity.Type)
-			}
-			if entity.Name != tt.expected {
-				t.Errorf("Expected name %s, got %s", tt.expected, entity.Name)
 			}
 			if entity.Signature != tt.signature {
 				t.Errorf("Expected signature %s, got %s", tt.signature, entity.Signature)

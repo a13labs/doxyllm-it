@@ -87,6 +87,7 @@ func (p *Parser) Parse(filename, content string) (*ast.ScopeTree, error) {
 		if e == nil {
 			continue // skip empty entities
 		}
+		e.Signature = cleanSpaces(e.Signature)
 		p.addEntity(e)
 	}
 
@@ -138,47 +139,39 @@ func (p *Parser) parseDefault() (*ast.Entity, error) {
 	numIdentifiers := 0
 	for !p.tokenizer.IsAtEnd() {
 		nextToken := p.tokenizer.PeekToken(offset)
-		if IsKeyword(nextToken) {
+		if IsKeyword(nextToken) || IsLiteral(nextToken) || IsWhitespace(nextToken) {
 			offset++
 			continue
 		}
-		switch nextToken.Type {
-		case TokenWhitespace, TokenNewline:
+		if IsSymbol(nextToken) {
+			switch nextToken.Type {
+			case TokenLeftParen:
+				// Found a (, it must be a function
+				e, err := p.parseFunction()
+				if err != nil {
+					return nil, err
+				}
+				e.Defines = defines
+				return e, nil
+			case TokenSemicolon:
+				// Found a ';' , it must be variable(s)
+				e, err := p.parseVariable()
+				if err != nil {
+					return nil, err
+				}
+				e.Defines = defines
+				return e, nil
+			}
 			offset++
+			continue
+		}
+
+		switch nextToken.Type {
 		case TokenIdentifier:
 			if _, exists := p.defines[nextToken.Value]; exists {
 				defines = append(defines, nextToken.Value)
 			}
 			numIdentifiers++
-			offset++ // Keep looking for the next token
-		case TokenStar, TokenAmpersand, TokenLeftBracket, TokenRightBracket:
-			// These are valid types, continue
-			offset++ // Keep looking for the next token
-		case TokenOperator, TokenDoubleColon, TokenLess, TokenEquals:
-			if numIdentifiers == 0 {
-				return nil, p.formatErrorAtCurrentPositionf("There must be some identifiers before a '%s'", nextToken.Value)
-			}
-			offset++
-		case TokenNumber, TokenString, TokenChar, TokenCharLiteral:
-			offset++
-		case TokenTilde:
-			offset++ // Tilde is valid, continue
-		case TokenLeftParen:
-			// Found a (, it must be a function
-			e, err := p.parseFunction()
-			if err != nil {
-				return nil, err
-			}
-			e.Defines = defines
-			return e, nil
-		case TokenSemicolon:
-			// Found a ';' , it must be variable(s)
-			e, err := p.parseVariable()
-			if err != nil {
-				return nil, err
-			}
-			e.Defines = defines
-			return e, nil
 		case TokenClass, TokenStruct, TokenEnum:
 			// Found a class keyword after identifier, parse as class
 			if offset != len(defines) {
@@ -211,6 +204,25 @@ func (p *Parser) parseDefault() (*ast.Entity, error) {
 		default:
 			return nil, p.formatErrorAtCurrentPositionf("unexpected token '%s' after identifier", nextToken.Value)
 		}
+		offset++
 	}
 	return nil, p.formatErrorAtCurrentPositionf("unexpected end of input after identifier")
+}
+
+// cleanSpaces returns a string with consecutive spaces replaced by a single space
+func cleanSpaces(s string) string {
+	out := make([]rune, 0, len(s))
+	space := false
+	for _, r := range s {
+		if r == ' ' {
+			if !space {
+				out = append(out, r)
+				space = true
+			}
+		} else {
+			out = append(out, r)
+			space = false
+		}
+	}
+	return string(out)
 }

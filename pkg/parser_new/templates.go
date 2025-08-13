@@ -36,46 +36,29 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 	}
 
 	p.tokenizer.SkipWhitespace()
-
+	var newSig string
+	var e *ast.Entity
+	var err error
 	token := p.tokenizer.PeekToken(0)
-
 	switch token.Type {
 	case TokenClass:
-		e, err := p.parseClass()
-		if err != nil {
-			return nil, err
-		}
-		newSig := fmt.Sprintf("template %s %s", templateParams.String(), e.Signature)
-		e.Signature = newSig
-
-		return e, nil
+		e, err = p.parseClass()
 	case TokenStruct:
-		e, err := p.parseStruct()
-		if err != nil {
-			return nil, err
-		}
-		newSig := fmt.Sprintf("template %s %s", templateParams.String(), e.Signature)
-		e.Signature = newSig
-
-		return e, nil
+		e, err = p.parseStruct()
 	case TokenUsing:
-		e, err := p.parseUsing()
-		if err != nil {
-			return nil, err
-		}
-		newSig := fmt.Sprintf("template %s %s", templateParams.String(), e.Signature)
-		e.Signature = newSig
-
-		return e, nil
+		e, err = p.parseUsing()
 	default:
-		// Template function
-		e, err := p.parseDefault()
-		if err != nil {
-			return nil, err
-		}
-		newSig := fmt.Sprintf("template %s %s", templateParams.String(), e.Signature)
-		e.Signature = newSig
-		return e, nil
+		// Template function?
+		e, err = p.parseDefault()
 	}
 
+	if err != nil {
+		return nil, err
+	}
+
+	newSig = fmt.Sprintf("template %s %s", templateParams.String(), e.Signature)
+	e.Signature = newSig
+	e.IsTemplate = true
+
+	return e, nil
 }
