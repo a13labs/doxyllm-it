@@ -111,8 +111,6 @@ func (p *Parser) parseNext() (*ast.Entity, error) {
 		return p.parseAccessSpecifier()
 	case TokenRightBrace:
 		return nil, p.parseCloseBrace()
-	case TokenIdentifier:
-		return p.parseDefault()
 	default:
 		return p.parseDefault()
 	}

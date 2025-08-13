@@ -7,27 +7,29 @@ import (
 
 // parseVariable handles variable declarations
 func (p *Parser) parseVariable() (*ast.Entity, error) {
-
-	signature := strings.Builder{}
-	lastIdentifier := ""
+	var signature strings.Builder
+	var lastIdentifier string
 	sigReady := false
+
 	for !p.tokenizer.IsAtEnd() && !sigReady {
 		token := p.tokenizer.PeekToken(0)
 		switch token.Type {
 		case TokenWhitespace, TokenNewline:
 			if signature.Len() == 0 {
-				p.tokenizer.NextToken() // skip whitespace at start of signature
+				p.tokenizer.NextToken() // skip leading whitespace
 				continue
 			}
+			signature.WriteString(token.Value) // preserve whitespace inside signature
 		case TokenSemicolon:
 			p.tokenizer.NextToken()
 			sigReady = true
 			continue
 		case TokenIdentifier:
 			lastIdentifier = token.Value
+			signature.WriteString(token.Value)
 		default:
+			signature.WriteString(token.Value)
 		}
-		signature.WriteString(token.Value)
 		p.tokenizer.NextToken()
 	}
 
@@ -40,13 +42,11 @@ func (p *Parser) parseVariable() (*ast.Entity, error) {
 		entityType = ast.EntityField
 	}
 
-	entity := &ast.Entity{
+	return &ast.Entity{
 		Type:        entityType,
 		Name:        lastIdentifier,
 		FullName:    p.buildFullName(lastIdentifier),
 		Signature:   signature.String(),
 		AccessLevel: p.getCurrentAccessLevel(),
-	}
-
-	return entity, nil
+	}, nil
 }

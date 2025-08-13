@@ -8,30 +8,30 @@ import (
 
 // parseFunction handles function declarations
 func (p *Parser) parseFunction() (*ast.Entity, error) {
+	var (
+		lastIdentifier   string
+		signature        strings.Builder
+		hasBody          bool
+		numIdentifiers   int
+		numKeywords      int
+		inParameters     bool
+		sigReady         bool
+		inInheritance    bool
+		inSpecialization bool
+		isOperator       bool
+	)
 
-	lastIdentifier := ""
-	signature := strings.Builder{}
-	hasBody := false
-	numIdentifiers := 0
-	numKeywords := 0
-	inParameters := false
-	sigReady := false
-	inInheritance := false
-	inSpecialization := false
-	isOperator := false
-	// Since this is a function read all tokens until we find either ; or {
+	// Read tokens until we find either ; or {
 	for !p.tokenizer.IsAtEnd() && !sigReady {
 		token := p.tokenizer.PeekToken(0)
 		switch token.Type {
 		case TokenWhitespace, TokenNewline:
 			if numIdentifiers == 0 && numKeywords == 0 {
-				p.tokenizer.NextToken() // skip whitespace at start of signature
+				p.tokenizer.NextToken()
 				continue
 			}
 		case TokenSemicolon, TokenLeftBrace:
-			if token.Type == TokenLeftBrace {
-				hasBody = true
-			}
+			hasBody = token.Type == TokenLeftBrace
 			sigReady = true
 			continue
 		case TokenLess:
@@ -41,23 +41,19 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 		case TokenLeftParen:
 			inParameters = true
 		case TokenIdentifier:
-			if !inParameters && !inInheritance && !inSpecialization && !isOperator {
+			if !(inParameters || inInheritance || inSpecialization || isOperator) {
 				numIdentifiers++
 				lastIdentifier = token.Value
 			}
 		default:
-			if IsSymbol(token) {
-				if isOperator && !inParameters && !inInheritance && !inSpecialization {
-					lastIdentifier += token.Value
-				}
+			if IsSymbol(token) && isOperator && !(inParameters || inInheritance || inSpecialization) {
+				lastIdentifier += token.Value
 			}
-			if IsKeyword(token) {
-				if !inParameters && !inInheritance && !inSpecialization {
-					numKeywords++
-				}
+			if IsKeyword(token) && !(inParameters || inInheritance || inSpecialization) {
+				numKeywords++
 				if token.Type == TokenOperator {
 					isOperator = true
-					lastIdentifier = token.Value // operator name is the keyword itself
+					lastIdentifier = token.Value
 				}
 			}
 		}
@@ -69,62 +65,50 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 		return nil, p.formatError(p.tokenizer.PeekToken(0), "function signature is incomplete")
 	}
 
-	bodyText := ""
+	var bodyText string
 	if hasBody {
-		// Check if there's a function body after the signature
 		p.tokenizer.SkipWhitespace()
 		if !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type == TokenLeftBrace {
-			// This function has a body - track its range and content for the formatter
 			braceDepth := 1
 			var bodyTokens []Token
-			bodyTokens = append(bodyTokens, p.tokenizer.NextToken()) // consume opening brace
-
+			bodyTokens = append(bodyTokens, p.tokenizer.NextToken())
 			for !p.tokenizer.IsAtEnd() && braceDepth > 0 {
 				token := p.tokenizer.PeekToken(0)
-				if token.Type == TokenLeftBrace {
+				switch token.Type {
+				case TokenLeftBrace:
 					braceDepth++
-				} else if token.Type == TokenRightBrace {
+				case TokenRightBrace:
 					braceDepth--
 				}
 				bodyTokens = append(bodyTokens, p.tokenizer.NextToken())
 			}
-
 			if braceDepth == 0 {
-				// Reconstruct body text from tokens
 				var bodyBuilder strings.Builder
-				for _, token := range bodyTokens {
-					bodyBuilder.WriteString(token.Value)
+				for _, t := range bodyTokens {
+					bodyBuilder.WriteString(t.Value)
 				}
 				bodyText = bodyBuilder.String()
 			}
 		}
 	} else {
-		// consume ;
 		p.tokenizer.NextToken()
 	}
 
 	entityType := ast.EntityFunction
 	entitySignature := strings.TrimSpace(signature.String())
-
-	// Check for special method types
-	if strings.HasPrefix(entitySignature, "~") {
-		// Detect destructor by checking for ~ in signature
+	switch {
+	case strings.HasPrefix(entitySignature, "~"):
 		entityType = ast.EntityDestructor
-	} else {
-		if numIdentifiers == 1 && numKeywords == 0 {
-			// If there's exactly one identifier until the parameter list, this is a constructor
-			entityType = ast.EntityConstructor
-		}
+	case numIdentifiers == 1 && numKeywords == 0:
+		entityType = ast.EntityConstructor
 	}
 
-	entity := &ast.Entity{
+	return &ast.Entity{
 		Type:        entityType,
 		Name:        lastIdentifier,
 		FullName:    p.buildFullName(lastIdentifier),
 		Signature:   entitySignature,
 		AccessLevel: p.getCurrentAccessLevel(),
 		Body:        bodyText,
-	}
-
-	return entity, nil
+	}, nil
 }

@@ -15,7 +15,8 @@ func (p *Parser) parseNamespace() (*ast.Entity, error) {
 	p.tokenizer.NextToken() // consume 'namespace'
 	p.tokenizer.SkipWhitespace()
 
-	sigReady := false
+	var sigReady bool
+
 	for !p.tokenizer.IsAtEnd() && !sigReady {
 		token := p.tokenizer.PeekToken(0)
 		if token.Type == TokenLeftBrace {
@@ -38,13 +39,11 @@ func (p *Parser) parseNamespace() (*ast.Entity, error) {
 	namespaceName := strings.Trim(nameBuilder.String(), " ")
 	signature.WriteString(namespaceName)
 
-	entity := &ast.Entity{
+	return &ast.Entity{
 		Type:      ast.EntityNamespace,
 		Name:      namespaceName,
-		FullName:  namespaceName,
+		FullName:  p.buildFullName(namespaceName),
 		Signature: signature.String(), // Clean signature without braces
 		Children:  make([]*ast.Entity, 0),
-	}
-
-	return entity, nil
+	}, nil
 }

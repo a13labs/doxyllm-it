@@ -9,15 +9,21 @@ import (
 
 // parseTemplate handles template declarations
 func (p *Parser) parseTemplate() (*ast.Entity, error) {
-	var signature strings.Builder
 	p.tokenizer.NextToken() // consume 'template'
 	p.tokenizer.SkipWhitespace()
+
+	var signature strings.Builder
 	signature.WriteString("template ")
 
-	depth := 0
-	sigReady := false
-	for !p.tokenizer.IsAtEnd() && !sigReady {
+	var (
+		depth    int
+		sigReady bool
+	)
+
+	for !p.tokenizer.IsAtEnd() {
 		token := p.tokenizer.PeekToken(0)
+		signature.WriteString(token.Value)
+
 		switch token.Type {
 		case TokenLess:
 			depth++
@@ -25,22 +31,27 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 			depth--
 			if depth == 0 {
 				sigReady = true
+				p.tokenizer.NextToken() // consume '>'
+				break
 			}
 		}
-		signature.WriteString(token.Value)
 		p.tokenizer.NextToken()
+		if sigReady {
+			break
+		}
 	}
 
 	if !sigReady {
 		return nil, p.formatError(p.tokenizer.PeekToken(0), "template signature is incomplete")
 	}
 
-	var entity *ast.Entity
-	var err error
-
-	// templates are always followed by a class, struct, or other type of entities
 	p.tokenizer.SkipWhitespace()
 	token := p.tokenizer.PeekToken(0)
+
+	var (
+		entity *ast.Entity
+		err    error
+	)
 	switch token.Type {
 	case TokenClass:
 		entity, err = p.parseClass()
@@ -49,7 +60,6 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 	case TokenUsing:
 		entity, err = p.parseUsing()
 	default:
-		// Template function?
 		entity, err = p.parseDefault()
 	}
 

@@ -8,23 +8,33 @@ import (
 
 // parseUsing handles using declarations
 func (p *Parser) parseUsing() (*ast.Entity, error) {
-
 	var signature strings.Builder
 	p.tokenizer.NextToken() // consume 'using'
 	p.tokenizer.SkipWhitespace()
 
 	signature.WriteString("using ")
-	lastIdentifier := ""
-	inDefinition := false
 
-	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type != TokenSemicolon {
-		if p.tokenizer.PeekToken(0).Type == TokenEquals {
+	var (
+		lastIdentifier string
+		inDefinition   bool
+		sigReady       bool
+	)
+
+	for !p.tokenizer.IsAtEnd() && !sigReady {
+		token := p.tokenizer.PeekToken(0)
+		switch token.Type {
+		case TokenSemicolon:
+			sigReady = true
+			continue
+		case TokenEquals:
 			inDefinition = true
+		case TokenIdentifier:
+			if !inDefinition {
+				lastIdentifier = token.Value
+			}
 		}
-		if p.tokenizer.PeekToken(0).Type == TokenIdentifier && !inDefinition {
-			lastIdentifier = p.tokenizer.PeekToken(0).Value
-		}
-		signature.WriteString(p.tokenizer.NextToken().Value)
+		signature.WriteString(token.Value)
+		p.tokenizer.NextToken()
 	}
 
 	// Consume the semicolon
@@ -33,12 +43,10 @@ func (p *Parser) parseUsing() (*ast.Entity, error) {
 	}
 	p.tokenizer.NextToken() // consume semicolon
 
-	entity := &ast.Entity{
+	return &ast.Entity{
 		Type:      ast.EntityUsing,
 		Name:      lastIdentifier,
 		FullName:  p.buildFullName(lastIdentifier),
 		Signature: signature.String(),
-	}
-
-	return entity, nil
+	}, nil
 }

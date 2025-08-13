@@ -10,22 +10,20 @@ import (
 func (p *Parser) parseTypedef() (*ast.Entity, error) {
 	p.tokenizer.NextToken() // consume 'typedef'
 
-	// Parse until we find the identifier and semicolon
-	var signature strings.Builder
-	signature.WriteString("typedef")
-
+	var tokens []string
 	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type != TokenSemicolon {
-		token := p.tokenizer.PeekToken(0)
-		signature.WriteString(" " + token.Value)
+		token := p.tokenizer.NextToken()
+		tokens = append(tokens, token.Value)
+	}
+
+	// Consume the semicolon if present
+	if !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type == TokenSemicolon {
 		p.tokenizer.NextToken()
 	}
 
-	// Consume the semicolon
-	p.tokenizer.NextToken()
-
 	entity := &ast.Entity{
 		Type:      ast.EntityTypedef,
-		Signature: signature.String(),
+		Signature: "typedef " + strings.Join(tokens, " "),
 	}
 
 	return entity, nil

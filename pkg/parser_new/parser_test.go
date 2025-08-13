@@ -1129,10 +1129,12 @@ func TestBraceCountingValidation(t *testing.T) {
 	// and we have the expected structure without using formatter
 	if tree == nil {
 		t.Errorf("Tree should not be nil")
+		return
 	}
 
 	if tree.Root == nil {
 		t.Errorf("Root should not be nil")
+		return
 	}
 
 	// Count braces in the original content for basic validation

@@ -9,17 +9,19 @@ import (
 // parseEnum handles enum declarations
 func (p *Parser) parseEnum() (*ast.Entity, error) {
 
-	signature := strings.Builder{}
 	p.tokenizer.NextToken()
 	p.tokenizer.SkipWhitespace()
 
 	// Build signature and handle body
+	signature := strings.Builder{}
 	signature.WriteString("enum")
 
-	// enums always end with a semicolon
-	lastIdentifier := ""
-	inInheritance := false
-	numTokens := 0
+	var (
+		lastIdentifier string
+		inInheritance  bool
+		numTokens      int
+	)
+
 	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type != TokenSemicolon {
 		token := p.tokenizer.PeekToken(0)
 		switch token.Type {
@@ -46,28 +48,11 @@ func (p *Parser) parseEnum() (*ast.Entity, error) {
 	}
 	p.tokenizer.NextToken()
 
-	entity := &ast.Entity{
+	return &ast.Entity{
 		Type:      ast.EntityEnum,
 		Name:      lastIdentifier,
 		FullName:  p.buildFullName(lastIdentifier),
 		Signature: signature.String(),
 		Children:  make([]*ast.Entity, 0),
-	}
-
-	return entity, nil
-}
-
-// parseType parses a type specification
-func (p *Parser) parseType() string {
-	var typeStr strings.Builder
-
-	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type != TokenLeftBrace && p.tokenizer.PeekToken(0).Type != TokenSemicolon {
-		if p.tokenizer.PeekToken(0).Type == TokenLeftBrace {
-			break
-		}
-		typeStr.WriteString(p.tokenizer.PeekToken(0).Value)
-		p.tokenizer.NextToken()
-	}
-
-	return strings.TrimSpace(typeStr.String())
+	}, nil
 }

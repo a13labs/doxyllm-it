@@ -17,23 +17,31 @@ func (p *Parser) parseStruct() (*ast.Entity, error) {
 }
 
 func (p *Parser) parseClassOrStruct(entityType ast.EntityType) (*ast.Entity, error) {
-	signature := strings.Builder{}
+	var signature strings.Builder
 
 	keyword := p.tokenizer.NextToken()
-	signature.WriteString(keyword.Value + " ")
+	signature.WriteString(keyword.Value)
+	signature.WriteByte(' ')
 	p.tokenizer.SkipWhitespace()
 
-	sigReady := false
-	isForwardDeclaration := false
-	inInheritance := false
-	lastIdentifier := ""
+	var (
+		sigReady             bool
+		isForwardDeclaration bool
+		inInheritance        bool
+		lastIdentifier       string
+	)
+
 	for !p.tokenizer.IsAtEnd() && !sigReady {
 		token := p.tokenizer.PeekToken(0)
 		switch token.Type {
-		case TokenLeftBrace, TokenSemicolon:
+		case TokenLeftBrace:
 			p.tokenizer.NextToken()
 			sigReady = true
-			isForwardDeclaration = (token.Type == TokenSemicolon)
+			continue
+		case TokenSemicolon:
+			p.tokenizer.NextToken()
+			sigReady = true
+			isForwardDeclaration = true
 			continue
 		case TokenColon:
 			inInheritance = true
@@ -47,16 +55,14 @@ func (p *Parser) parseClassOrStruct(entityType ast.EntityType) (*ast.Entity, err
 	}
 
 	if !sigReady {
-		return nil, p.formatError(p.tokenizer.PeekToken(0), "class signature is incomplete")
+		return nil, p.formatError(p.tokenizer.PeekToken(0), "class/struct signature incomplete")
 	}
 
-	entity := &ast.Entity{
+	return &ast.Entity{
 		Type:                 entityType,
 		Name:                 lastIdentifier,
-		Signature:            strings.Trim(signature.String(), " "),
+		Signature:            strings.TrimSpace(signature.String()),
 		IsForwardDeclaration: isForwardDeclaration,
-		Children:             make([]*ast.Entity, 0),
-	}
-
-	return entity, nil
+		Children:             []*ast.Entity{},
+	}, nil
 }

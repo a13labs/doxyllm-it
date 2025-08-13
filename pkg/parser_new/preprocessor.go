@@ -23,77 +23,76 @@ func (p *Parser) parsePreprocessor() (*ast.Entity, error) {
 
 // parseDefine handles #define directives
 func (p *Parser) parseDefine() (*ast.Entity, error) {
-	p.tokenizer.NextToken() // consume 'define'
+	var signature strings.Builder
+
+	p.tokenizer.NextToken()
+	signature.WriteString("#define ")
 	p.tokenizer.SkipWhitespace()
 
-	var signature strings.Builder
-	nameToken := p.tokenizer.PeekToken(0)
-	if nameToken.Type != TokenIdentifier {
-		return nil, p.formatError(nameToken, "expected identifier after #define")
-	}
-	p.tokenizer.NextToken()
-	signature.WriteString("#define " + nameToken.Value)
+	var (
+		processNextLine bool
+		entityName      string
+		sigReady        bool
+	)
 
-	// Collect the definition value until end of line or end of file
-
-	nextLine := false
-	for !p.tokenizer.IsAtEnd() {
+	for !p.tokenizer.IsAtEnd() && !sigReady {
 		token := p.tokenizer.PeekToken(0)
 
-		// Handle nextLine macros with backslash continuation
-		if token.Type == TokenBackslash {
-			nextLine = true
-			continue
-		}
-
-		if token.Type == TokenNewline {
-			if !nextLine {
+		switch token.Type {
+		case TokenBackslash:
+			processNextLine = true
+		case TokenNewline:
+			if !processNextLine {
 				p.tokenizer.NextToken() // consume newline
-				break
+				sigReady = true
+				continue
 			}
-			nextLine = false
+			processNextLine = false
+		case TokenIdentifier:
+			if entityName == "" {
+				entityName = token.Value
+			}
 		}
 
 		signature.WriteString(token.Value)
-
 		p.tokenizer.NextToken()
 	}
 
-	// Store the define
-	p.defines[nameToken.Value] = signature.String()
-
-	entity := &ast.Entity{
-		Type:      ast.EntityPreprocessor,
-		Name:      nameToken.Value,
-		FullName:  nameToken.Value,
-		Signature: signature.String(),
+	if !sigReady {
+		return nil, p.formatError(p.tokenizer.PeekToken(0), "expected newline after preprocessor directive")
 	}
 
-	return entity, nil
+	// Store the define
+	p.defines[entityName] = signature.String()
+
+	return &ast.Entity{
+		Type:      ast.EntityPreprocessor,
+		Name:      entityName,
+		FullName:  entityName,
+		Signature: signature.String(),
+	}, nil
 }
 
 // parseOtherPreprocessor handles other preprocessor directives
 func (p *Parser) parseOtherPreprocessor() (*ast.Entity, error) {
-	// Consume until end of line
-	var content strings.Builder
-	content.WriteString("#")
+	var signature strings.Builder
+	signature.WriteString("#")
 
 	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type != TokenNewline {
-		content.WriteString(p.tokenizer.PeekToken(0).Value)
+		signature.WriteString(p.tokenizer.PeekToken(0).Value)
 		p.tokenizer.NextToken()
 	}
 
 	// Consume \n
-	if !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type == TokenNewline {
-		p.tokenizer.NextToken()
+	if p.tokenizer.PeekToken(0).Type != TokenNewline && !p.tokenizer.IsAtEnd() {
+		return nil, p.formatError(p.tokenizer.PeekToken(0), "expected newline after preprocessor directive")
 	}
+	p.tokenizer.NextToken() // consume newline
 
-	entity := &ast.Entity{
+	return &ast.Entity{
 		Type:      ast.EntityPreprocessor,
-		Name:      strings.TrimSpace(content.String()),
-		FullName:  strings.TrimSpace(content.String()),
-		Signature: content.String(),
-	}
-
-	return entity, nil
+		Name:      strings.TrimSpace(signature.String()),
+		FullName:  strings.TrimSpace(signature.String()),
+		Signature: signature.String(),
+	}, nil
 }
