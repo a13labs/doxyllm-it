@@ -20,7 +20,7 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 		sigReady bool
 	)
 
-	for !p.tokenizer.IsAtEnd() {
+	for !p.tokenizer.IsAtEnd() && !sigReady {
 		token := p.tokenizer.PeekToken(0)
 		signature.WriteString(token.Value)
 
@@ -30,15 +30,12 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 		case TokenGreater:
 			depth--
 			if depth == 0 {
-				sigReady = true
 				p.tokenizer.NextToken() // consume '>'
-				break
+				sigReady = true
+				continue
 			}
 		}
 		p.tokenizer.NextToken()
-		if sigReady {
-			break
-		}
 	}
 
 	if !sigReady {
