@@ -64,7 +64,7 @@ public:
 	// Debug: Print all root children
 	t.Logf("Root children after adding comment:")
 	for i, child := range doc.tree.Root.Children {
-		t.Logf("  %d: %s (%s) - %s", i, child.Type, child.Name, child.OriginalText[:min(50, len(child.OriginalText))])
+		t.Logf("  %d: %s (%s) - %s", i, child.Type, child.Name, child.Signature[:min(50, len(child.Signature))])
 	}
 
 	// Now the class should have a comment
@@ -100,10 +100,10 @@ public:
 		t.Error("Comment entity not found in AST")
 	} else {
 		// Verify comment content
-		if commentEntity.OriginalText == "" {
-			t.Error("Comment entity has empty OriginalText")
+		if commentEntity.Signature == "" {
+			t.Error("Comment entity has empty Signature")
 		}
-		t.Logf("Comment text: %s", commentEntity.OriginalText)
+		t.Logf("Comment text: %s", commentEntity.Signature)
 	}
 
 	// Test modifying the comment

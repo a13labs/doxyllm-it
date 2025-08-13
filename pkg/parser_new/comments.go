@@ -16,7 +16,6 @@ func (p *Parser) parseComment() (*ast.Entity, error) {
 		Name:        "comment",
 		AccessLevel: ast.AccessUnknown,
 		Signature:   fullCommentText,
-		Body:        fullCommentText,
 	}
 
 	return comment, nil

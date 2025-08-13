@@ -157,7 +157,7 @@ func (d *Document) GetDocumentableEntities() []*ast.Entity {
 func (d *Document) isDocumentableEntityType(entityType ast.EntityType) bool {
 	switch entityType {
 	case ast.EntityNamespace, ast.EntityClass, ast.EntityStruct, ast.EntityEnum,
-		ast.EntityFunction, ast.EntityMethod, ast.EntityConstructor, ast.EntityDestructor,
+		ast.EntityFunction, ast.EntityConstructor, ast.EntityDestructor,
 		ast.EntityVariable, ast.EntityField, ast.EntityTypedef, ast.EntityUsing,
 		ast.EntityMacro, ast.EntityTemplate:
 		return true
@@ -199,7 +199,7 @@ func (d *Document) HasDoxygenComment(entity *ast.Entity) bool {
 	}
 
 	// Parse and cache the comment
-	doxyComment := ParseDoxygenComment(commentEntity.OriginalText)
+	doxyComment := ParseDoxygenComment(commentEntity.Signature)
 	d.commentCache[entity] = doxyComment
 	return doxyComment.HasDoxygenContent()
 }
@@ -219,7 +219,7 @@ func (d *Document) GetDoxygenComment(entity *ast.Entity) *DoxygenComment {
 	}
 
 	// Parse and cache the comment
-	doxyComment := ParseDoxygenComment(commentEntity.OriginalText)
+	doxyComment := ParseDoxygenComment(commentEntity.Signature)
 	d.commentCache[entity] = doxyComment
 	return doxyComment
 }
@@ -250,8 +250,8 @@ func (d *Document) findCommentForEntity(entity *ast.Entity) *ast.Entity {
 	prevSibling := siblings[entityIndex-1]
 	if prevSibling.Type == ast.EntityComment {
 		// Check if this comment appears to be a Doxygen comment
-		if strings.Contains(prevSibling.OriginalText, "/**") ||
-			strings.Contains(prevSibling.OriginalText, "///") {
+		if strings.Contains(prevSibling.Signature, "/**") ||
+			strings.Contains(prevSibling.Signature, "///") {
 			return prevSibling
 		}
 	}
@@ -291,7 +291,7 @@ func (d *Document) SetEntityCommentDirect(entity *ast.Entity, comment *DoxygenCo
 		// Update existing comment entity
 		if comment != nil && comment.HasDoxygenContent() {
 			// Update the existing comment's raw text
-			commentEntity.OriginalText = d.generateCommentText(comment)
+			commentEntity.Signature = d.generateCommentText(comment)
 		} else {
 			// Remove the comment entity if comment is empty/nil
 			d.removeCommentEntity(commentEntity)
@@ -306,38 +306,10 @@ func (d *Document) createCommentEntity(comment *DoxygenComment) *ast.Entity {
 	commentText := d.generateCommentText(comment)
 
 	return &ast.Entity{
-		Type:                 ast.EntityComment,
-		Name:                 "", // Comments don't have names
-		FullName:             "",
-		Signature:            "",
-		AccessLevel:          ast.AccessUnknown,
-		IsStatic:             false,
-		IsConst:              false,
-		IsConstexpr:          false,
-		IsExtern:             false,
-		IsVirtual:            false,
-		IsPure:               false,
-		IsInline:             false,
-		IsForwardDeclaration: false,
-		IsTemplate:           false,
-		TemplateParams:       nil,
-		Namespace:            "",
-		Class:                "",
-		Children:             nil,
-		Parent:               nil, // Will be set when inserting
-		SourceRange: ast.Range{
-			// Position will be set when inserting
-			Start: ast.Position{Line: 0, Column: 0, Offset: 0},
-			End:   ast.Position{Line: 0, Column: 0, Offset: 0},
-		},
-		HeaderRange: ast.Range{
-			Start: ast.Position{Line: 0, Column: 0, Offset: 0},
-			End:   ast.Position{Line: 0, Column: 0, Offset: 0},
-		},
-		BodyRange:    nil,
-		OriginalText: commentText,
-		LeadingWS:    "",
-		TrailingWS:   "",
+		Type:        ast.EntityComment,
+		Name:        "comment",
+		Signature:   commentText,
+		AccessLevel: ast.AccessUnknown,
 	}
 }
 
@@ -477,8 +449,7 @@ func (d *Document) AddEntityParam(entityPath, paramName, description string) err
 		return fmt.Errorf("entity not found: %s", entityPath)
 	}
 
-	if entity.Type != ast.EntityFunction && entity.Type != ast.EntityMethod &&
-		entity.Type != ast.EntityConstructor {
+	if entity.Type != ast.EntityFunction && entity.Type != ast.EntityConstructor {
 		return fmt.Errorf("entity %s is not a function/method", entityPath)
 	}
 
@@ -518,7 +489,7 @@ func (d *Document) SetEntityReturn(entityPath, description string) error {
 		return fmt.Errorf("entity not found: %s", entityPath)
 	}
 
-	if entity.Type != ast.EntityFunction && entity.Type != ast.EntityMethod {
+	if entity.Type != ast.EntityFunction {
 		return fmt.Errorf("entity %s is not a function/method", entityPath)
 	}
 
@@ -778,7 +749,7 @@ func (d *Document) Validate() []ValidationIssue {
 		}
 
 		// Check function-specific issues
-		if entity.Type == ast.EntityFunction || entity.Type == ast.EntityMethod {
+		if entity.Type == ast.EntityFunction {
 			// TODO: We would need to parse function parameters from the signature
 			// to validate @param completeness. This will be implemented when
 			// we have better signature parsing in the AST.
@@ -828,7 +799,7 @@ func (d *Document) GetEntityContext(entityPath string, includeParent, includeSib
 
 	// For now, just return the original text
 	// TODO: Implement proper context extraction with formatter_new
-	return entity.OriginalText, nil
+	return entity.Signature, nil
 }
 
 // GetEntitySummaryFormatted returns a formatted summary of an entity (requires formatter_new)
@@ -852,5 +823,5 @@ func (d *Document) ReconstructScope(entityPath string) (string, error) {
 
 	// For now, just return the original text
 	// TODO: Implement proper reconstruction with formatter_new
-	return entity.OriginalText, nil
+	return entity.Signature, nil
 }

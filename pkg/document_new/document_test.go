@@ -55,7 +55,7 @@ public:
 	methodEntity := doc.FindEntity("TestClass::testMethod")
 	if methodEntity == nil {
 		t.Error("Could not find TestClass::testMethod entity")
-	} else if methodEntity.Type != ast.EntityMethod {
+	} else if methodEntity.Type != ast.EntityFunction {
 		t.Errorf("Expected method entity, got %s", methodEntity.Type)
 	}
 }
@@ -79,15 +79,15 @@ public:
 	}
 
 	// Should include class, field, and method but not comments
-	var hasClass, hasField, hasMethod bool
+	var hasClass, hasField, hasFunction bool
 	for _, entity := range documentable {
 		switch entity.Type {
 		case ast.EntityClass:
 			hasClass = true
 		case ast.EntityField:
 			hasField = true
-		case ast.EntityMethod:
-			hasMethod = true
+		case ast.EntityFunction:
+			hasFunction = true
 		case ast.EntityComment:
 			t.Error("Comments should not be in documentable entities")
 		}
@@ -99,7 +99,7 @@ public:
 	if !hasField {
 		t.Error("Expected to find field in documentable entities")
 	}
-	if !hasMethod {
+	if !hasFunction {
 		t.Error("Expected to find method in documentable entities")
 	}
 }
