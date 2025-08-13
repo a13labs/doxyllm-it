@@ -28,9 +28,10 @@ func (p *Parser) parseUsing() (*ast.Entity, error) {
 	}
 
 	// Consume the semicolon
-	if !p.tokenizer.Match(TokenSemicolon) {
-		return nil, p.formatErrorAtCurrentPosition("expected semicolon after using declaration")
+	if p.tokenizer.PeekToken(0).Type != TokenSemicolon {
+		return nil, p.formatError(p.tokenizer.PeekToken(0), "expected semicolon after using declaration")
 	}
+	p.tokenizer.NextToken() // consume semicolon
 
 	entity := &ast.Entity{
 		Type:      ast.EntityUsing,

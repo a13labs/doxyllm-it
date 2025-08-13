@@ -28,7 +28,8 @@ func (p *Parser) parseNamespace() (*ast.Entity, error) {
 	}
 
 	if !sigReady {
-		return nil, p.formatErrorAtCurrentPosition("expected '{' after namespace name")
+		token := p.tokenizer.PeekToken(0)
+		return nil, p.formatError(token, "unexpected end of namespace declaration")
 	}
 
 	// Consume the opening brace (entering a scope, this will be taken care addEntity)

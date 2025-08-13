@@ -9,9 +9,6 @@ import (
 // parseFunction handles function declarations
 func (p *Parser) parseFunction() (*ast.Entity, error) {
 
-	// Parse specifiers and attributes first
-	var isStatic, isInline, isVirtual, isConst, isConstexpr bool
-
 	lastIdentifier := ""
 	signature := strings.Builder{}
 	hasBody := false
@@ -58,18 +55,7 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 				if !inParameters && !inInheritance && !inSpecialization {
 					numKeywords++
 				}
-				switch token.Type {
-				case TokenStatic:
-					isStatic = true
-				case TokenInline:
-					isInline = true
-				case TokenVirtual:
-					isVirtual = true
-				case TokenConstexpr:
-					isConstexpr = true
-				case TokenConst:
-					isConst = true
-				case TokenOperator:
+				if token.Type == TokenOperator {
 					isOperator = true
 					lastIdentifier = token.Value // operator name is the keyword itself
 				}
@@ -80,7 +66,7 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 	}
 
 	if !sigReady {
-		return nil, p.formatErrorAtCurrentPosition("function signature is incomplete")
+		return nil, p.formatError(p.tokenizer.PeekToken(0), "function signature is incomplete")
 	}
 
 	bodyText := ""
@@ -137,11 +123,6 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 		FullName:    p.buildFullName(lastIdentifier),
 		Signature:   entitySignature,
 		AccessLevel: p.getCurrentAccessLevel(),
-		IsStatic:    isStatic,
-		IsInline:    isInline,
-		IsVirtual:   isVirtual,
-		IsConst:     isConst,
-		IsConstexpr: isConstexpr,
 		Body:        bodyText,
 	}
 

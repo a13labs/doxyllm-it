@@ -113,27 +113,15 @@ type Entity struct {
 
 	// C++ language attributes
 	Defines              []string // List of macro definitions
-	IsStatic             bool     // Whether entity is static
-	IsConst              bool     // Whether entity is const
-	IsConstexpr          bool     // Whether entity is constexpr
-	IsExtern             bool     // Whether entity is extern
-	IsVirtual            bool     // Whether method is virtual
-	IsPure               bool     // Whether method is pure virtual
-	IsInline             bool     // Whether function is inline
 	IsForwardDeclaration bool     // Whether this is a forward declaration
 	IsTemplate           bool     // Whether entity is templated
-	TemplateParams       []string // Template parameters
-
-	// Scope information
-	Namespace string // Containing namespace
-	Class     string // Containing class (for methods/fields)
 
 	// Tree structure
 	Children []*Entity // Child entities
 	Parent   *Entity   // Parent entity
 
 	// Source information
-	Body string // Original text including whitespace and comments
+	Body string // Inner body content for functions (without comments)
 }
 
 // GetPath returns the hierarchical path to this entity

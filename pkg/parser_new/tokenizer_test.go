@@ -13,7 +13,7 @@ func TestTokenizerBasics(t *testing.T) {
 }`
 
 	tokenizer := NewTokenizer(input)
-	tokens := tokenizer.Tokenize()
+	tokens := tokenize(tokenizer)
 
 	// Verify we get the expected tokens
 	expectedTokens := []TokenType{
@@ -63,7 +63,7 @@ func TestTokenizerComments(t *testing.T) {
 /// Doxygen line`
 
 	tokenizer := NewTokenizer(input)
-	tokens := tokenizer.Tokenize()
+	tokens := tokenize(tokenizer)
 
 	commentTypes := []TokenType{}
 	for _, token := range tokens {
@@ -94,7 +94,7 @@ func TestTokenizerOperators(t *testing.T) {
 	input := `:: -> == != <= >= && || ++ -- += -= *= /= << >>`
 
 	tokenizer := NewTokenizer(input)
-	tokens := tokenizer.Tokenize()
+	tokens := tokenize(tokenizer)
 
 	expectedOperators := []TokenType{
 		TokenDoubleColon, TokenWhitespace,
@@ -135,7 +135,7 @@ func TestTokenizerPreprocessor(t *testing.T) {
 #include <iostream>`
 
 	tokenizer := NewTokenizer(input)
-	tokens := tokenizer.Tokenize()
+	tokens := tokenize(tokenizer)
 
 	foundDefine := false
 	foundInclude := false
@@ -159,4 +159,16 @@ func TestTokenizerPreprocessor(t *testing.T) {
 	if !foundInclude {
 		t.Error("Expected to find 'include' identifier")
 	}
+}
+
+func tokenize(t *Tokenizer) []Token {
+	var tokens []Token
+	for {
+		token := t.NextToken()
+		tokens = append(tokens, token)
+		if token.Type == TokenEOF {
+			break
+		}
+	}
+	return tokens
 }

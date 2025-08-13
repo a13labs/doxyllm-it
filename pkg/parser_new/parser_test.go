@@ -512,12 +512,12 @@ public:
 	}
 
 	staticFunc := tree.Root.Children[1]
-	if !staticFunc.IsStatic {
+	if !strings.Contains(staticFunc.Signature, "static") {
 		t.Errorf("Expected static function to have IsStatic=true")
 	}
 
 	inlineFunc := tree.Root.Children[2]
-	if !inlineFunc.IsInline {
+	if !strings.Contains(inlineFunc.Signature, "inline") {
 		t.Errorf("Expected inline function to have IsInline=true")
 	}
 
@@ -539,17 +539,17 @@ public:
 	}
 
 	constMethod := members[2]
-	if !constMethod.IsConst {
+	if !strings.Contains(constMethod.Signature, "const") {
 		t.Errorf("Expected const method to have IsConst=true")
 	}
 
 	staticMethod := members[3]
-	if !staticMethod.IsStatic {
+	if !strings.Contains(staticMethod.Signature, "static") {
 		t.Errorf("Expected static method to have IsStatic=true")
 	}
 
 	virtualMethod := members[4]
-	if !virtualMethod.IsVirtual {
+	if !strings.Contains(virtualMethod.Signature, "virtual") {
 		t.Errorf("Expected virtual method to have IsVirtual=true")
 	}
 }
@@ -582,12 +582,12 @@ private:
 	}
 
 	staticVar := tree.Root.Children[1]
-	if !staticVar.IsStatic {
+	if !strings.Contains(staticVar.Signature, "static") {
 		t.Errorf("Expected static variable to have IsStatic=true")
 	}
 
 	constVar := tree.Root.Children[2]
-	if !constVar.IsConst {
+	if !strings.Contains(constVar.Signature, "const") {
 		t.Errorf("Expected const variable to have IsConst=true")
 	}
 
@@ -607,12 +607,12 @@ private:
 	}
 
 	staticField := members[1]
-	if !staticField.IsStatic {
+	if !strings.Contains(staticField.Signature, "static") {
 		t.Errorf("Expected static field to have IsStatic=true")
 	}
 
 	constField := members[3]
-	if !constField.IsConst {
+	if !strings.Contains(constField.Signature, "const") {
 		t.Errorf("Expected const field to have IsConst=true")
 	}
 }
@@ -1005,7 +1005,7 @@ private:
 	if inlineMethod.Name != "get_value" {
 		t.Errorf("Expected get_value, got %s", inlineMethod.Name)
 	}
-	if !inlineMethod.IsInline {
+	if !strings.Contains(inlineMethod.Signature, "inline") {
 		t.Errorf("Expected method to be marked as inline")
 	}
 	// Signature should not contain body
@@ -1063,7 +1063,7 @@ func TestComplexInlineFunctions(t *testing.T) {
 	if readBuffer.Name != "read_buffer" {
 		t.Errorf("Expected read_buffer, got %s", readBuffer.Name)
 	}
-	if !readBuffer.IsInline {
+	if !strings.Contains(readBuffer.Signature, "inline") {
 		t.Errorf("Expected function to be marked as inline")
 	}
 
@@ -1090,7 +1090,7 @@ func TestComplexInlineFunctions(t *testing.T) {
 	if isValid.Name != "is_valid" {
 		t.Errorf("Expected is_valid, got %s", isValid.Name)
 	}
-	if !isValid.IsInline {
+	if !strings.Contains(isValid.Signature, "inline") {
 		t.Errorf("Expected function to be marked as inline")
 	}
 }

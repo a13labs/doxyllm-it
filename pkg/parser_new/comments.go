@@ -8,9 +8,7 @@ import (
 // Only identifies C++ comment syntax, does NOT interpret content
 func (p *Parser) parseComment() (*ast.Entity, error) {
 
-	var fullCommentText string
-
-	fullCommentText = p.tokenizer.NextToken().Value
+	fullCommentText := p.tokenizer.NextToken().Value
 
 	// Create comment entity
 	comment := &ast.Entity{

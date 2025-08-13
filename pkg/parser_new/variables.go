@@ -8,9 +8,6 @@ import (
 // parseVariable handles variable declarations
 func (p *Parser) parseVariable() (*ast.Entity, error) {
 
-	// Parse specifiers first
-	var isStatic, isConst, isConstexpr, isExtern bool
-
 	signature := strings.Builder{}
 	lastIdentifier := ""
 	sigReady := false
@@ -26,14 +23,6 @@ func (p *Parser) parseVariable() (*ast.Entity, error) {
 			p.tokenizer.NextToken()
 			sigReady = true
 			continue
-		case TokenExtern:
-			isExtern = true
-		case TokenStatic:
-			isStatic = true
-		case TokenConstexpr:
-			isConstexpr = true
-		case TokenConst:
-			isConst = true
 		case TokenIdentifier:
 			lastIdentifier = token.Value
 		default:
@@ -43,7 +32,7 @@ func (p *Parser) parseVariable() (*ast.Entity, error) {
 	}
 
 	if !sigReady {
-		return nil, p.formatErrorAtCurrentPosition("variable signature is incomplete")
+		return nil, p.formatError(p.tokenizer.PeekToken(0), "variable signature is incomplete")
 	}
 
 	entityType := ast.EntityVariable
@@ -57,10 +46,6 @@ func (p *Parser) parseVariable() (*ast.Entity, error) {
 		FullName:    p.buildFullName(lastIdentifier),
 		Signature:   signature.String(),
 		AccessLevel: p.getCurrentAccessLevel(),
-		IsStatic:    isStatic,
-		IsConst:     isConst,
-		IsConstexpr: isConstexpr,
-		IsExtern:    isExtern,
 	}
 
 	return entity, nil

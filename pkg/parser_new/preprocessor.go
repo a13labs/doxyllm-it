@@ -26,14 +26,10 @@ func (p *Parser) parseDefine() (*ast.Entity, error) {
 	p.tokenizer.NextToken() // consume 'define'
 	p.tokenizer.SkipWhitespace()
 
-	if p.tokenizer.IsAtEnd() {
-		return nil, p.formatErrorAtCurrentPosition("expected identifier after #define")
-	}
-
 	var signature strings.Builder
 	nameToken := p.tokenizer.PeekToken(0)
 	if nameToken.Type != TokenIdentifier {
-		return nil, p.formatError("expected identifier after #define", nameToken)
+		return nil, p.formatError(nameToken, "expected identifier after #define")
 	}
 	p.tokenizer.NextToken()
 	signature.WriteString("#define " + nameToken.Value)

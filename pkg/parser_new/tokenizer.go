@@ -382,16 +382,6 @@ func (t *Tokenizer) NextToken() Token {
 	return t.scanToken()
 }
 
-func (t *Tokenizer) Match(types ...TokenType) bool {
-	for _, tokenType := range types {
-		if t.PeekToken(0).Type == tokenType {
-			t.NextToken()
-			return true
-		}
-	}
-	return false
-}
-
 func (t *Tokenizer) SkipWhitespace() {
 	for !t.IsAtEnd() {
 		token := t.PeekToken(0)
@@ -435,30 +425,6 @@ func (t *Tokenizer) GetErrors() []Token {
 // IsAtEnd checks if the tokenizer has reached the end of the input
 func (t *Tokenizer) IsAtEnd() bool {
 	return t.pos >= len(t.input)
-}
-
-func (t *Tokenizer) GetCurrentLine() int {
-	return t.line
-}
-
-func (t *Tokenizer) GetCurrentColumn() int {
-	return t.column
-}
-
-func (t *Tokenizer) GetCurrentOffset() int {
-	return t.pos
-}
-
-func (t *Tokenizer) Tokenize() []Token {
-	var tokens []Token
-	for {
-		token := t.NextToken()
-		tokens = append(tokens, token)
-		if token.Type == TokenEOF {
-			break
-		}
-	}
-	return tokens
 }
 
 func IsKeyword(token Token) bool {

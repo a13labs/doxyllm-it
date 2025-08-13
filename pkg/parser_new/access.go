@@ -6,15 +6,11 @@ import (
 
 // parseAccessSpecifier handles access specifier declarations
 func (p *Parser) parseAccessSpecifier() (*ast.Entity, error) {
-	accessToken := p.tokenizer.NextToken()
-
-	if !p.tokenizer.Match(TokenColon) {
-		return nil, p.formatErrorAtCurrentPosition("expected ':' after access specifier")
-	}
+	token := p.tokenizer.NextToken()
 
 	// Update current access level
 	var accessLevel ast.AccessLevel
-	switch accessToken.Value {
+	switch token.Value {
 	case "public":
 		accessLevel = ast.AccessPublic
 	case "private":
@@ -22,6 +18,11 @@ func (p *Parser) parseAccessSpecifier() (*ast.Entity, error) {
 	case "protected":
 		accessLevel = ast.AccessProtected
 	}
+
+	if p.tokenizer.PeekToken(0).Type != TokenColon {
+		return nil, p.formatError(p.tokenizer.PeekToken(0), "expected ':' after access specifier")
+	}
+	p.tokenizer.NextToken() // consume ':'
 
 	// Update the access stack for current scope
 	if len(p.accessStack) > 0 {
@@ -31,9 +32,9 @@ func (p *Parser) parseAccessSpecifier() (*ast.Entity, error) {
 	// Create access specifier entity
 	entity := &ast.Entity{
 		Type:        ast.EntityAccessSpecifier,
-		Name:        accessToken.Value,
-		FullName:    accessToken.Value,
-		Signature:   accessToken.Value + ":",
+		Name:        token.Value,
+		FullName:    token.Value,
+		Signature:   token.Value + ":",
 		AccessLevel: accessLevel,
 	}
 

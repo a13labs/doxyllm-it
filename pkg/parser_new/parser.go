@@ -17,26 +17,12 @@ type Parser struct {
 }
 
 // formatError creates an error message with line and column information
-func (p *Parser) formatError(message string, token Token) error {
+func (p *Parser) formatError(token Token, message string) error {
 	return fmt.Errorf("%s at line %d, column %d (token: '%s')", message, token.Line, token.Column, token.Value)
 }
 
-// formatErrorAtCurrentPosition creates an error message with current position information
-func (p *Parser) formatErrorAtCurrentPosition(message string) error {
-	if p.tokenizer.IsAtEnd() {
-		return fmt.Errorf("%s at end of file", message)
-	}
-	token := p.tokenizer.PeekToken(0)
-	return p.formatError(message, token)
-}
-
-// formatErrorAtCurrentPosition creates an error message with current position information
-func (p *Parser) formatErrorAtCurrentPositionf(format string, args ...interface{}) error {
-	if p.tokenizer.IsAtEnd() {
-		return fmt.Errorf(format+" at end of file", args...)
-	}
-	token := p.tokenizer.PeekToken(0)
-	return p.formatError(fmt.Sprintf(format, args...), token)
+func (p *Parser) formatErrorf(token Token, format string, args ...interface{}) error {
+	return fmt.Errorf(format+" at line %d, column %d (token: '%s')", append(args, token.Line, token.Column, token.Value)...)
 }
 
 // New creates a new token-driven parser
@@ -138,13 +124,13 @@ func (p *Parser) parseDefault() (*ast.Entity, error) {
 	offset := 0 // Start looking after the identifier
 	numIdentifiers := 0
 	for !p.tokenizer.IsAtEnd() {
-		nextToken := p.tokenizer.PeekToken(offset)
-		if IsKeyword(nextToken) || IsLiteral(nextToken) || IsWhitespace(nextToken) {
+		token := p.tokenizer.PeekToken(offset)
+		if IsKeyword(token) || IsLiteral(token) || IsWhitespace(token) {
 			offset++
 			continue
 		}
-		if IsSymbol(nextToken) {
-			switch nextToken.Type {
+		if IsSymbol(token) {
+			switch token.Type {
 			case TokenLeftParen:
 				// Found a (, it must be a function
 				e, err := p.parseFunction()
@@ -166,16 +152,16 @@ func (p *Parser) parseDefault() (*ast.Entity, error) {
 			continue
 		}
 
-		switch nextToken.Type {
+		switch token.Type {
 		case TokenIdentifier:
-			if _, exists := p.defines[nextToken.Value]; exists {
-				defines = append(defines, nextToken.Value)
+			if _, exists := p.defines[token.Value]; exists {
+				defines = append(defines, token.Value)
 			}
 			numIdentifiers++
 		case TokenClass, TokenStruct, TokenEnum:
 			// Found a class keyword after identifier, parse as class
 			if offset != len(defines) {
-				return nil, p.formatErrorAtCurrentPositionf("All identifiers before a class must be a macro")
+				return nil, p.formatError(token, "unexpected token")
 			}
 			// consume all tokens until now since we found a class
 			for i := 0; i < offset; i++ {
@@ -184,7 +170,7 @@ func (p *Parser) parseDefault() (*ast.Entity, error) {
 
 			var e *ast.Entity
 			var err error
-			switch nextToken.Type {
+			switch token.Type {
 			case TokenClass:
 				e, err = p.parseClass()
 			case TokenEnum:
@@ -192,7 +178,7 @@ func (p *Parser) parseDefault() (*ast.Entity, error) {
 			case TokenStruct:
 				e, err = p.parseStruct()
 			default:
-				return nil, p.formatErrorAtCurrentPositionf("unexpected token '%s' after identifier", nextToken.Value)
+				return nil, p.formatError(token, "unexpected token")
 			}
 
 			if err != nil {
@@ -202,11 +188,11 @@ func (p *Parser) parseDefault() (*ast.Entity, error) {
 			e.Defines = defines
 			return e, nil
 		default:
-			return nil, p.formatErrorAtCurrentPositionf("unexpected token '%s' after identifier", nextToken.Value)
+			return nil, p.formatError(token, "unexpected token")
 		}
 		offset++
 	}
-	return nil, p.formatErrorAtCurrentPositionf("unexpected end of input after identifier")
+	return nil, p.formatError(p.tokenizer.PeekToken(0), "unexpected")
 }
 
 // cleanSpaces returns a string with consecutive spaces replaced by a single space

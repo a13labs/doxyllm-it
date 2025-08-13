@@ -40,11 +40,10 @@ func (p *Parser) parseEnum() (*ast.Entity, error) {
 		numTokens++
 	}
 
-	if p.tokenizer.IsAtEnd() {
-		return nil, p.formatErrorAtCurrentPosition("expected semicolon after enum declaration")
-	}
-
 	// consume semicolon
+	if p.tokenizer.PeekToken(0).Type != TokenSemicolon {
+		return nil, p.formatError(p.tokenizer.PeekToken(0), "expected ';' after enum declaration")
+	}
 	p.tokenizer.NextToken()
 
 	entity := &ast.Entity{

@@ -9,56 +9,56 @@ import (
 
 // parseTemplate handles template declarations
 func (p *Parser) parseTemplate() (*ast.Entity, error) {
+	var signature strings.Builder
 	p.tokenizer.NextToken() // consume 'template'
-
-	// Skip whitespace and newlines
 	p.tokenizer.SkipWhitespace()
+	signature.WriteString("template ")
 
-	// Parse template parameters
-	if !p.tokenizer.Match(TokenLess) {
-		return nil, p.formatErrorAtCurrentPosition("expected '<' after template")
-	}
-
-	depth := 1
-	var templateParams strings.Builder
-	templateParams.WriteString("<")
-
-	for !p.tokenizer.IsAtEnd() && depth > 0 {
+	depth := 0
+	sigReady := false
+	for !p.tokenizer.IsAtEnd() && !sigReady {
 		token := p.tokenizer.PeekToken(0)
-		if token.Type == TokenLess {
+		switch token.Type {
+		case TokenLess:
 			depth++
-		} else if token.Type == TokenGreater {
+		case TokenGreater:
 			depth--
+			if depth == 0 {
+				sigReady = true
+			}
 		}
-
-		templateParams.WriteString(token.Value)
+		signature.WriteString(token.Value)
 		p.tokenizer.NextToken()
 	}
 
-	p.tokenizer.SkipWhitespace()
-	var newSig string
-	var e *ast.Entity
+	if !sigReady {
+		return nil, p.formatError(p.tokenizer.PeekToken(0), "template signature is incomplete")
+	}
+
+	var entity *ast.Entity
 	var err error
+
+	// templates are always followed by a class, struct, or other type of entities
+	p.tokenizer.SkipWhitespace()
 	token := p.tokenizer.PeekToken(0)
 	switch token.Type {
 	case TokenClass:
-		e, err = p.parseClass()
+		entity, err = p.parseClass()
 	case TokenStruct:
-		e, err = p.parseStruct()
+		entity, err = p.parseStruct()
 	case TokenUsing:
-		e, err = p.parseUsing()
+		entity, err = p.parseUsing()
 	default:
 		// Template function?
-		e, err = p.parseDefault()
+		entity, err = p.parseDefault()
 	}
 
 	if err != nil {
 		return nil, err
 	}
 
-	newSig = fmt.Sprintf("template %s %s", templateParams.String(), e.Signature)
-	e.Signature = newSig
-	e.IsTemplate = true
+	entity.Signature = fmt.Sprintf("%s %s", signature.String(), entity.Signature)
+	entity.IsTemplate = true
 
-	return e, nil
+	return entity, nil
 }
