@@ -266,7 +266,27 @@ class Container {
 public:
     template <typename U>
     void insert(const U& item);
-};`
+};
+
+template <class Key, class Value>
+// Template with comment
+using Map = std::unordered_map<Key, Value>;
+
+template <typename ElementType, std::size_t Extent = dynamic_extent>
+/**
+* \brief A flexible, efficient and safe mechanism for representing contiguous sequences of elements in memory.
+*
+* The span class template allows access to a contiguous sequence of objects without copying them, providing strong exception safety guarantees.
+*/
+class span;
+
+template <typename C, typename U = uncvref_t<C>>
+/**
+ * @brief A type trait to check if a type is a container.
+ */
+struct is_container;
+
+`
 
 	parser := New()
 	tree, err := parser.Parse("test.hpp", content)
@@ -283,8 +303,8 @@ public:
 	}
 
 	// Should have: 2 template functions + 2 template using + 1 template class = 5 entities
-	if len(codeEntities) != 5 {
-		t.Errorf("Expected 5 code entities, got %d", len(codeEntities))
+	if len(codeEntities) != 8 {
+		t.Errorf("Expected 8 code entities, got %d", len(codeEntities))
 		for i, child := range tree.Root.Children {
 			t.Logf("Child %d: %s %s", i, child.Type, child.Name)
 		}
@@ -300,7 +320,6 @@ public:
 	autoFunc := codeEntities[1]
 	if autoFunc.Type != ast.EntityFunction || autoFunc.Name != "multiply" {
 		t.Errorf("Expected template function multiply, got %s %s", autoFunc.Type, autoFunc.Name)
-		t.Logf("Debug: autoFunc signature: %s", autoFunc.Signature)
 	}
 
 	// Check template using declarations
@@ -1791,13 +1810,13 @@ func TestTypedefSpacingFixes(t *testing.T) {
 			name:      "pointer_typedef",
 			content:   "typedef void* VoidPtr;",
 			expected:  "VoidPtr",
-			signature: "typedef void * VoidPtr",
+			signature: "typedef void* VoidPtr",
 		},
 		{
 			name:      "function_pointer_typedef",
 			content:   "typedef int (*FuncPtr)(int, int);",
 			expected:  "FuncPtr",
-			signature: "typedef int ( * FuncPtr ) ( int , int )",
+			signature: "typedef int (*FuncPtr)(int, int)",
 		},
 	}
 

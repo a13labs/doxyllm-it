@@ -59,4 +59,5 @@ func init() {
 	rootCmd.AddCommand(updateCmd)
 	rootCmd.AddCommand(batchUpdateCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(inspectCmd)
 }

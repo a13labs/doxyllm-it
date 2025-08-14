@@ -27,8 +27,7 @@ func TestEntityTypes(t *testing.T) {
 func TestEntityPaths(t *testing.T) {
 	// Create a simple hierarchy: namespace::class::method
 	root := &Entity{
-		Type: EntityUnknown,
-		Name: "",
+		Type: EntityRoot,
 	}
 
 	namespace := &Entity{
@@ -66,13 +65,6 @@ func TestEntityPaths(t *testing.T) {
 		t.Errorf("Function path should be 'MyNamespace::MyClass::myFunction', got %s", function.GetFullPath())
 	}
 
-	// Test scope
-	if !root.IsGlobal() {
-		t.Errorf("Root should be global")
-	}
-	if !namespace.IsGlobal() {
-		t.Errorf("Namespace should be global since its parent is the unnamed root")
-	}
 	if function.GetScope() != "MyNamespace::MyClass" {
 		t.Errorf("Function scope should be 'MyNamespace::MyClass', got %s", function.GetScope())
 	}
@@ -136,7 +128,6 @@ func TestEntityType(t *testing.T) {
 		{EntityClass, "class"},
 		{EntityFunction, "function"},
 		{EntityNamespace, "namespace"},
-		{EntityUnknown, "unknown"},
 	}
 
 	for _, test := range tests {

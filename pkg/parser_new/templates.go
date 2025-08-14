@@ -9,7 +9,7 @@ import (
 
 // parseTemplate handles template declarations
 func (p *Parser) parseTemplate() (*ast.Entity, error) {
-	p.tokenizer.NextToken() // consume 'template'
+	p.tokenizer.NextToken()
 	p.tokenizer.SkipWhitespace()
 
 	var signature strings.Builder
@@ -22,7 +22,6 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 
 	for !p.tokenizer.IsAtEnd() && !sigReady {
 		token := p.tokenizer.PeekToken(0)
-		signature.WriteString(token.Value)
 
 		switch token.Type {
 		case TokenLess:
@@ -30,11 +29,16 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 		case TokenGreater:
 			depth--
 			if depth == 0 {
-				p.tokenizer.NextToken() // consume '>'
 				sigReady = true
-				continue
+			}
+		case TokenRightShift:
+			depth--
+			depth--
+			if depth == 0 {
+				sigReady = true
 			}
 		}
+		signature.WriteString(token.Value)
 		p.tokenizer.NextToken()
 	}
 
@@ -44,6 +48,15 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 
 	p.tokenizer.SkipWhitespace()
 	token := p.tokenizer.PeekToken(0)
+
+	if token.Type == TokenLineComment || token.Type == TokenBlockComment {
+		for !p.tokenizer.IsAtEnd() && (token.Type == TokenLineComment || token.Type == TokenBlockComment) {
+			// Consume all comments
+			p.tokenizer.NextToken() // consume comment
+			p.tokenizer.SkipWhitespace()
+			token = p.tokenizer.PeekToken(0)
+		}
+	}
 
 	var (
 		entity *ast.Entity

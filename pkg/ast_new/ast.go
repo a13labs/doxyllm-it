@@ -26,12 +26,10 @@ const (
 	EntityDefine
 	EntityMacro
 	EntityAccessSpecifier
-	EntityTemplate
 	EntityUnion
 	EntityPreprocessor
 	EntityComment
 	EntityIdentifier
-	EntityUnknown
 )
 
 func (et EntityType) String() string {
@@ -62,8 +60,6 @@ func (et EntityType) String() string {
 		return "using"
 	case EntityMacro:
 		return "macro"
-	case EntityTemplate:
-		return "template"
 	case EntityPreprocessor:
 		return "preprocessor"
 	case EntityComment:
@@ -72,8 +68,6 @@ func (et EntityType) String() string {
 		return "access"
 	case EntityIdentifier:
 		return "identifier"
-	case EntityUnknown:
-		return "unknown"
 	default:
 		return "unknown"
 	}
@@ -115,6 +109,7 @@ type Entity struct {
 	Defines              []string // List of macro definitions
 	IsForwardDeclaration bool     // Whether this is a forward declaration
 	IsTemplate           bool     // Whether entity is templated
+	IsDeduction          bool     // Whether entity is a deduction guide
 
 	// Tree structure
 	Children []*Entity // Child entities
@@ -144,11 +139,6 @@ func (e *Entity) GetFullPath() string {
 		return ""
 	}
 	return strings.Join(path, "::")
-}
-
-// IsGlobal returns true if entity is at global scope
-func (e *Entity) IsGlobal() bool {
-	return e.Parent == nil || (e.Parent.Type == EntityUnknown && e.Parent.Name == "")
 }
 
 // GetScope returns the scope this entity belongs to

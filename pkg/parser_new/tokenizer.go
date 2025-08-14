@@ -3,7 +3,6 @@ package parser_new
 
 import (
 	"fmt"
-	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -16,9 +15,8 @@ const (
 	TokenError
 	TokenWhitespace
 	TokenNewline
-	TokenLineComment    // //
-	TokenBlockComment   // /* */
-	TokenDoxygenComment // /** */ or ///
+	TokenLineComment  // //
+	TokenBlockComment // /* */
 
 	// Literals
 	TokenIdentifier
@@ -163,8 +161,6 @@ func (t Token) String() string {
 		return fmt.Sprintf("LINE_COMMENT:%s", t.Value)
 	case TokenBlockComment:
 		return fmt.Sprintf("BLOCK_COMMENT:%s", t.Value)
-	case TokenDoxygenComment:
-		return fmt.Sprintf("DOXYGEN_COMMENT:%s", t.Value)
 	case TokenIdentifier:
 		return fmt.Sprintf("IDENTIFIER:%s", t.Value)
 	case TokenNumber:
@@ -348,8 +344,8 @@ type Tokenizer struct {
 	width  int // width of last rune read
 
 	// Streaming tokenizer improvements
-	lookahead [10]Token // Small lookahead buffer for peek operations
-	lookPos   int       // Number of tokens in lookahead buffer
+	lookahead [100]Token // Small lookahead buffer for peek operations
+	lookPos   int        // Number of tokens in lookahead buffer
 
 	// Error handling
 	errors []Token
@@ -676,11 +672,6 @@ func (t *Tokenizer) scanCommentToken(start, startLine, startColumn int) Token {
 		value := t.input[start:t.pos]
 		tokenType := TokenLineComment
 
-		// Check for Doxygen comment
-		if strings.HasPrefix(value, "///") || strings.HasPrefix(value, "//!") {
-			tokenType = TokenDoxygenComment
-		}
-
 		return Token{
 			Type:   tokenType,
 			Value:  value,
@@ -691,12 +682,6 @@ func (t *Tokenizer) scanCommentToken(start, startLine, startColumn int) Token {
 	} else if t.peek() == '*' {
 		// Block comment
 		t.next() // consume *
-		isDoxygen := false
-
-		// Check for /** at start
-		if t.peek() == '*' {
-			isDoxygen = true
-		}
 
 		for t.pos < len(t.input)-1 {
 			if t.input[t.pos] == '*' && t.input[t.pos+1] == '/' {
@@ -709,9 +694,6 @@ func (t *Tokenizer) scanCommentToken(start, startLine, startColumn int) Token {
 
 		value := t.input[start:t.pos]
 		tokenType := TokenBlockComment
-		if isDoxygen {
-			tokenType = TokenDoxygenComment
-		}
 
 		return Token{
 			Type:   tokenType,

@@ -19,6 +19,8 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 		inInheritance    bool
 		inSpecialization bool
 		isOperator       bool
+		isDeduction      bool
+		depth            int
 	)
 
 	// Read tokens until we find either ; or {
@@ -34,8 +36,18 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 			hasBody = token.Type == TokenLeftBrace
 			sigReady = true
 			continue
+		case TokenArrow:
+			if !isOperator {
+				isDeduction = true
+			}
 		case TokenLess:
+			depth++
 			inSpecialization = true
+		case TokenGreater:
+			depth--
+			if depth == 0 {
+				inSpecialization = false
+			}
 		case TokenColon:
 			inInheritance = true
 		case TokenLeftParen:
@@ -108,6 +120,7 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 		Name:        lastIdentifier,
 		FullName:    p.buildFullName(lastIdentifier),
 		Signature:   entitySignature,
+		IsDeduction: isDeduction,
 		AccessLevel: p.getCurrentAccessLevel(),
 		Body:        bodyText,
 	}, nil

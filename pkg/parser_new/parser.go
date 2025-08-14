@@ -32,12 +32,6 @@ func New() *Parser {
 	}
 }
 
-// ParseContent is a convenience function to parse content from a string
-func ParseContent(filename, content string) (*ast.ScopeTree, error) {
-	parser := New()
-	return parser.Parse(filename, content)
-}
-
 // ParseFile is a convenience function to parse content from a file
 func ParseFile(filename string) (*ast.ScopeTree, error) {
 	content, err := os.ReadFile(filename)
@@ -91,7 +85,7 @@ func (p *Parser) parseNext() (*ast.Entity, error) {
 	switch token.Type {
 	case TokenHash:
 		return p.parsePreprocessor()
-	case TokenLineComment, TokenBlockComment, TokenDoxygenComment:
+	case TokenLineComment, TokenBlockComment:
 		return p.parseComment()
 	case TokenTemplate:
 		return p.parseTemplate()
@@ -190,7 +184,7 @@ func (p *Parser) parseDefault() (*ast.Entity, error) {
 		}
 		offset++
 	}
-	return nil, p.formatError(p.tokenizer.PeekToken(0), "unexpected")
+	return nil, nil
 }
 
 // cleanSpaces returns a string with consecutive spaces replaced by a single space

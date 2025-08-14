@@ -23,6 +23,10 @@ func (p *Parser) parseNamespace() (*ast.Entity, error) {
 			sigReady = true
 			break
 		}
+		if token.Type == TokenNewline {
+			p.tokenizer.NextToken() // consume newline
+			continue
+		}
 
 		nameBuilder.WriteString(token.Value)
 		p.tokenizer.NextToken()
@@ -36,7 +40,7 @@ func (p *Parser) parseNamespace() (*ast.Entity, error) {
 	// Consume the opening brace (entering a scope, this will be taken care addEntity)
 	p.tokenizer.NextToken()
 
-	namespaceName := strings.Trim(nameBuilder.String(), " ")
+	namespaceName := strings.TrimRight(nameBuilder.String(), " ")
 	signature.WriteString(namespaceName)
 
 	return &ast.Entity{

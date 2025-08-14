@@ -67,7 +67,7 @@ func TestTokenizerComments(t *testing.T) {
 
 	commentTypes := []TokenType{}
 	for _, token := range tokens {
-		if token.Type == TokenLineComment || token.Type == TokenBlockComment || token.Type == TokenDoxygenComment {
+		if token.Type == TokenLineComment || token.Type == TokenBlockComment {
 			commentTypes = append(commentTypes, token.Type)
 		}
 	}
@@ -75,8 +75,8 @@ func TestTokenizerComments(t *testing.T) {
 	expectedCommentTypes := []TokenType{
 		TokenLineComment,
 		TokenBlockComment,
-		TokenDoxygenComment,
-		TokenDoxygenComment,
+		TokenBlockComment,
+		TokenLineComment,
 	}
 
 	if len(commentTypes) != len(expectedCommentTypes) {

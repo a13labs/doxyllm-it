@@ -8,12 +8,21 @@ import (
 
 // parseTypedef handles typedef declarations
 func (p *Parser) parseTypedef() (*ast.Entity, error) {
-	p.tokenizer.NextToken() // consume 'typedef'
 
-	var tokens []string
+	var signature strings.Builder
+	p.tokenizer.NextToken() // consume 'typedef
+	signature.WriteString("typedef ")
+	p.tokenizer.SkipWhitespace()
+
+	lastIdentifier := ""
 	for !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type != TokenSemicolon {
-		token := p.tokenizer.NextToken()
-		tokens = append(tokens, token.Value)
+		token := p.tokenizer.PeekToken(0)
+		if token.Type == TokenIdentifier {
+			lastIdentifier = token.Value
+		}
+
+		signature.WriteString(token.Value)
+		p.tokenizer.NextToken() // consume the token
 	}
 
 	// Consume the semicolon if present
@@ -23,7 +32,9 @@ func (p *Parser) parseTypedef() (*ast.Entity, error) {
 
 	entity := &ast.Entity{
 		Type:      ast.EntityTypedef,
-		Signature: "typedef " + strings.Join(tokens, " "),
+		Name:      lastIdentifier,
+		FullName:  p.buildFullName(lastIdentifier),
+		Signature: signature.String(),
 	}
 
 	return entity, nil
