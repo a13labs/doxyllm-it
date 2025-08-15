@@ -87,12 +87,6 @@ func (p *Parser) parseCallable() (*ast.Entity, error) {
 
 	entityType := ast.EntityCallable
 	entitySignature := strings.TrimSpace(signature.String())
-	// switch {
-	// case strings.HasPrefix(entitySignature, "~"):
-	// 	entityType = ast.EntityDestructor
-	// case numIdentifiers == 1 && numKeywords == 0:
-	// 	entityType = ast.EntityConstructor
-	// }
 
 	return &ast.Entity{
 		Type:        entityType,

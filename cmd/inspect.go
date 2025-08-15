@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	document "doxyllm-it/pkg/document_new"
+	document "doxyllm-it/pkg/source"
 )
 
 var inspectCmd = &cobra.Command{

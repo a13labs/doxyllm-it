@@ -1,4 +1,4 @@
-package document_new
+package source
 
 import (
 	"testing"

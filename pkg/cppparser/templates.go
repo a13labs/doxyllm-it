@@ -51,7 +51,7 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 
 	if token.Type == TokenLineComment || token.Type == TokenBlockComment {
 		for !p.tokenizer.IsAtEnd() && (token.Type == TokenLineComment || token.Type == TokenBlockComment) {
-			// Consume all comments
+			// Consume all comments ( we for now ignore all comments )
 			p.tokenizer.NextToken() // consume comment
 			p.tokenizer.SkipWhitespace()
 			token = p.tokenizer.PeekToken(0)
