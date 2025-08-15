@@ -16,10 +16,10 @@ func TestEntityTypes(t *testing.T) {
 
 	// Test function entity
 	functionEntity := &Entity{
-		Type: EntityFunction,
+		Type: EntityCallable,
 		Name: "testFunc",
 	}
-	if functionEntity.Type != EntityFunction {
+	if functionEntity.Type != EntityCallable {
 		t.Errorf("Expected EntityFunction, got %v", functionEntity.Type)
 	}
 }
@@ -43,7 +43,7 @@ func TestEntityPaths(t *testing.T) {
 	namespace.AddChild(class)
 
 	function := &Entity{
-		Type: EntityFunction,
+		Type: EntityCallable,
 		Name: "myFunction",
 	}
 	class.AddChild(function)
@@ -126,7 +126,7 @@ func TestEntityType(t *testing.T) {
 		expected   string
 	}{
 		{EntityClass, "class"},
-		{EntityFunction, "function"},
+		{EntityCallable, "function"},
 		{EntityNamespace, "namespace"},
 	}
 

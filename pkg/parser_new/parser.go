@@ -124,16 +124,16 @@ func (p *Parser) parseDefault() (*ast.Entity, error) {
 		if IsSymbol(token) {
 			switch token.Type {
 			case TokenLeftParen:
-				// Found a (, it must be a function
-				e, err := p.parseFunction()
+				// Found a (, it must be a callable
+				e, err := p.parseCallable()
 				if err != nil {
 					return nil, err
 				}
 				e.Defines = defines
 				return e, nil
 			case TokenSemicolon:
-				// Found a ';' , it must be variable(s)
-				e, err := p.parseVariable()
+				// Found a ';' , it must be name(s)
+				e, err := p.parseName()
 				if err != nil {
 					return nil, err
 				}

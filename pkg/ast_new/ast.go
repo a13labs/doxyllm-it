@@ -14,17 +14,11 @@ const (
 	EntityNamespace
 	EntityClass
 	EntityStruct
-	EntityFunction
-	EntityConstructor
-	EntityDestructor
-	EntityVariable
-	EntityField
+	EntityCallable
+	EntityName
 	EntityEnum
-	EntityEnumValue
 	EntityTypedef
 	EntityUsing
-	EntityDefine
-	EntityMacro
 	EntityAccessSpecifier
 	EntityUnion
 	EntityPreprocessor
@@ -44,22 +38,14 @@ func (et EntityType) String() string {
 		return "struct"
 	case EntityEnum:
 		return "enum"
-	case EntityFunction:
+	case EntityCallable:
 		return "function"
-	case EntityConstructor:
-		return "constructor"
-	case EntityDestructor:
-		return "destructor"
-	case EntityVariable:
+	case EntityName:
 		return "variable"
-	case EntityField:
-		return "field"
 	case EntityTypedef:
 		return "typedef"
 	case EntityUsing:
 		return "using"
-	case EntityMacro:
-		return "macro"
 	case EntityPreprocessor:
 		return "preprocessor"
 	case EntityComment:

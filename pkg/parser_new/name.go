@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// parseVariable handles variable declarations
-func (p *Parser) parseVariable() (*ast.Entity, error) {
+// parseName handles variable declarations
+func (p *Parser) parseName() (*ast.Entity, error) {
 	var signature strings.Builder
 	var lastIdentifier string
 	sigReady := false
@@ -37,10 +37,7 @@ func (p *Parser) parseVariable() (*ast.Entity, error) {
 		return nil, p.formatError(p.tokenizer.PeekToken(0), "variable signature is incomplete")
 	}
 
-	entityType := ast.EntityVariable
-	if p.isInsideClass() {
-		entityType = ast.EntityField
-	}
+	entityType := ast.EntityName
 
 	return &ast.Entity{
 		Type:        entityType,

@@ -55,7 +55,7 @@ public:
 	methodEntity := doc.FindEntity("TestClass::testMethod")
 	if methodEntity == nil {
 		t.Error("Could not find TestClass::testMethod entity")
-	} else if methodEntity.Type != ast.EntityFunction {
+	} else if methodEntity.Type != ast.EntityCallable {
 		t.Errorf("Expected method entity, got %s", methodEntity.Type)
 	}
 }
@@ -84,9 +84,9 @@ public:
 		switch entity.Type {
 		case ast.EntityClass:
 			hasClass = true
-		case ast.EntityField:
+		case ast.EntityName:
 			hasField = true
-		case ast.EntityFunction:
+		case ast.EntityCallable:
 			hasFunction = true
 		case ast.EntityComment:
 			t.Error("Comments should not be in documentable entities")

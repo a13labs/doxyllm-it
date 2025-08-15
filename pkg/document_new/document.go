@@ -146,9 +146,7 @@ func (d *Document) GetInstructions() []*ast.Entity {
 func (d *Document) isInstruction(entityType ast.EntityType) bool {
 	switch entityType {
 	case ast.EntityNamespace, ast.EntityClass, ast.EntityStruct, ast.EntityEnum,
-		ast.EntityFunction, ast.EntityConstructor, ast.EntityDestructor,
-		ast.EntityVariable, ast.EntityField, ast.EntityTypedef, ast.EntityUsing,
-		ast.EntityMacro:
+		ast.EntityCallable, ast.EntityName, ast.EntityTypedef, ast.EntityUsing:
 		return true
 	case ast.EntityComment, ast.EntityAccessSpecifier, ast.EntityPreprocessor:
 		return false

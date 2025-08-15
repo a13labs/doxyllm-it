@@ -6,8 +6,8 @@ import (
 	ast "doxyllm-it/pkg/ast_new"
 )
 
-// parseFunction handles function declarations
-func (p *Parser) parseFunction() (*ast.Entity, error) {
+// parseCallable handles function declarations
+func (p *Parser) parseCallable() (*ast.Entity, error) {
 	var (
 		lastIdentifier   string
 		signature        strings.Builder
@@ -80,40 +80,19 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 	var bodyText string
 	if hasBody {
 		p.tokenizer.SkipWhitespace()
-		if !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type == TokenLeftBrace {
-			braceDepth := 1
-			var bodyTokens []Token
-			bodyTokens = append(bodyTokens, p.tokenizer.NextToken())
-			for !p.tokenizer.IsAtEnd() && braceDepth > 0 {
-				token := p.tokenizer.PeekToken(0)
-				switch token.Type {
-				case TokenLeftBrace:
-					braceDepth++
-				case TokenRightBrace:
-					braceDepth--
-				}
-				bodyTokens = append(bodyTokens, p.tokenizer.NextToken())
-			}
-			if braceDepth == 0 {
-				var bodyBuilder strings.Builder
-				for _, t := range bodyTokens {
-					bodyBuilder.WriteString(t.Value)
-				}
-				bodyText = bodyBuilder.String()
-			}
-		}
+		bodyText = p.parseCallableBody()
 	} else {
 		p.tokenizer.NextToken()
 	}
 
-	entityType := ast.EntityFunction
+	entityType := ast.EntityCallable
 	entitySignature := strings.TrimSpace(signature.String())
-	switch {
-	case strings.HasPrefix(entitySignature, "~"):
-		entityType = ast.EntityDestructor
-	case numIdentifiers == 1 && numKeywords == 0:
-		entityType = ast.EntityConstructor
-	}
+	// switch {
+	// case strings.HasPrefix(entitySignature, "~"):
+	// 	entityType = ast.EntityDestructor
+	// case numIdentifiers == 1 && numKeywords == 0:
+	// 	entityType = ast.EntityConstructor
+	// }
 
 	return &ast.Entity{
 		Type:        entityType,
@@ -124,4 +103,26 @@ func (p *Parser) parseFunction() (*ast.Entity, error) {
 		AccessLevel: p.getCurrentAccessLevel(),
 		Body:        bodyText,
 	}, nil
+}
+
+func (p *Parser) parseCallableBody() string {
+	var bodyBuilder strings.Builder
+	braceDepth := 0
+	bodyReady := false
+	for !p.tokenizer.IsAtEnd() && !bodyReady {
+		token := p.tokenizer.PeekToken(0)
+		switch token.Type {
+		case TokenLeftBrace:
+			braceDepth++
+		case TokenRightBrace:
+			braceDepth--
+		}
+		if braceDepth == 0 {
+			bodyReady = true
+		}
+		bodyBuilder.WriteString(token.Value)
+		p.tokenizer.NextToken()
+	}
+
+	return bodyBuilder.String()
 }
