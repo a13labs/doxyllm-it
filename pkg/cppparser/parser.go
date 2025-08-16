@@ -1,10 +1,11 @@
 // Package parser implements a streaming token-driven C++ header file parser with O(1) memory complexity
-package parser_new
+package cppparser
 
 import (
-	ast "doxyllm-it/pkg/ast_new"
+	ast "doxyllm-it/pkg/ast"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Parser implements a token-driven parser for C++ headers with streaming tokenizer backend
@@ -202,5 +203,6 @@ func cleanSpaces(s string) string {
 			space = false
 		}
 	}
-	return string(out)
+	// clean all leading and trailing spaces
+	return strings.TrimSpace(string(out))
 }

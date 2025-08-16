@@ -1,9 +1,9 @@
-package parser_new
+package cppparser
 
 import (
 	"strings"
 
-	ast "doxyllm-it/pkg/ast_new"
+	ast "doxyllm-it/pkg/ast"
 )
 
 // parseCallable handles function declarations
@@ -19,7 +19,6 @@ func (p *Parser) parseCallable() (*ast.Entity, error) {
 		inInheritance    bool
 		inSpecialization bool
 		isOperator       bool
-		isDeduction      bool
 		depth            int
 	)
 
@@ -27,19 +26,18 @@ func (p *Parser) parseCallable() (*ast.Entity, error) {
 	for !p.tokenizer.IsAtEnd() && !sigReady {
 		token := p.tokenizer.PeekToken(0)
 		switch token.Type {
-		case TokenWhitespace, TokenNewline:
+		case TokenWhitespace:
 			if numIdentifiers == 0 && numKeywords == 0 {
 				p.tokenizer.NextToken()
 				continue
 			}
+		case TokenNewline:
+			p.tokenizer.NextToken()
+			continue
 		case TokenSemicolon, TokenLeftBrace:
 			hasBody = token.Type == TokenLeftBrace
 			sigReady = true
 			continue
-		case TokenArrow:
-			if !isOperator {
-				isDeduction = true
-			}
 		case TokenLess:
 			depth++
 			inSpecialization = true
@@ -77,10 +75,10 @@ func (p *Parser) parseCallable() (*ast.Entity, error) {
 		return nil, p.formatError(p.tokenizer.PeekToken(0), "function signature is incomplete")
 	}
 
-	var bodyText string
+	var body []string
 	if hasBody {
 		p.tokenizer.SkipWhitespace()
-		bodyText = p.parseCallableBody()
+		body = p.parseCallableBody()
 	} else {
 		p.tokenizer.NextToken()
 	}
@@ -93,30 +91,48 @@ func (p *Parser) parseCallable() (*ast.Entity, error) {
 		Name:        lastIdentifier,
 		FullName:    p.buildFullName(lastIdentifier),
 		Signature:   entitySignature,
-		IsDeduction: isDeduction,
 		AccessLevel: p.getCurrentAccessLevel(),
-		Body:        bodyText,
+		Body:        body,
 	}, nil
 }
 
-func (p *Parser) parseCallableBody() string {
-	var bodyBuilder strings.Builder
+func (p *Parser) parseCallableBody() []string {
+	var bodyLines []string
+	var currentLine strings.Builder
 	braceDepth := 0
 	bodyReady := false
 	for !p.tokenizer.IsAtEnd() && !bodyReady {
 		token := p.tokenizer.PeekToken(0)
 		switch token.Type {
+		case TokenNewline:
+			p.tokenizer.NextToken()
+			line := cleanSpaces(strings.TrimSpace(currentLine.String()))
+			if line != "" {
+				bodyLines = append(bodyLines, line)
+			}
+			currentLine.Reset()
+			continue
 		case TokenLeftBrace:
 			braceDepth++
+			p.tokenizer.NextToken()
+			if braceDepth > 1 {
+				currentLine.WriteString(token.Value)
+			}
+			continue
 		case TokenRightBrace:
 			braceDepth--
+			p.tokenizer.NextToken()
+			if braceDepth > 0 {
+				currentLine.WriteString(token.Value)
+			}
+			if braceDepth == 0 {
+				bodyReady = true
+			}
+			continue
 		}
-		if braceDepth == 0 {
-			bodyReady = true
-		}
-		bodyBuilder.WriteString(token.Value)
+		currentLine.WriteString(token.Value)
 		p.tokenizer.NextToken()
 	}
 
-	return bodyBuilder.String()
+	return bodyLines
 }

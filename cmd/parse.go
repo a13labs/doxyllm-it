@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"doxyllm-it/pkg/ast"
-	"doxyllm-it/pkg/parser"
+	"doxyllm-it/pkg/cppparser"
 
 	"github.com/spf13/cobra"
 )
@@ -27,7 +27,7 @@ The output can be in JSON format for further processing or human-readable format
 		}
 
 		// Parse the file
-		p := parser.New()
+		p := cppparser.New()
 		tree, err := p.Parse(filename, string(content))
 		if err != nil {
 			return fmt.Errorf("failed to parse file %s: %w", filename, err)
@@ -54,35 +54,25 @@ func init() {
 func outputJSON(tree *ast.ScopeTree, showAll bool) error {
 	// Create a simplified structure for JSON output
 	type JSONEntity struct {
-		Type        string       `json:"type"`
-		Name        string       `json:"name"`
-		FullName    string       `json:"fullName"`
-		Signature   string       `json:"signature"`
-		AccessLevel string       `json:"accessLevel,omitempty"`
-		IsStatic    bool         `json:"isStatic,omitempty"`
-		IsVirtual   bool         `json:"isVirtual,omitempty"`
-		IsConst     bool         `json:"isConst,omitempty"`
-		IsExtern    bool         `json:"isExtern,omitempty"`
-		HasComment  bool         `json:"hasComment"`
-		Children    []JSONEntity `json:"children,omitempty"`
-		Line        int          `json:"line"`
-		Column      int          `json:"column"`
+		Type                 string       `json:"type"`
+		Name                 string       `json:"name"`
+		FullName             string       `json:"fullName"`
+		Signature            string       `json:"signature"`
+		AccessLevel          string       `json:"accessLevel,omitempty"`
+		IsForwardDeclaration bool         `json:"isForwardDeclaration,omitempty"`
+		IsTemplate           bool         `json:"isTemplate,omitempty"`
+		Children             []JSONEntity `json:"children,omitempty"`
 	}
 
 	var convertEntity func(*ast.Entity) JSONEntity
 	convertEntity = func(e *ast.Entity) JSONEntity {
 		je := JSONEntity{
-			Type:       e.Type.String(),
-			Name:       e.Name,
-			FullName:   e.FullName,
-			Signature:  e.Signature,
-			IsStatic:   e.IsStatic,
-			IsVirtual:  e.IsVirtual,
-			IsConst:    e.IsConst,
-			IsExtern:   e.IsExtern,
-			HasComment: e.HasDoxygenComment(),
-			Line:       e.SourceRange.Start.Line,
-			Column:     e.SourceRange.Start.Column,
+			Type:                 e.Type.String(),
+			Name:                 e.Name,
+			FullName:             e.FullName,
+			Signature:            e.Signature,
+			IsForwardDeclaration: e.IsForwardDeclaration,
+			IsTemplate:           e.IsTemplate,
 		}
 
 		if e.AccessLevel != ast.AccessUnknown {
@@ -99,9 +89,7 @@ func outputJSON(tree *ast.ScopeTree, showAll bool) error {
 	// Convert only the direct children of root (no duplicates)
 	var jsonEntities []JSONEntity
 	for _, entity := range tree.Root.Children {
-		if entity.Type != ast.EntityUnknown {
-			jsonEntities = append(jsonEntities, convertEntity(entity))
-		}
+		jsonEntities = append(jsonEntities, convertEntity(entity))
 	}
 
 	output := map[string]interface{}{
@@ -120,9 +108,6 @@ func outputHuman(tree *ast.ScopeTree, showAll bool) error {
 
 	// Print the tree hierarchically starting from root children
 	for _, entity := range tree.Root.Children {
-		if entity.Type == ast.EntityUnknown {
-			continue
-		}
 		printEntity(entity, 0)
 		fmt.Println()
 	}
@@ -135,32 +120,9 @@ func outputHuman(tree *ast.ScopeTree, showAll bool) error {
 	allEntities := tree.Root.GetAllEntities()
 	// Filter out the root entity itself
 	var entities []*ast.Entity
-	for _, entity := range allEntities {
-		if entity.Type != ast.EntityUnknown {
-			entities = append(entities, entity)
-		}
-	}
+	entities = append(entities, allEntities...)
 
 	fmt.Printf("Total entities: %d\n", len(entities))
-
-	// Count by type
-	typeCounts := make(map[ast.EntityType]int)
-	documentedCount := 0
-
-	for _, entity := range entities {
-		if entity.Type != ast.EntityUnknown {
-			typeCounts[entity.Type]++
-			if entity.HasDoxygenComment() {
-				documentedCount++
-			}
-		}
-	}
-
-	for entityType, count := range typeCounts {
-		fmt.Printf("%s: %d\n", entityType.String(), count)
-	}
-
-	fmt.Printf("Documented: %d (%.1f%%)\n", documentedCount, float64(documentedCount)/float64(len(entities))*100)
 
 	return nil
 }
@@ -171,51 +133,17 @@ func printEntity(entity *ast.Entity, depth int) {
 		indent += "  "
 	}
 
-	fmt.Printf("%s%s: %s", indent, entity.Type.String(), entity.Name)
-
-	if entity.FullName != entity.Name {
-		fmt.Printf(" (%s)", entity.FullName)
-	}
+	fmt.Printf("%s%s:", indent, entity.Type.String())
 
 	if entity.AccessLevel != ast.AccessUnknown {
 		fmt.Printf(" [%s]", entity.AccessLevel.String())
 	}
 
-	if entity.IsStatic {
-		fmt.Printf(" [static]")
-	}
-	if entity.IsVirtual {
-		fmt.Printf(" [virtual]")
-	}
-	if entity.IsConst {
-		fmt.Printf(" [const]")
-	}
-	if entity.IsExtern {
-		fmt.Printf(" [extern]")
-	}
-	if entity.IsConstexpr {
-		fmt.Printf(" [constexpr]")
-	}
 	if entity.IsForwardDeclaration {
 		fmt.Printf(" [forward]")
 	}
 
-	if entity.HasDoxygenComment() {
-		fmt.Printf(" [documented]")
-	}
-
 	fmt.Printf("\n%s  Signature: %s\n", indent, entity.Signature)
-	fmt.Printf("%s  Location: Line %d, Column %d\n", indent, entity.SourceRange.Start.Line, entity.SourceRange.Start.Column)
-
-	if entity.HasDoxygenComment() {
-		fmt.Printf("%s  Documentation:\n", indent)
-		if entity.Comment.Brief != "" {
-			fmt.Printf("%s    Brief: %s\n", indent, entity.Comment.Brief)
-		}
-		if entity.Comment.Detailed != "" {
-			fmt.Printf("%s    Details: %s\n", indent, entity.Comment.Detailed)
-		}
-	}
 
 	// Print children
 	for _, child := range entity.Children {

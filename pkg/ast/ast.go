@@ -1,49 +1,35 @@
 // Package ast defines the Abstract Syntax Tree structures for C++ documentable entities
+// This version ONLY handles C++ language syntax, not documentation semantics
 package ast
 
 import (
 	"strings"
 )
 
-// Position represents a position in the source file
-type Position struct {
-	Line   int
-	Column int
-	Offset int
-}
-
-// Range represents a range in the source file
-type Range struct {
-	Start Position
-	End   Position
-}
-
 // EntityType represents the type of documentable entity
 type EntityType int
 
 const (
-	EntityUnknown EntityType = iota
+	EntityRoot EntityType = iota
 	EntityNamespace
 	EntityClass
 	EntityStruct
+	EntityCallable
+	EntityName
 	EntityEnum
-	EntityFunction
-	EntityMethod
-	EntityConstructor
-	EntityDestructor
-	EntityVariable
-	EntityField
 	EntityTypedef
 	EntityUsing
-	EntityMacro
-	EntityTemplate
+	EntityAccessSpecifier
+	EntityUnion
 	EntityPreprocessor
 	EntityComment
-	EntityAccessSpecifier
+	EntityIdentifier
 )
 
 func (et EntityType) String() string {
 	switch et {
+	case EntityRoot:
+		return "root"
 	case EntityNamespace:
 		return "namespace"
 	case EntityClass:
@@ -52,32 +38,22 @@ func (et EntityType) String() string {
 		return "struct"
 	case EntityEnum:
 		return "enum"
-	case EntityFunction:
+	case EntityCallable:
 		return "function"
-	case EntityMethod:
-		return "method"
-	case EntityConstructor:
-		return "constructor"
-	case EntityDestructor:
-		return "destructor"
-	case EntityVariable:
+	case EntityName:
 		return "variable"
-	case EntityField:
-		return "field"
 	case EntityTypedef:
 		return "typedef"
 	case EntityUsing:
 		return "using"
-	case EntityMacro:
-		return "macro"
-	case EntityTemplate:
-		return "template"
 	case EntityPreprocessor:
 		return "preprocessor"
 	case EntityComment:
 		return "comment"
 	case EntityAccessSpecifier:
 		return "access"
+	case EntityIdentifier:
+		return "identifier"
 	default:
 		return "unknown"
 	}
@@ -106,60 +82,27 @@ func (al AccessLevel) String() string {
 	}
 }
 
-// DoxygenComment represents a parsed doxygen comment
-type DoxygenComment struct {
-	Raw        string            // Original comment text
-	Brief      string            // Brief description
-	Detailed   string            // Detailed description
-	Params     map[string]string // Parameter documentation (@param)
-	TParams    map[string]string // Template parameter documentation (@tparam)
-	Returns    string            // Return value documentation
-	Throws     []string          // Exception documentation
-	Since      string            // Since version
-	Deprecated string            // Deprecation notice
-	See        []string          // See also references
-	Author     string            // Author information
-	Version    string            // Version information
-	// Group-related tags
-	Defgroup   string   // @defgroup tag (for group definitions)
-	Ingroup    []string // @ingroup tags (group memberships)
-	Addtogroup string   // @addtogroup tag
-	// Structural tags
-	File       string            // @file tag
-	Namespace  string            // @namespace tag
-	Class      string            // @class tag
-	CustomTags map[string]string // Custom doxygen tags
-	Range      Range             // Position in source
-}
-
-// Entity represents a documentable C++ entity
+// Entity represents a C++ language entity with raw comments
 type Entity struct {
-	Type                 EntityType      // Type of entity
-	Name                 string          // Entity name
-	FullName             string          // Fully qualified name
-	Signature            string          // Complete signature/declaration
-	AccessLevel          AccessLevel     // Access level (for class members)
-	IsStatic             bool            // Whether entity is static
-	IsConst              bool            // Whether entity is const
-	IsConstexpr          bool            // Whether entity is constexpr
-	IsExtern             bool            // Whether entity is extern
-	IsVirtual            bool            // Whether method is virtual
-	IsPure               bool            // Whether method is pure virtual
-	IsInline             bool            // Whether function is inline
-	IsForwardDeclaration bool            // Whether this is a forward declaration
-	IsTemplate           bool            // Whether entity is templated
-	TemplateParams       []string        // Template parameters
-	Namespace            string          // Containing namespace
-	Class                string          // Containing class (for methods/fields)
-	Comment              *DoxygenComment // Associated doxygen comment
-	Children             []*Entity       // Child entities
-	Parent               *Entity         // Parent entity
-	SourceRange          Range           // Range in source file
-	HeaderRange          Range           // Range of just the declaration/header
-	BodyRange            *Range          // Range of body (for functions/classes with implementation)
-	OriginalText         string          // Original text including whitespace and comments
-	LeadingWS            string          // Leading whitespace/comments before entity
-	TrailingWS           string          // Trailing whitespace/comments after entity
+	// Core entity information
+	Type        EntityType  // Type of C++ entity
+	Name        string      // Entity name
+	FullName    string      // Fully qualified name
+	Signature   string      // Complete signature/declaration
+	AccessLevel AccessLevel // C++ access level (for class members)
+
+	// C++ language attributes
+	Defines              []string // List of macro definitions
+	IsForwardDeclaration bool     // Whether this is a forward declaration
+	IsTemplate           bool     // Whether entity is templated
+
+	// Tree structure
+	Children []*Entity // Child entities
+	Parent   *Entity   // Parent entity
+
+	// Source information
+	Body        []string // Inner body content for functions (without comments)
+	LineComment *Entity  // Line comment associated with the entity
 }
 
 // GetPath returns the hierarchical path to this entity
@@ -182,11 +125,6 @@ func (e *Entity) GetFullPath() string {
 		return ""
 	}
 	return strings.Join(path, "::")
-}
-
-// IsGlobal returns true if entity is at global scope
-func (e *Entity) IsGlobal() bool {
-	return e.Parent == nil || (e.Parent.Type == EntityUnknown && e.Parent.Name == "")
 }
 
 // GetScope returns the scope this entity belongs to
@@ -258,11 +196,6 @@ func (e *Entity) GetEntitiesByType(entityType EntityType) []*Entity {
 	return entities
 }
 
-// HasDoxygenComment returns true if entity has doxygen documentation
-func (e *Entity) HasDoxygenComment() bool {
-	return e.Comment != nil && e.Comment.Raw != ""
-}
-
 // ScopeTree represents the complete parsed tree of a C++ file
 type ScopeTree struct {
 	Root     *Entity   // Root entity (represents the file)
@@ -274,12 +207,10 @@ type ScopeTree struct {
 // NewScopeTree creates a new scope tree
 func NewScopeTree(filename, content string) *ScopeTree {
 	root := &Entity{
-		Type:         EntityUnknown,
-		Name:         "",
-		FullName:     "",
-		Children:     make([]*Entity, 0),
-		SourceRange:  Range{Start: Position{Line: 1, Column: 1, Offset: 0}, End: Position{Line: strings.Count(content, "\n") + 1, Column: 1, Offset: len(content)}},
-		OriginalText: content,
+		Type:     EntityRoot,
+		Name:     "",
+		Children: make([]*Entity, 0),
+		Body:     strings.Split(content, "\n"),
 	}
 
 	return &ScopeTree{
@@ -310,24 +241,69 @@ func (st *ScopeTree) GetEntitiesByType(entityType EntityType) []*Entity {
 	return st.Root.GetEntitiesByType(entityType)
 }
 
-// GetDocumentableEntities returns entities that can have doxygen comments
-func (st *ScopeTree) GetDocumentableEntities() []*Entity {
-	var entities []*Entity
-	documentableTypes := []EntityType{
-		EntityNamespace, EntityClass, EntityStruct, EntityEnum,
-		EntityFunction, EntityMethod, EntityConstructor, EntityDestructor,
-		EntityVariable, EntityField, EntityTypedef, EntityUsing,
+func (st *ScopeTree) InsertBefore(entity *Entity, newEntity *Entity) {
+	parent := entity.Parent
+	if parent == nil {
+		return
 	}
 
-	for _, entityType := range documentableTypes {
-		candidates := st.GetEntitiesByType(entityType)
-		// Filter out forward declarations - they typically don't need documentation
-		for _, entity := range candidates {
-			if !entity.IsForwardDeclaration {
-				entities = append(entities, entity)
-			}
+	// Find the index of the entity to insert before
+	index := -1
+	for i, child := range parent.Children {
+		if child == entity {
+			index = i
+			break
 		}
 	}
 
-	return entities
+	if index == -1 {
+		return
+	}
+
+	// Insert the new entity before the existing one
+	parent.Children = append(parent.Children[:index], append([]*Entity{newEntity}, parent.Children[index:]...)...)
+}
+
+func (st *ScopeTree) RemoveEntity(entity *Entity) {
+	parent := entity.Parent
+	if parent == nil {
+		return
+	}
+
+	// Remove the entity from its parent's children
+	for i, child := range parent.Children {
+		if child == entity {
+			parent.Children = append(parent.Children[:i], parent.Children[i+1:]...)
+			break
+		}
+	}
+}
+
+func (st *ScopeTree) GetPrecedingEntity(entity *Entity) *Entity {
+	if entity == nil {
+		return nil
+	}
+
+	// Find the parent entity
+	parent := entity.Parent
+	if parent == nil {
+		return nil
+	}
+
+	// If the entity is the first child, return the parent
+	if parent.Children[0] == entity {
+		return parent
+	}
+
+	// Otherwise, find the previous sibling
+	for i, child := range parent.Children {
+		if child == entity {
+			if i > 0 {
+				return parent.Children[i-1]
+			}
+			break
+		}
+	}
+
+	return nil
 }

@@ -1,9 +1,9 @@
-package parser_new
+package cppparser
 
 import (
 	"strings"
 
-	ast "doxyllm-it/pkg/ast_new"
+	ast "doxyllm-it/pkg/ast"
 )
 
 // parseTypedef handles typedef declarations

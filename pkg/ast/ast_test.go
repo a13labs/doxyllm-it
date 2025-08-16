@@ -4,122 +4,135 @@ import (
 	"testing"
 )
 
-func TestDoxygenCommentParamsAndTParams(t *testing.T) {
-	tests := []struct {
-		name            string
-		comment         *DoxygenComment
-		expectedParams  map[string]string
-		expectedTParams map[string]string
-	}{
-		{
-			name: "Empty comment",
-			comment: &DoxygenComment{
-				Params:  make(map[string]string),
-				TParams: make(map[string]string),
-			},
-			expectedParams:  map[string]string{},
-			expectedTParams: map[string]string{},
-		},
-		{
-			name: "Function with params only",
-			comment: &DoxygenComment{
-				Params: map[string]string{
-					"x": "The x coordinate",
-					"y": "The y coordinate",
-				},
-				TParams: make(map[string]string),
-			},
-			expectedParams: map[string]string{
-				"x": "The x coordinate",
-				"y": "The y coordinate",
-			},
-			expectedTParams: map[string]string{},
-		},
-		{
-			name: "Template with tparams only",
-			comment: &DoxygenComment{
-				Params: make(map[string]string),
-				TParams: map[string]string{
-					"T": "The type of elements in the container",
-					"U": "The type of the allocator",
-				},
-			},
-			expectedParams: map[string]string{},
-			expectedTParams: map[string]string{
-				"T": "The type of elements in the container",
-				"U": "The type of the allocator",
-			},
-		},
-		{
-			name: "Template function with both params and tparams",
-			comment: &DoxygenComment{
-				Params: map[string]string{
-					"value": "The value to insert",
-					"index": "The index where to insert",
-				},
-				TParams: map[string]string{
-					"T":         "The type of elements",
-					"Allocator": "The allocator type",
-				},
-			},
-			expectedParams: map[string]string{
-				"value": "The value to insert",
-				"index": "The index where to insert",
-			},
-			expectedTParams: map[string]string{
-				"T":         "The type of elements",
-				"Allocator": "The allocator type",
-			},
-		},
+func TestEntityTypes(t *testing.T) {
+	// Test comment entity
+	commentEntity := &Entity{
+		Type: EntityComment,
+		Body: []string{"// Line comment"},
+	}
+	if commentEntity.Type != EntityComment {
+		t.Errorf("Expected EntityComment, got %v", commentEntity.Type)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Verify Params
-			if len(tt.comment.Params) != len(tt.expectedParams) {
-				t.Errorf("Params length mismatch: got %d, want %d", len(tt.comment.Params), len(tt.expectedParams))
-			}
-			for key, value := range tt.expectedParams {
-				if got, exists := tt.comment.Params[key]; !exists || got != value {
-					t.Errorf("Params[%q] = %q, want %q", key, got, value)
-				}
-			}
-
-			// Verify TParams
-			if len(tt.comment.TParams) != len(tt.expectedTParams) {
-				t.Errorf("TParams length mismatch: got %d, want %d", len(tt.comment.TParams), len(tt.expectedTParams))
-			}
-			for key, value := range tt.expectedTParams {
-				if got, exists := tt.comment.TParams[key]; !exists || got != value {
-					t.Errorf("TParams[%q] = %q, want %q", key, got, value)
-				}
-			}
-		})
+	// Test function entity
+	functionEntity := &Entity{
+		Type: EntityCallable,
+		Name: "testFunc",
+	}
+	if functionEntity.Type != EntityCallable {
+		t.Errorf("Expected EntityFunction, got %v", functionEntity.Type)
 	}
 }
 
-func TestDoxygenCommentInitialization(t *testing.T) {
-	comment := &DoxygenComment{
-		Params:  make(map[string]string),
-		TParams: make(map[string]string),
+func TestEntityPaths(t *testing.T) {
+	// Create a simple hierarchy: namespace::class::method
+	root := &Entity{
+		Type: EntityRoot,
 	}
 
-	// Verify maps are properly initialized
-	if comment.Params == nil {
-		t.Error("Params map not initialized")
+	namespace := &Entity{
+		Type: EntityNamespace,
+		Name: "MyNamespace",
 	}
-	if comment.TParams == nil {
-		t.Error("TParams map not initialized")
+	root.AddChild(namespace)
+
+	class := &Entity{
+		Type: EntityClass,
+		Name: "MyClass",
+	}
+	namespace.AddChild(class)
+
+	function := &Entity{
+		Type: EntityCallable,
+		Name: "myFunction",
+	}
+	class.AddChild(function)
+
+	// Test paths
+	if root.GetFullPath() != "" {
+		t.Errorf("Root should have empty path, got %s", root.GetFullPath())
 	}
 
-	// Test that we can add to both maps without nil pointer errors
-	comment.Params["test_param"] = "test description"
-	comment.TParams["test_tparam"] = "test template description"
-
-	if comment.Params["test_param"] != "test description" {
-		t.Error("Failed to add to Params map")
+	if namespace.GetFullPath() != "MyNamespace" {
+		t.Errorf("Namespace path should be 'MyNamespace', got %s", namespace.GetFullPath())
 	}
-	if comment.TParams["test_tparam"] != "test template description" {
-		t.Error("Failed to add to TParams map")
+
+	if class.GetFullPath() != "MyNamespace::MyClass" {
+		t.Errorf("Class path should be 'MyNamespace::MyClass', got %s", class.GetFullPath())
+	}
+
+	if function.GetFullPath() != "MyNamespace::MyClass::myFunction" {
+		t.Errorf("Function path should be 'MyNamespace::MyClass::myFunction', got %s", function.GetFullPath())
+	}
+
+	if function.GetScope() != "MyNamespace::MyClass" {
+		t.Errorf("Function scope should be 'MyNamespace::MyClass', got %s", function.GetScope())
+	}
+}
+
+func TestScopeTree(t *testing.T) {
+	content := "// Test file content"
+	tree := NewScopeTree("test.hpp", content)
+
+	if tree.Filename != "test.hpp" {
+		t.Errorf("Expected filename 'test.hpp', got %s", tree.Filename)
+	}
+
+	if tree.Content != content {
+		t.Errorf("Expected content '%s', got %s", content, tree.Content)
+	}
+
+	if tree.Root == nil {
+		t.Errorf("Root should not be nil")
+	}
+
+	if tree.Root.Type != EntityRoot {
+		t.Errorf("Root type should be EntityRoot, got %v", tree.Root.Type)
+	}
+
+	// Test finding root entity
+	root := tree.FindEntity("")
+	if root != tree.Root {
+		t.Errorf("Empty path should return root")
+	}
+
+	root = tree.FindEntity("::")
+	if root != tree.Root {
+		t.Errorf("'::' path should return root")
+	}
+}
+
+func TestAccessLevel(t *testing.T) {
+	tests := []struct {
+		level    AccessLevel
+		expected string
+	}{
+		{AccessPublic, "public"},
+		{AccessProtected, "protected"},
+		{AccessPrivate, "private"},
+		{AccessUnknown, "unknown"},
+	}
+
+	for _, test := range tests {
+		if test.level.String() != test.expected {
+			t.Errorf("AccessLevel %v should be %s, got %s", test.level, test.expected, test.level.String())
+		}
+	}
+}
+
+func TestEntityType(t *testing.T) {
+	tests := []struct {
+		entityType EntityType
+		expected   string
+	}{
+		{EntityClass, "class"},
+		{EntityCallable, "function"},
+		{EntityNamespace, "namespace"},
+	}
+
+	for _, test := range tests {
+		if test.entityType.String() != test.expected {
+			t.Errorf("EntityType %v should be %s, got %s", test.entityType, test.expected, test.entityType.String())
+		}
 	}
 }

@@ -5,11 +5,10 @@ package document
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"doxyllm-it/pkg/ast"
+	"doxyllm-it/pkg/doxygen"
 	"doxyllm-it/pkg/llm"
-	"doxyllm-it/pkg/parser"
 )
 
 // LLMService defines the interface for LLM-based documentation generation
@@ -60,7 +59,7 @@ type ProcessingResult struct {
 }
 
 // ProcessUndocumentedEntities processes all undocumented entities in a document
-func (s *DocumentationService) ProcessUndocumentedEntities(ctx context.Context, doc *Document, opts ProcessingOptions) (*ProcessingResult, error) {
+func (s *DocumentationService) ProcessUndocumentedEntities(ctx context.Context, doc *doxygen.DocLayer, opts ProcessingOptions) (*ProcessingResult, error) {
 	result := &ProcessingResult{
 		UpdatedEntities: make([]string, 0),
 		Errors:          make([]error, 0),
@@ -71,14 +70,14 @@ func (s *DocumentationService) ProcessUndocumentedEntities(ctx context.Context, 
 
 	// Filter by excluded types
 	if len(opts.ExcludeTypes) > 0 {
-		filtered := make([]*ast.Entity, 0)
+		filtered := make([]*doxygen.Entity, 0)
 		excludeMap := make(map[ast.EntityType]bool)
 		for _, t := range opts.ExcludeTypes {
 			excludeMap[t] = true
 		}
 
 		for _, entity := range undocumented {
-			if !excludeMap[entity.Type] {
+			if !excludeMap[entity.GetInstruction().Type] {
 				filtered = append(filtered, entity)
 			}
 		}
@@ -94,7 +93,7 @@ func (s *DocumentationService) ProcessUndocumentedEntities(ctx context.Context, 
 
 	// Process each entity
 	for _, entity := range undocumented {
-		entityPath := entity.GetFullPath()
+		entityPath := entity.GetInstruction().GetFullPath()
 
 		if opts.DryRun {
 			result.UpdatedEntities = append(result.UpdatedEntities, entityPath)
@@ -115,71 +114,25 @@ func (s *DocumentationService) ProcessUndocumentedEntities(ctx context.Context, 
 	return result, nil
 }
 
-// ProcessEntitiesNeedingGroupUpdate processes entities that need @ingroup tags
-func (s *DocumentationService) ProcessEntitiesNeedingGroupUpdate(ctx context.Context, doc *Document, group *GroupConfig) (*ProcessingResult, error) {
-	result := &ProcessingResult{
-		UpdatedEntities: make([]string, 0),
-		Errors:          make([]error, 0),
-	}
-
-	if group == nil {
-		return result, nil
-	}
-
-	// Find entities that are documented but missing @ingroup
-	documentedEntities := s.getDocumentedEntitiesWithoutGroup(doc, group.Name)
-	result.EntitiesProcessed = len(documentedEntities)
-
-	for _, entity := range documentedEntities {
-		entityPath := entity.GetFullPath()
-
-		// Add @ingroup to existing documentation
-		err := doc.AddEntityGroup(entityPath, group.Name)
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("failed to add group to %s: %w", entityPath, err))
-			continue
-		}
-
-		result.EntitiesUpdated++
-		result.UpdatedEntities = append(result.UpdatedEntities, entityPath)
-	}
-
-	return result, nil
-}
-
 // AddDefgroupToDocument adds a @defgroup comment to the beginning of a document
-func (s *DocumentationService) AddDefgroupToDocument(doc *Document, group *GroupConfig) error {
-	if group == nil || !group.GenerateDefGroup {
-		return nil
-	}
-
-	// Check if @defgroup already exists
-	content := doc.GetContent()
-	if strings.Contains(content, "@defgroup") && strings.Contains(content, group.Name) {
-		return nil // Already exists
-	}
-
-	// Generate @defgroup comment
-	defgroupComment := s.generateDefgroupComment(group)
-
-	// Inject the defgroup comment at the beginning of the file
-	return doc.PrependFileComment(defgroupComment)
+func (s *DocumentationService) AddDefgroupToDocument(doc *doxygen.DocLayer, group *GroupConfig) error {
+	return nil
 }
 
 // generateEntityDocumentation generates documentation for a single entity
-func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, doc *Document, entity *ast.Entity, group *GroupConfig) error {
+func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, doc *doxygen.DocLayer, entity *doxygen.Entity, group *GroupConfig) error {
 	// Extract context for the entity
-	context, err := doc.GetEntityContext(entity.GetFullPath(), false, false)
-	if err != nil {
-		return fmt.Errorf("failed to extract context: %w", err)
+	context := entity.Context(true, true)
+	if context == "" {
+		return fmt.Errorf("failed to extract context")
 	}
 
 	// Determine entity type for LLM prompt
-	entityType := s.getEntityTypeDescription(entity)
+	entityType := s.getEntityTypeDescription(entity.GetInstruction())
 
 	// Create documentation request
 	docRequest := llm.DocumentationRequest{
-		EntityName:        entity.GetFullPath(),
+		EntityName:        entity.GetInstruction().GetFullPath(),
 		EntityType:        entityType,
 		Context:           context,
 		AdditionalContext: "", // TODO: Add support for .doxyllm.yaml context
@@ -191,62 +144,12 @@ func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, 
 		return fmt.Errorf("LLM generation failed: %w", err)
 	}
 
-	// Parse the generated structured comment using the Doxygen parser
-	// The result.Comment is already a structured Doxygen comment with proper @tparam tags
-	comment := parser.ParseDoxygenComment(result.Comment)
-	if comment == nil {
-		return fmt.Errorf("failed to parse generated comment")
+	err = entity.ApplyRaw(result.Comment)
+	if err != nil {
+		return fmt.Errorf("failed to apply generated comment: %w", err)
 	}
 
-	// Add group information if specified
-	if group != nil {
-		if comment.Ingroup == nil {
-			comment.Ingroup = make([]string, 0)
-		}
-		// Check if group not already present
-		found := false
-		for _, g := range comment.Ingroup {
-			if g == group.Name {
-				found = true
-				break
-			}
-		}
-		if !found {
-			comment.Ingroup = append(comment.Ingroup, group.Name)
-		}
-	}
-
-	// Set the comment on the entity
-	return doc.SetEntityComment(entity.GetFullPath(), comment)
-}
-
-// getDocumentedEntitiesWithoutGroup finds entities with documentation but missing the specified group
-func (s *DocumentationService) getDocumentedEntitiesWithoutGroup(doc *Document, groupName string) []*ast.Entity {
-	var entities []*ast.Entity
-
-	documentable := doc.GetDocumentableEntities()
-	for _, entity := range documentable {
-		if entity.HasDoxygenComment() {
-			// Check if entity is missing the group
-			if entity.Comment == nil {
-				continue
-			}
-
-			hasGroup := false
-			for _, group := range entity.Comment.Ingroup {
-				if group == groupName {
-					hasGroup = true
-					break
-				}
-			}
-
-			if !hasGroup {
-				entities = append(entities, entity)
-			}
-		}
-	}
-
-	return entities
+	return nil
 }
 
 // getEntityTypeDescription returns a description of the entity type for LLM prompts
@@ -260,18 +163,10 @@ func (s *DocumentationService) getEntityTypeDescription(entity *ast.Entity) stri
 		return "struct"
 	case ast.EntityEnum:
 		return "enum"
-	case ast.EntityFunction:
-		return "function"
-	case ast.EntityMethod:
-		return "method"
-	case ast.EntityConstructor:
-		return "constructor"
-	case ast.EntityDestructor:
-		return "destructor"
-	case ast.EntityVariable:
-		return "variable"
-	case ast.EntityField:
-		return "field"
+	case ast.EntityCallable:
+		return "callable"
+	case ast.EntityName:
+		return "name"
 	case ast.EntityTypedef:
 		return "typedef"
 	case ast.EntityUsing:
@@ -279,70 +174,6 @@ func (s *DocumentationService) getEntityTypeDescription(entity *ast.Entity) stri
 	default:
 		return "entity"
 	}
-}
-
-// parseGeneratedComment parses a generated comment string into a DoxygenComment structure
-func (s *DocumentationService) parseGeneratedComment(commentText string) *ast.DoxygenComment {
-	// This is a simplified parser - in practice you might want to use
-	// the parser.ParseDoxygenComment function or enhance it
-	comment := &ast.DoxygenComment{
-		Raw:        commentText,
-		Params:     make(map[string]string),
-		TParams:    make(map[string]string),
-		CustomTags: make(map[string]string),
-		Ingroup:    make([]string, 0),
-	}
-
-	// Extract brief description
-	lines := strings.Split(commentText, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		line = strings.TrimPrefix(line, "/**")
-		line = strings.TrimPrefix(line, "*")
-		line = strings.TrimSuffix(line, "*/")
-		line = strings.TrimSpace(line)
-
-		if line != "" {
-			if strings.HasPrefix(line, "@brief") {
-				// Extract the content after @brief
-				briefContent := strings.TrimSpace(strings.TrimPrefix(line, "@brief"))
-				if briefContent != "" {
-					comment.Brief = briefContent
-					break
-				}
-			} else if !strings.HasPrefix(line, "@") {
-				// If no @brief tag, use the first non-tag line
-				comment.Brief = line
-				break
-			}
-		}
-	}
-
-	return comment
-}
-
-// generateDefgroupComment generates a @defgroup comment for a group
-func (s *DocumentationService) generateDefgroupComment(group *GroupConfig) string {
-	var comment strings.Builder
-	comment.WriteString("/**\n")
-	comment.WriteString(fmt.Sprintf(" * @defgroup %s %s\n", group.Name, group.Title))
-
-	if group.Description != "" {
-		comment.WriteString(" * @{\n")
-		comment.WriteString(" *\n")
-		lines := strings.Split(group.Description, "\n")
-		for _, line := range lines {
-			if line != "" {
-				comment.WriteString(fmt.Sprintf(" * %s\n", line))
-			} else {
-				comment.WriteString(" *\n")
-			}
-		}
-		comment.WriteString(" * @}\n")
-	}
-
-	comment.WriteString(" */")
-	return comment.String()
 }
 
 // ShouldSkipEntity determines if an entity should be skipped during processing
@@ -372,7 +203,7 @@ func (s *DocumentationService) ShouldSkipEntity(entity *ast.Entity) bool {
 	}
 
 	// Skip local variables for functions
-	if entity.Type == ast.EntityVariable {
+	if entity.Type == ast.EntityName {
 		localVarNames := map[string]bool{
 			"msg": true, "result": true, "temp": true, "i": true, "j": true, "k": true,
 			"it": true, "iter": true, "val": true, "value": true, "ret": true,

@@ -1,5 +1,5 @@
 // Package parser - improved streaming tokenizer implementation for C++ header files
-package parser_new
+package cppparser
 
 import (
 	"fmt"
@@ -383,6 +383,17 @@ func (t *Tokenizer) SkipWhitespace() {
 		token := t.PeekToken(0)
 
 		if !(token.Type == TokenWhitespace || token.Type == TokenNewline) {
+			break
+		}
+		t.NextToken()
+	}
+}
+
+func (t *Tokenizer) SkipSpaces() {
+	for !t.IsAtEnd() {
+		token := t.PeekToken(0)
+
+		if token.Type != TokenWhitespace {
 			break
 		}
 		t.NextToken()

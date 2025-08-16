@@ -1,9 +1,9 @@
-package parser_new
+package cppparser
 
 import (
 	"strings"
 
-	ast "doxyllm-it/pkg/ast_new"
+	ast "doxyllm-it/pkg/ast"
 )
 
 // parseClass handles class declarations
@@ -34,6 +34,9 @@ func (p *Parser) parseClassOrStruct(entityType ast.EntityType) (*ast.Entity, err
 	for !p.tokenizer.IsAtEnd() && !sigReady {
 		token := p.tokenizer.PeekToken(0)
 		switch token.Type {
+		case TokenNewline:
+			p.tokenizer.NextToken()
+			continue
 		case TokenLeftBrace:
 			p.tokenizer.NextToken()
 			sigReady = true

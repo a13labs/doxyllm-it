@@ -1,7 +1,7 @@
-package parser_new
+package cppparser
 
 import (
-	ast "doxyllm-it/pkg/ast_new"
+	ast "doxyllm-it/pkg/ast"
 )
 
 func (p *Parser) getCurrentScope() *ast.Entity {
@@ -69,6 +69,16 @@ func (p *Parser) parseCloseBrace() error {
 	// Check for optional semicolon after brace (for class/struct)
 	if !p.tokenizer.IsAtEnd() && p.tokenizer.PeekToken(0).Type == TokenSemicolon {
 		p.tokenizer.NextToken()
+	}
+
+	p.tokenizer.SkipSpaces()
+	if p.tokenizer.PeekToken(0).Type == TokenLineComment || p.tokenizer.PeekToken(0).Type == TokenBlockComment {
+		genericComment := p.tokenizer.NextToken()
+		p.getCurrentScope().LineComment = &ast.Entity{
+			Type:      ast.EntityComment,
+			Signature: genericComment.Value,
+		}
+		p.tokenizer.NextToken() // consume comment
 	}
 
 	// Exit current scope

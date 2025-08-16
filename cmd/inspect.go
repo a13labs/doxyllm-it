@@ -28,7 +28,7 @@ comments and access specifiers.`,
 		filename := args[0]
 
 		// Load and parse the document
-		doc, err := document.NewFromFile(filename)
+		doc, err := document.NewSourceFromFile(filename)
 		if err != nil {
 			return fmt.Errorf("failed to load document: %w", err)
 		}
@@ -62,7 +62,7 @@ Use the list command to see available paths.`,
 		entityPath := args[1]
 
 		// Load and parse the document
-		doc, err := document.NewFromFile(filename)
+		doc, err := document.NewSourceFromFile(filename)
 		if err != nil {
 			return fmt.Errorf("failed to load document: %w", err)
 		}
@@ -91,8 +91,8 @@ Use the list command to see available paths.`,
 			entityInfo["defines"] = entity.Defines
 		}
 		// Add body if present (full, not truncated)
-		if entity.Body != "" {
-			entityInfo["body"] = entity.Body
+		if len(entity.Body) > 0 {
+			entityInfo["body"] = strings.Join(entity.Body, "\n")
 		}
 
 		// Add children count if any

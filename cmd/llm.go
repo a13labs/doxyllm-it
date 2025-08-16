@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"doxyllm-it/pkg/document"
+	"doxyllm-it/pkg/doxygen"
 	"doxyllm-it/pkg/llm"
 
 	"github.com/spf13/cobra"
@@ -285,7 +286,7 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 
 	// Load the document
 	spinner.Start("Loading document...")
-	doc, err := document.NewFromFile(filePath)
+	doc, err := doxygen.NewLayer(filePath)
 	spinner.Stop()
 	if err != nil {
 		fmt.Printf("  ❌ Failed to load document: %v\n", err)
@@ -338,19 +339,19 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 	}
 
 	// Process entities needing group updates
-	if group != nil {
-		spinner.Start("Updating group annotations...")
-		groupResult, err := docService.ProcessEntitiesNeedingGroupUpdate(ctx, doc, group)
-		spinner.Stop()
-		if err != nil {
-			fmt.Printf("  ⚠️  Failed to update groups: %v\n", err)
-		} else {
-			// Merge counts so progress output remains intuitive
-			result.EntitiesUpdated += groupResult.EntitiesUpdated
-			result.EntitiesProcessed += groupResult.EntitiesProcessed
-			result.UpdatedEntities = append(result.UpdatedEntities, groupResult.UpdatedEntities...)
-		}
-	}
+	// if group != nil {
+	// 	spinner.Start("Updating group annotations...")
+	// 	groupResult, err := docService.ProcessEntitiesNeedingGroupUpdate(ctx, doc, group)
+	// 	spinner.Stop()
+	// 	if err != nil {
+	// 		fmt.Printf("  ⚠️  Failed to update groups: %v\n", err)
+	// 	} else {
+	// 		// Merge counts so progress output remains intuitive
+	// 		result.EntitiesUpdated += groupResult.EntitiesUpdated
+	// 		result.EntitiesProcessed += groupResult.EntitiesProcessed
+	// 		result.UpdatedEntities = append(result.UpdatedEntities, groupResult.UpdatedEntities...)
+	// 	}
+	// }
 
 	// Report progress
 	if result.EntitiesProcessed == 0 {
@@ -391,10 +392,10 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 
 		// Save the document
 		if llmFormatOutput {
-			content, err := doc.SaveToStringFormatted()
+			content, err := doc.SaveToString(true)
 			if err != nil {
 				fmt.Printf("  ⚠️  Clang-format failed, using unformatted output: %v\n", err)
-				content, err = doc.SaveToString()
+				content, err = doc.SaveToString(false)
 			}
 			if err == nil {
 				err = os.WriteFile(filePath, []byte(content), 0644)
@@ -404,7 +405,7 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 				}
 			}
 		} else {
-			err = doc.Save()
+			err = doc.Save(llmFormatOutput)
 		}
 
 		spinner.Stop()

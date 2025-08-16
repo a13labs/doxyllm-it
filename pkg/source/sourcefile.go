@@ -7,21 +7,21 @@ import (
 	"os"
 	"path/filepath"
 
-	ast "doxyllm-it/pkg/ast_new"
+	ast "doxyllm-it/pkg/ast"
 	parser "doxyllm-it/pkg/cppparser"
 )
 
-// CppFile represents a C++ header file with its parsed AST and provides
+// SourceFile represents a C++ header file with its parsed AST and provides
 // high-level operations for manipulating Doxygen documentation
-type CppFile struct {
+type SourceFile struct {
 	filename    string                 // Original filename (if loaded from file)
 	tree        *ast.ScopeTree         // Parsed AST
 	modified    bool                   // Whether document has been modified
 	entityCache map[string]*ast.Entity // Cache for quick entity lookup by path
 }
 
-// NewFromFile creates a new document by loading and parsing a file
-func NewFromFile(filename string) (*CppFile, error) {
+// NewSourceFromFile creates a new document by loading and parsing a file
+func NewSourceFromFile(filename string) (*SourceFile, error) {
 	// Read file content
 	content, err := os.ReadFile(filename)
 	if err != nil {
@@ -34,11 +34,11 @@ func NewFromFile(filename string) (*CppFile, error) {
 		return nil, fmt.Errorf("failed to get absolute path for %s: %w", filename, err)
 	}
 
-	return NewFromContent(absPath, string(content))
+	return NewSourceFromContent(absPath, string(content))
 }
 
-// NewFromContent creates a new document from content with a given name
-func NewFromContent(name, content string) (*CppFile, error) {
+// NewSourceFromContent creates a new document from content with a given name
+func NewSourceFromContent(name, content string) (*SourceFile, error) {
 	// Create parser instance
 	p := parser.New()
 
@@ -48,7 +48,7 @@ func NewFromContent(name, content string) (*CppFile, error) {
 		return nil, fmt.Errorf("failed to parse content: %w", err)
 	}
 
-	doc := &CppFile{
+	doc := &SourceFile{
 		filename:    name,
 		tree:        tree,
 		modified:    false,
@@ -62,7 +62,7 @@ func NewFromContent(name, content string) (*CppFile, error) {
 }
 
 // buildEntityCache builds a cache of entities by their full path for quick lookup
-func (d *CppFile) buildEntityCache() {
+func (d *SourceFile) buildEntityCache() {
 	entities := d.tree.Root.GetAllEntities()
 	for _, entity := range entities {
 		if entity.Name != "" { // Skip root entity
@@ -73,29 +73,29 @@ func (d *CppFile) buildEntityCache() {
 }
 
 // GetFilename returns the document's filename
-func (d *CppFile) GetFilename() string {
+func (d *SourceFile) GetFilename() string {
 	return d.filename
 }
 
 // IsModified returns whether the document has been modified
-func (d *CppFile) IsModified() bool {
+func (d *SourceFile) IsModified() bool {
 	return d.modified
 }
 
 // GetTree returns the underlying AST tree (for advanced use cases)
-func (d *CppFile) GetTree() *ast.ScopeTree {
+func (d *SourceFile) GetTree() *ast.ScopeTree {
 	return d.tree
 }
 
 // Entity Lookup Methods
 
 // FindEntity finds an entity by its full path (e.g., "MyNamespace::MyClass::myMethod")
-func (d *CppFile) FindEntity(path string) *ast.Entity {
+func (d *SourceFile) FindEntity(path string) *ast.Entity {
 	return d.entityCache[path]
 }
 
 // FindEntitiesByName finds all entities with a given name (regardless of scope)
-func (d *CppFile) FindEntitiesByName(name string) []*ast.Entity {
+func (d *SourceFile) FindEntitiesByName(name string) []*ast.Entity {
 	var found []*ast.Entity
 	for _, entity := range d.entityCache {
 		if entity.Name == name {
@@ -106,12 +106,12 @@ func (d *CppFile) FindEntitiesByName(name string) []*ast.Entity {
 }
 
 // FindEntitiesByType returns all entities of a specific type
-func (d *CppFile) FindEntitiesByType(entityType ast.EntityType) []*ast.Entity {
+func (d *SourceFile) FindEntitiesByType(entityType ast.EntityType) []*ast.Entity {
 	return d.tree.GetEntitiesByType(entityType)
 }
 
 // ListInstructions returns entities that are code instructions
-func (d *CppFile) ListInstructions() []string {
+func (d *SourceFile) ListInstructions() []string {
 	// Determine which entity types can be documented
 	// Comments and access specifiers should not be documented
 	var instructions []string
@@ -127,7 +127,7 @@ func (d *CppFile) ListInstructions() []string {
 }
 
 // GetInstructions returns entities that are code instructions
-func (d *CppFile) GetInstructions() []*ast.Entity {
+func (d *SourceFile) GetInstructions() []*ast.Entity {
 	// Determine which entity types can be documented
 	// Comments and access specifiers should not be documented
 	var instructions []*ast.Entity
@@ -143,7 +143,7 @@ func (d *CppFile) GetInstructions() []*ast.Entity {
 }
 
 // isInstruction determines if an entity type can have documentation
-func (d *CppFile) isInstruction(entityType ast.EntityType) bool {
+func (d *SourceFile) isInstruction(entityType ast.EntityType) bool {
 	switch entityType {
 	case ast.EntityNamespace, ast.EntityClass, ast.EntityStruct, ast.EntityEnum,
 		ast.EntityCallable, ast.EntityName, ast.EntityTypedef, ast.EntityUsing:
@@ -155,7 +155,7 @@ func (d *CppFile) isInstruction(entityType ast.EntityType) bool {
 	}
 }
 
-func (d *CppFile) GetInstruction(path string) *ast.Entity {
+func (d *SourceFile) GetInstruction(path string) *ast.Entity {
 	e := d.FindEntity(path)
 	if !d.isInstruction(e.Type) {
 		return nil

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"doxyllm-it/pkg/cppparser"
 	"doxyllm-it/pkg/formatter"
-	"doxyllm-it/pkg/parser"
 
 	"github.com/spf13/cobra"
 )
@@ -25,7 +25,7 @@ This command parses the file, reconstructs it, and applies clang-format.`,
 			return fmt.Errorf("failed to read file %s: %w", filename, err)
 		}
 
-		p := parser.New()
+		p := cppparser.New()
 		tree, err := p.Parse(filename, string(content))
 		if err != nil {
 			return fmt.Errorf("failed to parse file %s: %w", filename, err)

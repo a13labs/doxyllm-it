@@ -1,4 +1,4 @@
-package parser_new
+package cppparser
 
 import (
 	"testing"

@@ -1,10 +1,10 @@
-package parser_new
+package cppparser
 
 import (
 	"fmt"
 	"strings"
 
-	ast "doxyllm-it/pkg/ast_new"
+	ast "doxyllm-it/pkg/ast"
 )
 
 // parseTemplate handles template declarations
@@ -24,6 +24,9 @@ func (p *Parser) parseTemplate() (*ast.Entity, error) {
 		token := p.tokenizer.PeekToken(0)
 
 		switch token.Type {
+		case TokenNewline:
+			p.tokenizer.NextToken()
+			continue
 		case TokenLess:
 			depth++
 		case TokenGreater:

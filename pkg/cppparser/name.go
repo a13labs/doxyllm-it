@@ -1,7 +1,7 @@
-package parser_new
+package cppparser
 
 import (
-	ast "doxyllm-it/pkg/ast_new"
+	ast "doxyllm-it/pkg/ast"
 	"strings"
 )
 
@@ -9,27 +9,32 @@ import (
 func (p *Parser) parseName() (*ast.Entity, error) {
 	var signature strings.Builder
 	var lastIdentifier string
-	sigReady := false
+	var sigReady bool
+	var lineComment string
 
 	for !p.tokenizer.IsAtEnd() && !sigReady {
 		token := p.tokenizer.PeekToken(0)
 		switch token.Type {
-		case TokenWhitespace, TokenNewline:
+		case TokenWhitespace:
 			if signature.Len() == 0 {
 				p.tokenizer.NextToken() // skip leading whitespace
 				continue
 			}
-			signature.WriteString(token.Value) // preserve whitespace inside signature
+		case TokenNewline:
+			p.tokenizer.NextToken()
+			continue
 		case TokenSemicolon:
 			p.tokenizer.NextToken()
+			p.tokenizer.SkipSpaces()
+			if p.tokenizer.PeekToken(0).Type == TokenLineComment || p.tokenizer.PeekToken(0).Type == TokenBlockComment {
+				lineComment = p.tokenizer.NextToken().Value
+			}
 			sigReady = true
 			continue
 		case TokenIdentifier:
 			lastIdentifier = token.Value
-			signature.WriteString(token.Value)
-		default:
-			signature.WriteString(token.Value)
 		}
+		signature.WriteString(token.Value) // preserve whitespace inside signature
 		p.tokenizer.NextToken()
 	}
 
@@ -45,5 +50,9 @@ func (p *Parser) parseName() (*ast.Entity, error) {
 		FullName:    p.buildFullName(lastIdentifier),
 		Signature:   signature.String(),
 		AccessLevel: p.getCurrentAccessLevel(),
+		LineComment: &ast.Entity{
+			Type:      ast.EntityComment,
+			Signature: lineComment,
+		},
 	}, nil
 }

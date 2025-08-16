@@ -38,46 +38,9 @@ func (f *Formatter) ReconstructScope(entity *ast.Entity) string {
 func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 	var result strings.Builder
 
-	// If this is the root entity, handle root comment and reconstruct all children
-	if entity.Type == ast.EntityUnknown && entity.Name == "" {
-		// Add root entity comment (e.g., file-level @defgroup) at the beginning
-		if entity.Comment != nil {
-			result.WriteString(f.formatDoxygenComment(entity.Comment, depth))
-			result.WriteString("\n")
-		}
-
-		for _, child := range entity.Children {
-			result.WriteString(f.reconstructEntity(child, depth))
-		}
-		return result.String()
-	}
-
-	// Add leading whitespace/comments
-	if entity.LeadingWS != "" {
-		result.WriteString(entity.LeadingWS)
-	}
-
-	// Check if comment should be inline
-	var isInlineComment bool
-	if entity.Comment != nil {
-		isInlineComment = f.shouldUseInlineComment(entity.Comment)
-	}
-
-	// Add doxygen comment if present and it's NOT an inline comment
-	if entity.Comment != nil && !isInlineComment {
-		result.WriteString(f.formatDoxygenComment(entity.Comment, depth))
-		result.WriteString("\n")
-	}
-
-	// For comment entities, only output the comment, skip signature and other handling
-	if entity.Type == ast.EntityComment {
-		return result.String()
-	}
-
 	// Add the entity declaration with proper multi-line indentation
 	indent := f.getIndent(depth)
-	signature := f.buildCompleteSignature(entity)
-
+	signature := entity.Signature
 	// Handle multi-line signatures by indenting each line properly
 	if strings.Contains(signature, "\n") {
 		lines := strings.Split(signature, "\n")
@@ -94,291 +57,96 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 
 	// Handle different entity types
 	switch entity.Type {
+	case ast.EntityRoot:
+		for _, child := range entity.Children {
+			result.WriteString(f.reconstructEntity(child, depth))
+		}
+		return result.String()
 	case ast.EntityNamespace:
 		// Handle namespace specifically to add proper closing
-		if len(entity.Children) > 0 {
-			// Check if signature already contains opening brace
-			if !strings.HasSuffix(strings.TrimSpace(entity.Signature), "{") {
-				// If signature contains newline (multi-line), put brace on new line
-				if strings.Contains(entity.Signature, "\n") {
-					result.WriteString("\n" + indent + "{")
-				} else {
-					// Single line signature, add brace on same line
-					result.WriteString(" {")
-				}
-			}
-			result.WriteString("\n")
+		result.WriteString(fmt.Sprintf("\n%s{\n", indent))
+		for _, child := range entity.Children {
+			result.WriteString(f.reconstructEntity(child, depth+1))
+		}
+		result.WriteString(fmt.Sprintf("%s}", indent))
 
-			// Add children
+	case ast.EntityClass, ast.EntityStruct:
+		if !entity.IsForwardDeclaration {
+			result.WriteString("\n")
+			result.WriteString(fmt.Sprintf("%s{\n", indent))
 			for _, child := range entity.Children {
 				result.WriteString(f.reconstructEntity(child, depth+1))
 			}
-
-			// Add closing brace with namespace comment
-			result.WriteString(indent + "} // namespace " + entity.Name)
+			result.WriteString(fmt.Sprintf("%s};", indent))
 		} else {
-			// Empty namespace, just add opening and closing braces
-			if !strings.HasSuffix(strings.TrimSpace(entity.Signature), "{") {
-				if strings.Contains(entity.Signature, "\n") {
-					result.WriteString("\n" + indent + "{\n" + indent + "} // namespace " + entity.Name)
-				} else {
-					result.WriteString(" {\n" + indent + "} // namespace " + entity.Name)
+			result.WriteString(";")
+		}
+	case ast.EntityCallable:
+		// Functions with bodies include the body content, others end with semicolon
+		if len(entity.Body) > 0 {
+			// Function has a body - include it from the stored original text
+			result.WriteString("\n")
+			result.WriteString(fmt.Sprintf("%s{\n", indent))
+			codeDepth := depth + 1
+			for _, line := range entity.Body {
+				if !strings.Contains(line, "{") && strings.Contains(line, "}") {
+					codeDepth--
+				}
+				codeIndent := f.getIndent(codeDepth)
+				result.WriteString(fmt.Sprintf("%s%s\n", codeIndent, line))
+				if strings.Contains(line, "{") && !strings.Contains(line, "}") {
+					codeDepth++
 				}
 			}
-		}
-
-	case ast.EntityClass, ast.EntityStruct, ast.EntityEnum:
-		// Always emit body braces if the signature represents a definition (ends with '{')
-		trimmedSig := strings.TrimSpace(entity.Signature)
-		if strings.HasSuffix(trimmedSig, "{") || len(entity.Children) > 0 {
-			// If signature does not already include opening brace, add it inline
-			if !strings.HasSuffix(trimmedSig, "{") {
-				result.WriteString(" {")
-			}
-			result.WriteString("\n")
-
-			// Emit children (if any)
-			for _, child := range entity.Children {
-				result.WriteString(f.reconstructEntity(child, depth+1))
-			}
-
-			// Closing brace
-			result.WriteString(indent + "}")
-		}
-
-		// Add semicolon for class/struct (always required in C++)
-		if entity.Type == ast.EntityClass || entity.Type == ast.EntityStruct {
+			result.WriteString(fmt.Sprintf("%s}\n", indent))
+		} else {
 			result.WriteString(";")
 		}
-
-	case ast.EntityFunction, ast.EntityMethod, ast.EntityConstructor, ast.EntityDestructor:
-		// Functions with bodies include the body content, others end with semicolon
-		if entity.BodyRange != nil && entity.OriginalText != "" {
-			// Function has a body - include it from the stored original text
-			result.WriteString(" ")
-			result.WriteString(entity.OriginalText)
-		} else if !strings.HasSuffix(entity.Signature, ";") {
-			result.WriteString(";")
-		}
-
 	case ast.EntityPreprocessor:
 		// Preprocessor directives don't need semicolons or additional formatting
 		// They are output as-is
-
 	case ast.EntityComment:
 		// File-level comments are output as their comment content only
 		// Remove the newline that would be added by default since comment formatting adds its own
-
 	case ast.EntityAccessSpecifier:
 		// Access specifiers don't need semicolons
 		// They are output as-is with their colon
-
 	default:
-		// Other entities typically end with semicolon
-		if !strings.HasSuffix(entity.Signature, ";") {
-			result.WriteString(";")
-		}
-
-		// Add inline comment if present (after semicolon, before newline)
-		if entity.Comment != nil && isInlineComment {
-			result.WriteString(" ")
-			result.WriteString(f.formatInlineComment(entity.Comment, depth))
-		}
+		result.WriteString(";")
 	}
-
+	if entity.LineComment != nil && entity.LineComment.Signature != "" {
+		result.WriteString(fmt.Sprintf(" %s", entity.LineComment.Signature))
+	}
 	result.WriteString("\n")
-
-	// Add trailing whitespace/comments
-	if entity.TrailingWS != "" {
-		result.WriteString(entity.TrailingWS)
-	}
-
 	return result.String()
 }
 
-// formatDoxygenComment formats a doxygen comment with proper indentation
-func (f *Formatter) formatDoxygenComment(comment *ast.DoxygenComment, depth int) string {
-	if comment == nil || comment.Raw == "" {
-		return ""
-	}
-
-	// Check if this should be formatted as an inline comment
-	if f.shouldFormatInline(comment) {
-		return f.formatInlineComment(comment, depth)
-	}
-
-	return f.formatBlockComment(comment, depth)
-}
-
-// shouldFormatInline determines if a comment should be formatted as inline
-func (f *Formatter) shouldFormatInline(comment *ast.DoxygenComment) bool {
-	// Check if original comment was inline style
-	if strings.HasPrefix(strings.TrimSpace(comment.Raw), "/**<") {
-		return true
-	}
-
-	// Check if it's a simple brief comment suitable for inline format
-	if comment.Brief != "" && comment.Detailed == "" &&
-		len(comment.Params) == 0 && len(comment.TParams) == 0 && comment.Returns == "" &&
-		len(comment.Throws) == 0 && len(comment.Ingroup) == 0 &&
-		len(comment.Brief) < 80 {
-		// If the brief starts with '<', it was likely generated for inline style
-		if strings.HasPrefix(strings.TrimSpace(comment.Brief), "<") {
-			return true
-		}
-	}
-
-	return false
-}
-
-// shouldUseInlineComment determines if a comment should be formatted as inline
-func (f *Formatter) shouldUseInlineComment(comment *ast.DoxygenComment) bool {
-	// Check if the original comment was inline style
-	if comment.Raw != "" {
-		trimmed := strings.TrimSpace(comment.Raw)
-		if strings.HasPrefix(trimmed, "/**<") || strings.HasPrefix(trimmed, "///<") || strings.HasPrefix(trimmed, "//!<") {
-			return true
-		}
-	}
-
-	// Check if the brief description starts with < (indicating LLM generated inline comment)
-	if comment.Brief != "" && strings.HasPrefix(strings.TrimSpace(comment.Brief), "<") {
-		return true
-	}
-
-	return false
-}
-
-// formatInlineComment formats a comment in inline style
-func (f *Formatter) formatInlineComment(comment *ast.DoxygenComment, depth int) string {
-	description := comment.Brief
-
-	if description == "" && comment.Detailed != "" {
-		description = comment.Detailed
-	}
-
-	// Clean up the description - remove leading/trailing whitespace first
-	description = strings.TrimSpace(description)
-
-	// Remove leading '<' character if present (from LLM generation)
-	if strings.HasPrefix(description, "<") {
-		description = strings.TrimSpace(description[1:])
-	}
-
-	return fmt.Sprintf("/**< %s */", description)
-}
-
-// formatBlockComment formats a comment in traditional block style
-func (f *Formatter) formatBlockComment(comment *ast.DoxygenComment, depth int) string {
+func (f *Formatter) ExtractEntityContext(entity *ast.Entity, includeParent bool, includeSiblings bool) string {
 	var result strings.Builder
-	indent := f.getIndent(depth)
 
-	result.WriteString(indent + "/**\n")
-
-	// Brief description
-	if comment.Brief != "" {
-		// Clean up brief description (remove leading < if present)
-		brief := comment.Brief
-		if strings.HasPrefix(strings.TrimSpace(brief), "<") {
-			brief = strings.TrimSpace(brief[1:])
-			brief = strings.TrimSpace(brief)
-		}
-		result.WriteString(indent + " * @brief " + brief + "\n")
+	// Include parent context if requested
+	if includeParent && entity.Parent != nil {
+		parent := entity.Parent
+		result.WriteString("// Parent context:\n")
+		result.WriteString(f.formatEntitySignature(parent))
+		result.WriteString("\n\n")
 	}
 
-	// Detailed description
-	if comment.Detailed != "" {
-		lines := strings.Split(comment.Detailed, "\n")
-		for _, line := range lines {
-			if strings.TrimSpace(line) != "" {
-				result.WriteString(indent + " * " + strings.TrimSpace(line) + "\n")
-			} else {
-				result.WriteString(indent + " *\n")
+	// Include sibling context if requested
+	if includeSiblings && entity.Parent != nil {
+		result.WriteString("// Sibling context:\n")
+		for _, sibling := range entity.Parent.Children {
+			if sibling != entity {
+				result.WriteString(f.formatEntitySignature(sibling))
+				result.WriteString("\n")
 			}
 		}
+		result.WriteString("\n")
 	}
 
-	// Template parameters
-	if len(comment.TParams) > 0 {
-		result.WriteString(indent + " *\n")
-		for tparam, desc := range comment.TParams {
-			result.WriteString(indent + " * @tparam " + tparam + " " + desc + "\n")
-		}
-	}
-
-	// Parameters
-	if len(comment.Params) > 0 {
-		result.WriteString(indent + " *\n")
-		for param, desc := range comment.Params {
-			result.WriteString(indent + " * @param " + param + " " + desc + "\n")
-		}
-	}
-
-	// Return value
-	if comment.Returns != "" {
-		result.WriteString(indent + " * @return " + comment.Returns + "\n")
-	}
-
-	// Exceptions
-	for _, exception := range comment.Throws {
-		result.WriteString(indent + " * @throws " + exception + "\n")
-	}
-
-	// Other tags
-	if comment.Since != "" {
-		result.WriteString(indent + " * @since " + comment.Since + "\n")
-	}
-
-	if comment.Deprecated != "" {
-		result.WriteString(indent + " * @deprecated " + comment.Deprecated + "\n")
-	}
-
-	if comment.Author != "" {
-		result.WriteString(indent + " * @author " + comment.Author + "\n")
-	}
-
-	if comment.Version != "" {
-		result.WriteString(indent + " * @version " + comment.Version + "\n")
-	}
-
-	// See also
-	for _, see := range comment.See {
-		result.WriteString(indent + " * @see " + see + "\n")
-	}
-
-	// Ingroup tags
-	for _, group := range comment.Ingroup {
-		result.WriteString(indent + " * @ingroup " + group + "\n")
-	}
-
-	// Group definition tags
-	if comment.Defgroup != "" {
-		result.WriteString(indent + " * @defgroup " + comment.Defgroup + "\n")
-	}
-
-	if comment.Addtogroup != "" {
-		result.WriteString(indent + " * @addtogroup " + comment.Addtogroup + "\n")
-	}
-
-	// Structural tags
-	if comment.File != "" {
-		result.WriteString(indent + " * @file " + comment.File + "\n")
-	}
-
-	if comment.Namespace != "" {
-		result.WriteString(indent + " * @namespace " + comment.Namespace + "\n")
-	}
-
-	if comment.Class != "" {
-		result.WriteString(indent + " * @class " + comment.Class + "\n")
-	}
-
-	// Custom tags
-	for tag, value := range comment.CustomTags {
-		result.WriteString(indent + " * @" + tag + " " + value + "\n")
-	}
-
-	result.WriteString(indent + " */")
+	// Include the entity itself
+	result.WriteString("// Target entity:\n")
+	result.WriteString(f.ReconstructScope(entity))
 
 	return result.String()
 }
@@ -391,7 +159,25 @@ func (f *Formatter) getIndent(depth int) string {
 	return strings.Repeat("\t", depth)
 }
 
-// FormatWithClang formats the code using clang-format
+// formatEntitySignature formats just the signature of an entity
+func (f *Formatter) formatEntitySignature(entity *ast.Entity) string {
+	signature := entity.Signature
+
+	// Add type prefix for clarity
+	switch entity.Type {
+	case ast.EntityNamespace:
+		signature = "namespace " + entity.Name + " { /* ... */ }"
+	case ast.EntityClass:
+		signature = "class " + entity.Name + " { /* ... */ };"
+	case ast.EntityStruct:
+		signature = "struct " + entity.Name + " { /* ... */ };"
+	case ast.EntityEnum:
+		signature = "enum " + entity.Name + " { /* ... */ };"
+	}
+
+	return signature
+}
+
 func (f *Formatter) FormatWithClang(code string) (string, error) {
 	// Create a temporary file
 	tmpFile, err := os.CreateTemp("", "doxyllm-*.cpp")
@@ -415,136 +201,4 @@ func (f *Formatter) FormatWithClang(code string) (string, error) {
 	}
 
 	return string(output), nil
-}
-
-// UpdateEntityComment updates an entity's doxygen comment
-func (f *Formatter) UpdateEntityComment(entity *ast.Entity, newComment *ast.DoxygenComment) {
-	entity.Comment = newComment
-}
-
-// ExtractEntityContext extracts code context for an entity suitable for LLM input
-func (f *Formatter) ExtractEntityContext(entity *ast.Entity, includeParent bool, includeSiblings bool) string {
-	var result strings.Builder
-
-	// Include parent context if requested
-	if includeParent && entity.Parent != nil {
-		parent := entity.Parent
-		if parent.Type != ast.EntityUnknown {
-			result.WriteString("// Parent context:\n")
-			result.WriteString(f.formatEntitySignature(parent))
-			result.WriteString("\n\n")
-		}
-	}
-
-	// Include sibling context if requested
-	if includeSiblings && entity.Parent != nil {
-		result.WriteString("// Sibling context:\n")
-		for _, sibling := range entity.Parent.Children {
-			if sibling != entity {
-				result.WriteString(f.formatEntitySignature(sibling))
-				result.WriteString("\n")
-			}
-		}
-		result.WriteString("\n")
-	}
-
-	// Include the entity itself
-	result.WriteString("// Target entity:\n")
-	result.WriteString(f.ReconstructScope(entity))
-
-	return result.String()
-}
-
-// formatEntitySignature formats just the signature of an entity
-func (f *Formatter) formatEntitySignature(entity *ast.Entity) string {
-	signature := entity.Signature
-
-	// Add type prefix for clarity
-	switch entity.Type {
-	case ast.EntityNamespace:
-		signature = "namespace " + entity.Name + " { /* ... */ }"
-	case ast.EntityClass:
-		signature = "class " + entity.Name + " { /* ... */ };"
-	case ast.EntityStruct:
-		signature = "struct " + entity.Name + " { /* ... */ };"
-	case ast.EntityEnum:
-		signature = "enum " + entity.Name + " { /* ... */ };"
-	}
-
-	return signature
-}
-
-// GetEntitySummary returns a summary of an entity for LLM context
-func (f *Formatter) GetEntitySummary(entity *ast.Entity) string {
-	var result strings.Builder
-
-	result.WriteString(fmt.Sprintf("Type: %s\n", entity.Type))
-	result.WriteString(fmt.Sprintf("Name: %s\n", entity.Name))
-	result.WriteString(fmt.Sprintf("Full Name: %s\n", entity.FullName))
-	result.WriteString(fmt.Sprintf("Signature: %s\n", entity.Signature))
-
-	if entity.AccessLevel != ast.AccessUnknown {
-		result.WriteString(fmt.Sprintf("Access: %s\n", entity.AccessLevel))
-	}
-
-	if entity.IsStatic {
-		result.WriteString("Static: true\n")
-	}
-	if entity.IsVirtual {
-		result.WriteString("Virtual: true\n")
-	}
-	if entity.IsConst {
-		result.WriteString("Const: true\n")
-	}
-
-	if entity.HasDoxygenComment() {
-		result.WriteString("Has Documentation: true\n")
-	} else {
-		result.WriteString("Has Documentation: false\n")
-	}
-
-	if len(entity.Children) > 0 {
-		result.WriteString(fmt.Sprintf("Children: %d\n", len(entity.Children)))
-	}
-
-	return result.String()
-}
-
-// buildCompleteSignature reconstructs the complete signature including modifiers
-func (f *Formatter) buildCompleteSignature(entity *ast.Entity) string {
-	var parts []string
-
-	// Add extern modifier if present
-	if entity.IsExtern {
-		parts = append(parts, "extern")
-	}
-
-	// Add static modifier if present
-	if entity.IsStatic {
-		parts = append(parts, "static")
-	}
-
-	// Add inline modifier if present
-	if entity.IsInline {
-		parts = append(parts, "inline")
-	}
-
-	// Add virtual modifier if present
-	if entity.IsVirtual {
-		parts = append(parts, "virtual")
-	}
-
-	// Add constexpr modifier if present (for fields/variables)
-	if entity.IsConstexpr {
-		parts = append(parts, "constexpr")
-	} else if entity.IsConst && (entity.Type == ast.EntityVariable || entity.Type == ast.EntityField) {
-		// Add const modifier for variables/fields (but not for constexpr which already implies const)
-		parts = append(parts, "const")
-	}
-
-	// Add the base signature
-	parts = append(parts, entity.Signature)
-
-	// Join all parts with spaces
-	return strings.Join(parts, " ")
 }

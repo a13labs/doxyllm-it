@@ -3,7 +3,7 @@ package source
 import (
 	"testing"
 
-	ast "doxyllm-it/pkg/ast_new"
+	ast "doxyllm-it/pkg/ast"
 )
 
 func TestNewFromContent(t *testing.T) {
@@ -16,7 +16,7 @@ public:
     int testMethod(int x);
 };`
 
-	doc, err := NewFromContent("test.hpp", content)
+	doc, err := NewSourceFromContent("test.hpp", content)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -38,7 +38,7 @@ public:
     int testMethod(int x);
 };`
 
-	doc, err := NewFromContent("test.hpp", content)
+	doc, err := NewSourceFromContent("test.hpp", content)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -68,7 +68,7 @@ public:
     void method();
 };`
 
-	doc, err := NewFromContent("test.hpp", content)
+	doc, err := NewSourceFromContent("test.hpp", content)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -118,7 +118,7 @@ public:
     int regularField;
 };`
 
-	doc, err := NewFromContent("test.hpp", content)
+	doc, err := NewSourceFromContent("test.hpp", content)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -148,7 +148,7 @@ public:
     void testMethod();
 };`
 
-	doc, err := NewFromContent("test.hpp", content)
+	doc, err := NewSourceFromContent("test.hpp", content)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}

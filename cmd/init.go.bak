@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"doxyllm-it/pkg/cppparser"
 	"doxyllm-it/pkg/llm"
-	"doxyllm-it/pkg/parser"
 
 	"github.com/spf13/cobra"
 )
@@ -236,7 +236,7 @@ func generateFileSummary(filePath string, provider llm.Provider) (string, error)
 	}
 
 	// Parse file to get a better understanding of its structure
-	p := parser.New()
+	p := cppparser.New()
 	_, err = p.Parse(filePath, string(content))
 	if err != nil {
 		// If parsing fails, still try to generate summary from raw content

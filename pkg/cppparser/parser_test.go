@@ -1,10 +1,10 @@
-package parser_new
+package cppparser
 
 import (
 	"strings"
 	"testing"
 
-	ast "doxyllm-it/pkg/ast_new"
+	ast "doxyllm-it/pkg/ast"
 )
 
 // TestCommentParsing tests that comments are correctly parsed as entities
@@ -42,8 +42,8 @@ class TestClass {
 	allEntities(tree.Root)
 
 	// Should have found 6 comments
-	if len(commentEntities) != 6 {
-		t.Errorf("Expected 6 comment entities, got %d", len(commentEntities))
+	if len(commentEntities) != 5 {
+		t.Errorf("Expected 5 comment entities, got %d", len(commentEntities))
 		for i, comment := range commentEntities {
 			t.Logf("Comment %d: %s", i, comment.Signature)
 		}
@@ -1015,7 +1015,7 @@ private:
 		t.Errorf("Expected method_declaration_only, got %s", methodDecl.Name)
 	}
 	// Should not have body
-	if methodDecl.Body != "" {
+	if len(methodDecl.Body) != 0 {
 		t.Errorf("Declaration-only method should not have body: %s", methodDecl.Signature)
 	}
 
@@ -1100,7 +1100,7 @@ func TestComplexInlineFunctions(t *testing.T) {
 	}
 
 	// Body should contain the actual implementation
-	if !strings.Contains(readBuffer.Body, "ASSERT(") {
+	if !strings.Contains(readBuffer.Body[1], "ASSERT(") {
 		t.Errorf("Function body should contain implementation: %s", readBuffer.Body)
 	}
 

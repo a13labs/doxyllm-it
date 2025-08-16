@@ -56,8 +56,6 @@ func init() {
 	rootCmd.AddCommand(parseCmd)
 	rootCmd.AddCommand(extractCmd)
 	rootCmd.AddCommand(formatCmd)
-	rootCmd.AddCommand(updateCmd)
-	rootCmd.AddCommand(batchUpdateCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(inspectCmd)
 }

@@ -1,7 +1,7 @@
-package parser_new
+package cppparser
 
 import (
-	ast "doxyllm-it/pkg/ast_new"
+	ast "doxyllm-it/pkg/ast"
 )
 
 // parseComment handles comment parsing - NEW ARCHITECTURE

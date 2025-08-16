@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"doxyllm-it/pkg/ast"
+	"doxyllm-it/pkg/doxygen"
 	"doxyllm-it/pkg/llm"
 )
 
@@ -60,7 +61,7 @@ namespace TestNamespace {
 }
 `
 
-	doc, err := NewFromContent("test.hpp", testContent)
+	doc, err := doxygen.NewLayerFromContent("test.hpp", testContent)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -111,7 +112,7 @@ public:
 };
 `
 
-	doc, err := NewFromContent("test.hpp", testContent)
+	doc, err := doxygen.NewLayerFromContent("test.hpp", testContent)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -149,7 +150,7 @@ public:
 };
 `
 
-	doc, err := NewFromContent("test.hpp", testContent)
+	doc, err := doxygen.NewLayerFromContent("test.hpp", testContent)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -184,7 +185,7 @@ namespace TestNamespace {
 }
 `
 
-	doc, err := NewFromContent("test.hpp", testContent)
+	doc, err := doxygen.NewLayerFromContent("test.hpp", testContent)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -194,7 +195,7 @@ namespace TestNamespace {
 
 	ctx := context.Background()
 	opts := ProcessingOptions{
-		ExcludeTypes: []ast.EntityType{ast.EntityVariable, ast.EntityField},
+		ExcludeTypes: []ast.EntityType{ast.EntityName},
 		DryRun:       true,
 	}
 
@@ -208,40 +209,6 @@ namespace TestNamespace {
 		if strings.Contains(entityPath, "testVariable") {
 			t.Error("Expected variables to be excluded from processing")
 		}
-	}
-}
-
-func TestProcessEntitiesNeedingGroupUpdate(t *testing.T) {
-	testContent := `
-/** @brief Documented class without group */
-class TestClass {
-public:
-    /** @brief Documented method without group */
-    void testMethod();
-};
-`
-
-	doc, err := NewFromContent("test.hpp", testContent)
-	if err != nil {
-		t.Fatalf("Failed to create document: %v", err)
-	}
-
-	mockLLM := &mockLLMService{}
-	service := NewDocumentationService(mockLLM)
-
-	group := &GroupConfig{
-		Name:  "testgroup",
-		Title: "Test Group",
-	}
-
-	ctx := context.Background()
-	result, err := service.ProcessEntitiesNeedingGroupUpdate(ctx, doc, group)
-	if err != nil {
-		t.Fatalf("Failed to process group updates: %v", err)
-	}
-
-	if result.EntitiesProcessed == 0 {
-		t.Error("Expected some entities to need group updates")
 	}
 }
 
@@ -282,7 +249,7 @@ func TestShouldSkipEntity(t *testing.T) {
 			name: "local variable",
 			entity: &ast.Entity{
 				Name: "temp",
-				Type: ast.EntityVariable,
+				Type: ast.EntityName,
 			},
 			expected: true,
 		},
@@ -308,9 +275,8 @@ func TestGetEntityTypeDescription(t *testing.T) {
 	}{
 		{ast.EntityNamespace, "namespace"},
 		{ast.EntityClass, "class"},
-		{ast.EntityFunction, "function"},
-		{ast.EntityMethod, "method"},
-		{ast.EntityVariable, "variable"},
+		{ast.EntityCallable, "callable"},
+		{ast.EntityName, "name"},
 	}
 
 	for _, tt := range tests {
@@ -319,26 +285,5 @@ func TestGetEntityTypeDescription(t *testing.T) {
 		if result != tt.expected {
 			t.Errorf("Expected %s, got %s for type %v", tt.expected, result, tt.entityType)
 		}
-	}
-}
-
-func TestParseGeneratedComment(t *testing.T) {
-	mockLLM := &mockLLMService{}
-	service := NewDocumentationService(mockLLM)
-
-	commentText := `/**
- * @brief This is a test comment
- * 
- * More detailed description here.
- */`
-
-	comment := service.parseGeneratedComment(commentText)
-
-	if comment.Raw != commentText {
-		t.Error("Expected raw comment to be preserved")
-	}
-
-	if comment.Brief != "This is a test comment" {
-		t.Errorf("Expected brief to be extracted, got: %s", comment.Brief)
 	}
 }
