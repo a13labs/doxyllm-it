@@ -7,8 +7,8 @@ import (
 
 // Provider represents a generic LLM provider interface
 type Provider interface {
-	// GenerateComment generates a documentation comment for the given entity
-	GenerateComment(ctx context.Context, request CommentRequest) (*CommentResponse, error)
+	// GenerateDescription generates a documentation comment for the given entity
+	GenerateDescription(ctx context.Context, request CommentRequest) (*CommentResponse, error)
 
 	// TestConnection verifies the LLM provider is accessible
 	TestConnection(ctx context.Context) error

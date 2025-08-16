@@ -35,37 +35,12 @@ func (s *DocumentationService) GenerateDocumentation(ctx context.Context, req Do
 	}
 
 	// Generate comment using LLM
-	response, err := s.provider.GenerateComment(ctx, llmRequest)
+	response, err := s.provider.GenerateDescription(ctx, llmRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate comment: %w", err)
 	}
 
-	// Build structured comment
-	// Use inline style for struct/class fields with simple descriptions
-	useInlineStyle := s.shouldUseInlineStyle(req.EntityType, response.Description)
-
-	var structuredComment string
-	if useInlineStyle {
-		structuredComment = s.builder.BuildStructuredCommentWithStyle(
-			response,
-			req.EntityName,
-			req.EntityType,
-			nil, // No GroupInfo for inline comments
-			req.Context,
-			true, // Use inline style
-		)
-	} else {
-		structuredComment = s.builder.BuildStructuredComment(
-			response,
-			req.EntityName,
-			req.EntityType,
-			nil, // No longer passing GroupInfo - will be handled by post-processor
-			req.Context,
-		)
-	}
-
 	return &DocumentationResult{
-		Comment:     structuredComment,
 		Description: response.Description,
 		Metadata:    response.Metadata,
 	}, nil
@@ -124,7 +99,6 @@ func (s *DocumentationService) validateRequest(req DocumentationRequest) error {
 
 // DocumentationResult represents the result of documentation generation
 type DocumentationResult struct {
-	Comment     string            // Complete structured Doxygen comment
 	Description string            // Raw description from LLM
 	Metadata    map[string]string // Additional metadata
 }

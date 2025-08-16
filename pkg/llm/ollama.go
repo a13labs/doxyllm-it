@@ -97,8 +97,8 @@ type OllamaResponse struct {
 	Done     bool   `json:"done"`
 }
 
-// GenerateComment generates a documentation comment using Ollama
-func (p *OllamaProvider) GenerateComment(ctx context.Context, request CommentRequest) (*CommentResponse, error) {
+// GenerateDescription generates a documentation comment using Ollama
+func (p *OllamaProvider) GenerateDescription(ctx context.Context, request CommentRequest) (*CommentResponse, error) {
 	// Build additional context section
 	var contextSection string
 	if request.AdditionalContext != "" {
@@ -299,7 +299,8 @@ func (p *OllamaProvider) extractDescriptionFromDoxygenComment(comment string) st
 	// Remove comment markers
 	comment = strings.ReplaceAll(comment, "/**", "")
 	comment = strings.ReplaceAll(comment, "*/", "")
-
+	comment = strings.ReplaceAll(comment, "///", "")
+	comment = strings.ReplaceAll(comment, "//! ", "")
 	lines := strings.Split(comment, "\n")
 	var descriptionLines []string
 

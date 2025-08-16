@@ -20,7 +20,6 @@ func (m *mockLLMService) GenerateDocumentation(ctx context.Context, req llm.Docu
 		return m.generateFunc(ctx, req)
 	}
 	return &llm.DocumentationResult{
-		Comment:     "/** @brief Mock comment */",
 		Description: "Mock description",
 		Metadata:    make(map[string]string),
 	}, nil
@@ -70,7 +69,6 @@ namespace TestNamespace {
 	mockLLM := &mockLLMService{
 		generateFunc: func(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error) {
 			return &llm.DocumentationResult{
-				Comment:     "/** @brief Generated comment for " + req.EntityName + " */",
 				Description: "Generated description",
 				Metadata:    make(map[string]string),
 			}, nil

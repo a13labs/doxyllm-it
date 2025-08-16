@@ -144,7 +144,7 @@ func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, 
 		return fmt.Errorf("LLM generation failed: %w", err)
 	}
 
-	err = entity.ApplyRaw(result.Comment)
+	err = entity.ApplyRaw(fmt.Sprintf("/** @brief %s */", result.Description))
 	if err != nil {
 		return fmt.Errorf("failed to apply generated comment: %w", err)
 	}

@@ -19,7 +19,7 @@ type mockLLMProvider struct {
 	modelName    string
 }
 
-func (m *mockLLMProvider) GenerateComment(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
+func (m *mockLLMProvider) GenerateDescription(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
 	if m.generateFunc != nil {
 		return m.generateFunc(ctx, req)
 	}
@@ -46,7 +46,7 @@ type mockLLMDocumentationService struct {
 }
 
 func (m *mockLLMDocumentationService) GenerateDocumentation(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error) {
-	response, err := m.provider.GenerateComment(ctx, llm.CommentRequest{
+	response, err := m.provider.GenerateDescription(ctx, llm.CommentRequest{
 		EntityName:        req.EntityName,
 		EntityType:        req.EntityType,
 		Context:           req.Context,
@@ -57,7 +57,6 @@ func (m *mockLLMDocumentationService) GenerateDocumentation(ctx context.Context,
 	}
 
 	return &llm.DocumentationResult{
-		Comment:     response.Description,
 		Description: response.Description,
 		Metadata:    response.Metadata,
 	}, nil

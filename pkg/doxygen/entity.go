@@ -26,6 +26,11 @@ func (e *Entity) ApplyRaw(raw string) error {
 	if err != nil {
 		return err
 	}
+	if e.instr.Type == ast.EntityName {
+		e.doc.Raw.Signature = e.doc.AsLineComment()
+	} else {
+		e.doc.Raw.Signature = e.doc.AsBlockComment()
+	}
 	e.layer.isModified = true
 	return nil
 }

@@ -90,7 +90,7 @@ func TestOllamaProvider_GenerateComment(t *testing.T) {
 			ctx := context.Background()
 
 			// Generate comment
-			response, err := provider.GenerateComment(ctx, tt.request)
+			response, err := provider.GenerateDescription(ctx, tt.request)
 
 			// Check results
 			if tt.expectError {

@@ -112,12 +112,12 @@ func TestGenerateDocumentationWithInlineStyle(t *testing.T) {
 		{
 			name:                "Field should use inline style",
 			entityType:          "field",
-			expectInlineKeyword: "/**<",
+			expectInlineKeyword: "The coordinate value",
 		},
 		{
 			name:                "Class should use block style",
 			entityType:          "class",
-			expectInlineKeyword: "@brief", // Block style uses @brief
+			expectInlineKeyword: "A longer description for", // Block style uses @brief
 		},
 	}
 
@@ -135,9 +135,9 @@ func TestGenerateDocumentationWithInlineStyle(t *testing.T) {
 				t.Fatalf("GenerateDocumentation failed: %v", err)
 			}
 
-			if !strings.Contains(result.Comment, tt.expectInlineKeyword) {
+			if !strings.Contains(result.Description, tt.expectInlineKeyword) {
 				t.Errorf("Expected comment to contain %q, got: %s",
-					tt.expectInlineKeyword, result.Comment)
+					tt.expectInlineKeyword, result.Description)
 			}
 		})
 	}
@@ -150,7 +150,7 @@ type MockProvider struct {
 	getModelInfoFunc    func() ModelInfo
 }
 
-func (m *MockProvider) GenerateComment(ctx context.Context, request CommentRequest) (*CommentResponse, error) {
+func (m *MockProvider) GenerateDescription(ctx context.Context, request CommentRequest) (*CommentResponse, error) {
 	if m.generateCommentFunc != nil {
 		return m.generateCommentFunc(ctx, request)
 	}
@@ -201,7 +201,7 @@ func TestDocumentationService_GenerateDocumentation(t *testing.T) {
 			},
 			expectError: false,
 			checkFunc: func(t *testing.T, result *DocumentationResult) {
-				if !strings.Contains(result.Comment, "@brief A test function") {
+				if !strings.Contains(result.Description, "A test function") {
 					t.Errorf("comment should contain brief description")
 				}
 				if result.Description != "A test function that does something useful." {
@@ -263,7 +263,7 @@ func TestDocumentationService_GenerateDocumentation(t *testing.T) {
 			},
 			expectError: false,
 			checkFunc: func(t *testing.T, result *DocumentationResult) {
-				if !strings.Contains(result.Comment, "@brief A test class") {
+				if !strings.Contains(result.Description, "A test class") {
 					t.Errorf("comment should contain brief description")
 				}
 				// Note: @ingroup is now handled by post-processor in cmd layer, not here
@@ -283,7 +283,7 @@ func TestDocumentationService_GenerateDocumentation(t *testing.T) {
 			},
 			expectError: false,
 			checkFunc: func(t *testing.T, result *DocumentationResult) {
-				if !strings.Contains(result.Comment, "@brief A helper function") {
+				if !strings.Contains(result.Description, "A helper function") {
 					t.Errorf("comment should contain description")
 				}
 			},

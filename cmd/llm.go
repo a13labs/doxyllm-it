@@ -338,21 +338,6 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 		return &document.ProcessingResult{}
 	}
 
-	// Process entities needing group updates
-	// if group != nil {
-	// 	spinner.Start("Updating group annotations...")
-	// 	groupResult, err := docService.ProcessEntitiesNeedingGroupUpdate(ctx, doc, group)
-	// 	spinner.Stop()
-	// 	if err != nil {
-	// 		fmt.Printf("  ⚠️  Failed to update groups: %v\n", err)
-	// 	} else {
-	// 		// Merge counts so progress output remains intuitive
-	// 		result.EntitiesUpdated += groupResult.EntitiesUpdated
-	// 		result.EntitiesProcessed += groupResult.EntitiesProcessed
-	// 		result.UpdatedEntities = append(result.UpdatedEntities, groupResult.UpdatedEntities...)
-	// 	}
-	// }
-
 	// Report progress
 	if result.EntitiesProcessed == 0 {
 		fmt.Printf("  ✅ No entities need documentation\n")
