@@ -37,7 +37,7 @@ func TestOllamaProvider_GenerateComment(t *testing.T) {
 				Context:    "class TestClass {};",
 			},
 			responseBody: `{"response": "` + "```cpp\\nA test class for validation.\\n```" + `", "done": true}`,
-			expectedDesc: "A test class for validation.",
+			expectedDesc: "```cpp\nA test class for validation.\n```",
 			expectError:  false,
 			httpStatus:   http.StatusOK,
 		},
@@ -51,18 +51,6 @@ func TestOllamaProvider_GenerateComment(t *testing.T) {
 			responseBody: `{"error": "Model not found"}`,
 			expectError:  true,
 			httpStatus:   http.StatusNotFound,
-		},
-		{
-			name: "response with unwanted prefix",
-			request: CommentRequest{
-				EntityName: "TestClass",
-				EntityType: "class",
-				Context:    "class TestClass {};",
-			},
-			responseBody: `{"response": "This is a C++ documentation expert. A comprehensive test class.", "done": true}`,
-			expectedDesc: "A comprehensive test class.",
-			expectError:  false,
-			httpStatus:   http.StatusOK,
 		},
 	}
 
@@ -90,7 +78,7 @@ func TestOllamaProvider_GenerateComment(t *testing.T) {
 			ctx := context.Background()
 
 			// Generate comment
-			response, err := provider.GenerateDescription(ctx, tt.request)
+			response, err := provider.Generate(ctx, tt.request)
 
 			// Check results
 			if tt.expectError {
@@ -105,8 +93,8 @@ func TestOllamaProvider_GenerateComment(t *testing.T) {
 				return
 			}
 
-			if response.Description != tt.expectedDesc {
-				t.Errorf("expected description %q, got %q", tt.expectedDesc, response.Description)
+			if response.Comment != tt.expectedDesc {
+				t.Errorf("expected description %q, got %q", tt.expectedDesc, response.Comment)
 			}
 
 			// Check metadata
@@ -196,51 +184,6 @@ func TestOllamaProvider_GetModelInfo(t *testing.T) {
 
 	if info.ContextSize != 4096 {
 		t.Errorf("expected context size 4096, got %d", info.ContextSize)
-	}
-}
-
-func TestOllamaProvider_CleanResponse(t *testing.T) {
-	provider := &OllamaProvider{}
-
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "clean text",
-			input:    "A simple function description.",
-			expected: "A simple function description.",
-		},
-		{
-			name:     "text with code blocks",
-			input:    "```cpp\nA function with code blocks.\n```",
-			expected: "A function with code blocks.",
-		},
-		{
-			name:     "text with unwanted prefix",
-			input:    "This is a C++ documentation expert. Here is the description.",
-			expected: "Here is the description.",
-		},
-		{
-			name:     "text with brief description prefix",
-			input:    "Brief Description: A concise description of the function.",
-			expected: "A concise description of the function.",
-		},
-		{
-			name:     "multiple code block types",
-			input:    "```c++\nDetailed function description.\n```",
-			expected: "Detailed function description.",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := provider.cleanResponse(tt.input)
-			if result != tt.expected {
-				t.Errorf("expected %q, got %q", tt.expected, result)
-			}
-		})
 	}
 }
 

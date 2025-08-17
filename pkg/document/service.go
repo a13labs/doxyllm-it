@@ -13,7 +13,7 @@ import (
 
 // LLMService defines the interface for LLM-based documentation generation
 type LLMService interface {
-	GenerateDocumentation(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error)
+	Generate(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error)
 	TestConnection(ctx context.Context) error
 	GetModelInfo() llm.ModelInfo
 }
@@ -60,13 +60,23 @@ type ProcessingResult struct {
 
 // ProcessUndocumentedEntities processes all undocumented entities in a document
 func (s *DocumentationService) ProcessUndocumentedEntities(ctx context.Context, doc *doxygen.DocLayer, opts ProcessingOptions) (*ProcessingResult, error) {
+
+	// Get undocumented entities
+	undocumented := doc.GetUndocumentedEntities()
+	return s.processEntities(ctx, doc, opts, undocumented)
+}
+
+func (s *DocumentationService) ProcessAllEntities(ctx context.Context, doc *doxygen.DocLayer, opts ProcessingOptions) (*ProcessingResult, error) {
+	// Get all entities
+	allEntities := doc.GetAllEntities()
+	return s.processEntities(ctx, doc, opts, allEntities)
+}
+
+func (s *DocumentationService) processEntities(ctx context.Context, doc *doxygen.DocLayer, opts ProcessingOptions, entities []*doxygen.Entity) (*ProcessingResult, error) {
 	result := &ProcessingResult{
 		UpdatedEntities: make([]string, 0),
 		Errors:          make([]error, 0),
 	}
-
-	// Get undocumented entities
-	undocumented := doc.GetUndocumentedEntities()
 
 	// Filter by excluded types
 	if len(opts.ExcludeTypes) > 0 {
@@ -76,23 +86,23 @@ func (s *DocumentationService) ProcessUndocumentedEntities(ctx context.Context, 
 			excludeMap[t] = true
 		}
 
-		for _, entity := range undocumented {
+		for _, entity := range entities {
 			if !excludeMap[entity.GetInstruction().Type] {
 				filtered = append(filtered, entity)
 			}
 		}
-		undocumented = filtered
+		entities = filtered
 	}
 
 	// Apply entity limit
-	if opts.MaxEntities > 0 && len(undocumented) > opts.MaxEntities {
-		undocumented = undocumented[:opts.MaxEntities]
+	if opts.MaxEntities > 0 && len(entities) > opts.MaxEntities {
+		entities = entities[:opts.MaxEntities]
 	}
 
-	result.EntitiesProcessed = len(undocumented)
+	result.EntitiesProcessed = len(entities)
 
 	// Process each entity
-	for _, entity := range undocumented {
+	for _, entity := range entities {
 		entityPath := entity.GetInstruction().GetFullPath()
 
 		if opts.DryRun {
@@ -139,12 +149,12 @@ func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, 
 	}
 
 	// Generate documentation using LLM
-	result, err := s.llmService.GenerateDocumentation(ctx, docRequest)
+	result, err := s.llmService.Generate(ctx, docRequest)
 	if err != nil {
 		return fmt.Errorf("LLM generation failed: %w", err)
 	}
 
-	err = entity.ApplyRaw(fmt.Sprintf("/** @brief %s */", result.Description))
+	err = entity.ApplyRaw(fmt.Sprintf("/** @brief %s */", result.Response))
 	if err != nil {
 		return fmt.Errorf("failed to apply generated comment: %w", err)
 	}

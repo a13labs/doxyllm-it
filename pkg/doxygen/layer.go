@@ -85,21 +85,25 @@ func NewLayer(filename string) (*DocLayer, error) {
 	return NewLayerFromContent(filename, string(content))
 }
 
-func (l *DocLayer) GetEntities(undocumented bool) []*Entity {
-	if undocumented {
-		var undocumentedEntities []*Entity
+func (l *DocLayer) GetEntities(newOnly bool) []*Entity {
+	if newOnly {
+		var newOnlyEntities []*Entity
 		for _, entity := range l.entitiesCache {
 			if entity.isNew {
-				undocumentedEntities = append(undocumentedEntities, entity)
+				newOnlyEntities = append(newOnlyEntities, entity)
 			}
 		}
-		return undocumentedEntities
+		return newOnlyEntities
 	}
 	return l.entitiesCache
 }
 
 func (l *DocLayer) GetUndocumentedEntities() []*Entity {
 	return l.GetEntities(true)
+}
+
+func (l *DocLayer) GetAllEntities() []*Entity {
+	return l.GetEntities(false)
 }
 
 func (l *DocLayer) IsModified() bool {
@@ -109,7 +113,7 @@ func (l *DocLayer) IsModified() bool {
 func (l *DocLayer) SaveToString(clanged bool) (string, error) {
 	f := formatter.New()
 
-	reconstructed := f.ReconstructCode(l.sourceFile.GetTree())
+	reconstructed := f.ReconstructCode(l.sourceFile.GetTree(), -1, true)
 	if clanged {
 		return f.FormatWithClang(reconstructed)
 	}
@@ -122,6 +126,5 @@ func (l *DocLayer) Save(clanged bool) error {
 	if err != nil {
 		return err
 	}
-
 	return os.WriteFile(l.sourceFile.GetFilename(), []byte(content), 0644)
 }

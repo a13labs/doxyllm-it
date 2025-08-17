@@ -21,7 +21,7 @@ func (cb *CommentBuilder) BuildStructuredComment(response *CommentResponse, enti
 
 // BuildStructuredCommentWithStyle creates a structured Doxygen comment with specified style
 func (cb *CommentBuilder) BuildStructuredCommentWithStyle(response *CommentResponse, entityName, entityType string, groupInfo *GroupInfo, context string, isInlineStyle bool) string {
-	description := response.Description
+	description := response.Comment
 
 	// For inline comments, create simple inline format
 	if isInlineStyle {

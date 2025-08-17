@@ -25,17 +25,22 @@ func New() *Formatter {
 }
 
 // ReconstructCode reconstructs the original code from the scope tree
-func (f *Formatter) ReconstructCode(tree *ast.ScopeTree) string {
-	return f.reconstructEntity(tree.Root, 0)
+func (f *Formatter) ReconstructCode(tree *ast.ScopeTree, maxDepth int, comments bool) string {
+	return f.reconstructEntity(tree.Root, 0, maxDepth, comments)
 }
 
 // ReconstructScope reconstructs code for a specific scope/entity
-func (f *Formatter) ReconstructScope(entity *ast.Entity) string {
-	return f.reconstructEntity(entity, 0)
+func (f *Formatter) ReconstructScope(entity *ast.Entity, maxDepth int, comments bool) string {
+	return f.reconstructEntity(entity, 0, maxDepth, comments)
 }
 
 // reconstructEntity recursively reconstructs code for an entity
-func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
+func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int, maxDepth int, comments bool) string {
+
+	if maxDepth > -1 && depth > maxDepth {
+		return fmt.Sprintf("%s/* ... */\n", f.getIndent(depth))
+	}
+
 	var result strings.Builder
 
 	// Add the entity declaration with proper multi-line indentation
@@ -59,14 +64,20 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 	switch entity.Type {
 	case ast.EntityRoot:
 		for _, child := range entity.Children {
-			result.WriteString(f.reconstructEntity(child, depth))
+			if !comments && child.Type == ast.EntityComment {
+				continue // Skip comments if not requested
+			}
+			result.WriteString(f.reconstructEntity(child, depth, maxDepth, comments))
 		}
 		return result.String()
 	case ast.EntityNamespace:
 		// Handle namespace specifically to add proper closing
 		result.WriteString(fmt.Sprintf("\n%s{\n", indent))
 		for _, child := range entity.Children {
-			result.WriteString(f.reconstructEntity(child, depth+1))
+			if !comments && child.Type == ast.EntityComment {
+				continue // Skip comments if not requested
+			}
+			result.WriteString(f.reconstructEntity(child, depth+1, maxDepth, comments))
 		}
 		result.WriteString(fmt.Sprintf("%s}", indent))
 
@@ -75,7 +86,14 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 			result.WriteString("\n")
 			result.WriteString(fmt.Sprintf("%s{\n", indent))
 			for _, child := range entity.Children {
-				result.WriteString(f.reconstructEntity(child, depth+1))
+				if !comments && child.Type == ast.EntityComment {
+					continue // Skip comments if not requested
+				}
+				if child.Type == ast.EntityAccessSpecifier {
+					result.WriteString(fmt.Sprintf("%s%s:\n", indent, child.Signature))
+				} else {
+					result.WriteString(f.reconstructEntity(child, depth+1, maxDepth, comments))
+				}
 			}
 			result.WriteString(fmt.Sprintf("%s};", indent))
 		} else {
@@ -114,39 +132,37 @@ func (f *Formatter) reconstructEntity(entity *ast.Entity, depth int) string {
 	default:
 		result.WriteString(";")
 	}
-	if entity.LineComment != nil && entity.LineComment.Signature != "" {
+	if comments && entity.LineComment != nil && entity.LineComment.Signature != "" {
 		result.WriteString(fmt.Sprintf(" %s", entity.LineComment.Signature))
 	}
 	result.WriteString("\n")
 	return result.String()
 }
 
-func (f *Formatter) ExtractEntityContext(entity *ast.Entity, includeParent bool, includeSiblings bool) string {
+func (f *Formatter) ExtractEntityContext(entity *ast.Entity) string {
 	var result strings.Builder
 
-	// Include parent context if requested
-	if includeParent && entity.Parent != nil {
-		parent := entity.Parent
-		result.WriteString("// Parent context:\n")
-		result.WriteString(f.formatEntitySignature(parent))
-		result.WriteString("\n\n")
-	}
-
-	// Include sibling context if requested
-	if includeSiblings && entity.Parent != nil {
-		result.WriteString("// Sibling context:\n")
-		for _, sibling := range entity.Parent.Children {
-			if sibling != entity {
-				result.WriteString(f.formatEntitySignature(sibling))
-				result.WriteString("\n")
-			}
+	result.WriteString("Context (for understanding the code):\n")
+	result.WriteString("```cpp\n")
+	switch entity.Type {
+	case ast.EntityNamespace:
+		result.WriteString(f.ReconstructScope(entity, 2, false))
+		result.WriteString("\n")
+	default:
+		depth := 0
+		if entity.Depth() > 0 {
+			depth = entity.Depth() - 1
 		}
+		entityToDocument := entity.GetParentAtDepth(depth)
+
+		result.WriteString(f.ReconstructScope(entityToDocument, 2, false))
 		result.WriteString("\n")
 	}
+	result.WriteString("```\n\n")
 
 	// Include the entity itself
-	result.WriteString("// Target entity:\n")
-	result.WriteString(f.ReconstructScope(entity))
+	result.WriteString("Target entity (entity to comment):\n")
+	result.WriteString(f.formatEntitySignature(entity))
 
 	return result.String()
 }

@@ -21,7 +21,7 @@ func NewDocumentationService(provider Provider) *DocumentationService {
 }
 
 // GenerateDocumentation generates a complete Doxygen comment for an entity
-func (s *DocumentationService) GenerateDocumentation(ctx context.Context, req DocumentationRequest) (*DocumentationResult, error) {
+func (s *DocumentationService) Generate(ctx context.Context, req DocumentationRequest) (*DocumentationResult, error) {
 	if err := s.validateRequest(req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
@@ -35,14 +35,14 @@ func (s *DocumentationService) GenerateDocumentation(ctx context.Context, req Do
 	}
 
 	// Generate comment using LLM
-	response, err := s.provider.GenerateDescription(ctx, llmRequest)
+	response, err := s.provider.Generate(ctx, llmRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate comment: %w", err)
 	}
 
 	return &DocumentationResult{
-		Description: response.Description,
-		Metadata:    response.Metadata,
+		Response: response.Comment,
+		Metadata: response.Metadata,
 	}, nil
 }
 
@@ -99,6 +99,6 @@ func (s *DocumentationService) validateRequest(req DocumentationRequest) error {
 
 // DocumentationResult represents the result of documentation generation
 type DocumentationResult struct {
-	Description string            // Raw description from LLM
-	Metadata    map[string]string // Additional metadata
+	Response string            // Raw description from LLM
+	Metadata map[string]string // Additional metadata
 }

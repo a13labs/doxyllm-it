@@ -196,6 +196,30 @@ func (e *Entity) GetEntitiesByType(entityType EntityType) []*Entity {
 	return entities
 }
 
+func (e *Entity) Depth() int {
+	if e.Parent == nil {
+		return 0
+	}
+	return 1 + e.Parent.Depth()
+}
+
+func (e *Entity) IsRoot() bool {
+	return e.Parent == nil
+}
+
+func (e *Entity) GetParentAtDepth(depth int) *Entity {
+	if depth >= e.Depth() {
+		return e
+	}
+	if e.Parent != nil && e.Parent.Depth() == depth {
+		return e.Parent
+	}
+	if e.Parent == nil {
+		return nil
+	}
+	return e.Parent.GetParentAtDepth(depth - 1)
+}
+
 // ScopeTree represents the complete parsed tree of a C++ file
 type ScopeTree struct {
 	Root     *Entity   // Root entity (represents the file)

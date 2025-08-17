@@ -72,6 +72,7 @@ var (
 	llmBackup       bool
 	llmFormatOutput bool
 	llmExcludeDirs  []string
+	llmOverwrite    bool
 )
 
 // Spinner represents a simple text-based spinner for showing progress
@@ -159,6 +160,7 @@ func init() {
 	llmCmd.Flags().BoolVar(&llmDryRun, "dry-run", false, "Show what would be processed without making changes")
 	llmCmd.Flags().BoolVarP(&llmBackup, "backup", "b", false, "Create backup files before updating")
 	llmCmd.Flags().BoolVarP(&llmFormatOutput, "format", "f", false, "Format updated files with clang-format")
+	llmCmd.Flags().BoolVar(&llmOverwrite, "overwrite", false, "Overwrite existing documentation without confirmation")
 	llmCmd.Flags().StringSliceVar(&llmExcludeDirs, "exclude", []string{"build", "vendor", "third_party", ".git", "node_modules"}, "Directories to exclude")
 }
 
@@ -330,8 +332,14 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 		GroupConfig:  group,
 	}
 
+	var result *document.ProcessingResult
 	spinner.Start("Analyzing and generating documentation...")
-	result, err := docService.ProcessUndocumentedEntities(ctx, doc, opts)
+	if llmOverwrite {
+		result, err = docService.ProcessAllEntities(ctx, doc, opts)
+	} else {
+		result, err = docService.ProcessUndocumentedEntities(ctx, doc, opts)
+	}
+
 	spinner.Stop()
 	if err != nil {
 		fmt.Printf("  ❌ Failed to process entities: %v\n", err)

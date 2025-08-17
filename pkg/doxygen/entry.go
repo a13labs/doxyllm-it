@@ -249,12 +249,12 @@ func (doc *DataEntry) GetTag(tag string) string {
 // AsBlockComment converts the DoxygenComment to a block comment representation
 func (doc *DataEntry) AsBlockComment() string {
 	var lines []string
-	lines = append(lines, "/*")
+	lines = append(lines, "/**")
 	if doc.Brief != "" {
-		lines = append(lines, fmt.Sprintf(" * %s", doc.Brief))
+		lines = append(lines, fmt.Sprintf(" * @brief %s", doc.Brief))
 	}
 	if doc.Detailed != "" {
-		lines = append(lines, fmt.Sprintf(" * %s", doc.Detailed))
+		lines = append(lines, fmt.Sprintf(" * @details %s", doc.Detailed))
 	}
 	for param, desc := range doc.Params {
 		lines = append(lines, fmt.Sprintf(" * @param %s %s", param, desc))
@@ -311,7 +311,7 @@ func (doc *DataEntry) AsBlockComment() string {
 // AsLineComment returns DoxygenComment as a line comment representation, used for variables (ie: /**< The time point when the timer started. */)
 func (doc *DataEntry) AsLineComment() string {
 	var commentBuilder strings.Builder
-	commentBuilder.WriteString("/»»< ")
+	commentBuilder.WriteString("/**< ")
 	if doc.Brief != "" {
 		commentBuilder.WriteString(doc.Brief)
 	}

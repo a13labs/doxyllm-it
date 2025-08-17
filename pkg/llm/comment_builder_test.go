@@ -20,7 +20,7 @@ func TestCommentBuilder_BuildStructuredComment(t *testing.T) {
 		{
 			name: "simple function comment",
 			response: &CommentResponse{
-				Description: "A simple test function that performs basic operations.",
+				Comment: "A simple test function that performs basic operations.",
 			},
 			entityName: "testFunction",
 			entityType: "function",
@@ -40,7 +40,7 @@ func TestCommentBuilder_BuildStructuredComment(t *testing.T) {
 		{
 			name: "class comment with group",
 			response: &CommentResponse{
-				Description: "A test class.\nThis class provides test functionality for the application.",
+				Comment: "A test class.\nThis class provides test functionality for the application.",
 			},
 			entityName: "TestClass",
 			entityType: "class",
@@ -62,7 +62,7 @@ func TestCommentBuilder_BuildStructuredComment(t *testing.T) {
 		{
 			name: "function with return value",
 			response: &CommentResponse{
-				Description: "Returns the result of a calculation.",
+				Comment: "Returns the result of a calculation.",
 			},
 			entityName: "calculate",
 			entityType: "function",
@@ -82,7 +82,7 @@ func TestCommentBuilder_BuildStructuredComment(t *testing.T) {
 		{
 			name: "namespace comment",
 			response: &CommentResponse{
-				Description: "Test namespace for organizing test utilities.",
+				Comment: "Test namespace for organizing test utilities.",
 			},
 			entityName: "test",
 			entityType: "namespace",
@@ -102,7 +102,7 @@ func TestCommentBuilder_BuildStructuredComment(t *testing.T) {
 		{
 			name: "constructor comment",
 			response: &CommentResponse{
-				Description: "Creates a new instance of the class.",
+				Comment: "Creates a new instance of the class.",
 			},
 			entityName: "TestClass",
 			entityType: "constructor",

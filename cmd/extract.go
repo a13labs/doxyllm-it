@@ -40,8 +40,6 @@ Use :: for global scope entities.`,
 		}
 
 		// Get options
-		includeParent, _ := cmd.Flags().GetBool("parent")
-		includeSiblings, _ := cmd.Flags().GetBool("siblings")
 		scopeOnly, _ := cmd.Flags().GetBool("scope")
 
 		// Extract context
@@ -49,9 +47,9 @@ Use :: for global scope entities.`,
 
 		var output string
 		if scopeOnly {
-			output = f.ReconstructScope(entity)
+			output = f.ReconstructScope(entity, -1, true)
 		} else {
-			output = f.ExtractEntityContext(entity, includeParent, includeSiblings)
+			output = f.ExtractEntityContext(entity)
 		}
 
 		fmt.Print(output)
@@ -60,7 +58,5 @@ Use :: for global scope entities.`,
 }
 
 func init() {
-	extractCmd.Flags().BoolP("parent", "p", false, "Include parent context")
-	extractCmd.Flags().BoolP("siblings", "s", false, "Include sibling context")
 	extractCmd.Flags().BoolP("scope", "", false, "Extract only the entity scope (no context)")
 }

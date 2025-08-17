@@ -91,13 +91,13 @@ func TestGenerateDocumentationWithInlineStyle(t *testing.T) {
 		generateCommentFunc: func(ctx context.Context, request CommentRequest) (*CommentResponse, error) {
 			if request.EntityType == "field" {
 				return &CommentResponse{
-					Description: "The coordinate value.",
-					Metadata:    map[string]string{"provider": "mock"},
+					Comment:  "The coordinate value.",
+					Metadata: map[string]string{"provider": "mock"},
 				}, nil
 			}
 			return &CommentResponse{
-				Description: "A longer description for non-field entities that should use block comment style.",
-				Metadata:    map[string]string{"provider": "mock"},
+				Comment:  "A longer description for non-field entities that should use block comment style.",
+				Metadata: map[string]string{"provider": "mock"},
 			}, nil
 		},
 	}
@@ -130,14 +130,14 @@ func TestGenerateDocumentationWithInlineStyle(t *testing.T) {
 				AdditionalContext: "",
 			}
 
-			result, err := service.GenerateDocumentation(context.Background(), req)
+			result, err := service.Generate(context.Background(), req)
 			if err != nil {
 				t.Fatalf("GenerateDocumentation failed: %v", err)
 			}
 
-			if !strings.Contains(result.Description, tt.expectInlineKeyword) {
+			if !strings.Contains(result.Response, tt.expectInlineKeyword) {
 				t.Errorf("Expected comment to contain %q, got: %s",
-					tt.expectInlineKeyword, result.Description)
+					tt.expectInlineKeyword, result.Response)
 			}
 		})
 	}
@@ -150,13 +150,13 @@ type MockProvider struct {
 	getModelInfoFunc    func() ModelInfo
 }
 
-func (m *MockProvider) GenerateDescription(ctx context.Context, request CommentRequest) (*CommentResponse, error) {
+func (m *MockProvider) Generate(ctx context.Context, request CommentRequest) (*CommentResponse, error) {
 	if m.generateCommentFunc != nil {
 		return m.generateCommentFunc(ctx, request)
 	}
 	return &CommentResponse{
-		Description: "Mock description for " + request.EntityName,
-		Metadata:    map[string]string{"provider": "mock"},
+		Comment:  "Mock description for " + request.EntityName,
+		Metadata: map[string]string{"provider": "mock"},
 	}, nil
 }
 
@@ -196,15 +196,15 @@ func TestDocumentationService_GenerateDocumentation(t *testing.T) {
 				Context:    "void testFunction(int param);",
 			},
 			mockResponse: &CommentResponse{
-				Description: "A test function that does something useful.",
-				Metadata:    map[string]string{"provider": "mock"},
+				Comment:  "A test function that does something useful.",
+				Metadata: map[string]string{"provider": "mock"},
 			},
 			expectError: false,
 			checkFunc: func(t *testing.T, result *DocumentationResult) {
-				if !strings.Contains(result.Description, "A test function") {
+				if !strings.Contains(result.Response, "A test function") {
 					t.Errorf("comment should contain brief description")
 				}
-				if result.Description != "A test function that does something useful." {
+				if result.Response != "A test function that does something useful." {
 					t.Errorf("description should match mock response")
 				}
 				if result.Metadata["provider"] != "mock" {
@@ -258,12 +258,12 @@ func TestDocumentationService_GenerateDocumentation(t *testing.T) {
 				AdditionalContext: "This is a test class for validation.",
 			},
 			mockResponse: &CommentResponse{
-				Description: "A test class for validation.",
-				Metadata:    map[string]string{"provider": "mock"},
+				Comment:  "A test class for validation.",
+				Metadata: map[string]string{"provider": "mock"},
 			},
 			expectError: false,
 			checkFunc: func(t *testing.T, result *DocumentationResult) {
-				if !strings.Contains(result.Description, "A test class") {
+				if !strings.Contains(result.Response, "A test class") {
 					t.Errorf("comment should contain brief description")
 				}
 				// Note: @ingroup is now handled by post-processor in cmd layer, not here
@@ -278,12 +278,12 @@ func TestDocumentationService_GenerateDocumentation(t *testing.T) {
 				AdditionalContext: "This is a utility function for testing.",
 			},
 			mockResponse: &CommentResponse{
-				Description: "A helper function with context.",
-				Metadata:    map[string]string{"provider": "mock"},
+				Comment:  "A helper function with context.",
+				Metadata: map[string]string{"provider": "mock"},
 			},
 			expectError: false,
 			checkFunc: func(t *testing.T, result *DocumentationResult) {
-				if !strings.Contains(result.Description, "A helper function") {
+				if !strings.Contains(result.Response, "A helper function") {
 					t.Errorf("comment should contain description")
 				}
 			},
@@ -307,7 +307,7 @@ func TestDocumentationService_GenerateDocumentation(t *testing.T) {
 			ctx := context.Background()
 
 			// Generate documentation
-			result, err := service.GenerateDocumentation(ctx, tt.request)
+			result, err := service.Generate(ctx, tt.request)
 
 			// Check results
 			if tt.expectError {

@@ -33,7 +33,8 @@ This command parses the file, reconstructs it, and applies clang-format.`,
 
 		// Reconstruct the code
 		f := formatter.New()
-		reconstructed := f.ReconstructCode(tree)
+		noComments, _ := cmd.Flags().GetBool("no-comments")
+		reconstructed := f.ReconstructCode(tree, -1, !noComments)
 
 		// Apply clang-format if requested
 		useClang, _ := cmd.Flags().GetBool("clang-format")
@@ -55,4 +56,5 @@ This command parses the file, reconstructs it, and applies clang-format.`,
 
 func init() {
 	formatCmd.Flags().BoolP("clang-format", "c", false, "Apply clang-format to the output")
+	formatCmd.Flags().BoolP("no-comments", "n", false, "Remove comments from the output")
 }

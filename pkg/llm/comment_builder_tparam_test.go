@@ -136,7 +136,7 @@ func TestCommentBuilder_BuildStructuredCommentWithTemplateParams(t *testing.T) {
 
 	// Test that template parameters are included in the generated comment
 	response := &CommentResponse{
-		Description: "Alias for std::pair<T, U>.",
+		Comment: "Alias for std::pair<T, U>.",
 	}
 
 	context := "template <typename T, typename U> using pair = std::pair<T, U>"

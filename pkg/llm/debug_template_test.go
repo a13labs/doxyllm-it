@@ -25,7 +25,7 @@ func TestDebugDictionaryAlias(t *testing.T) {
 
 	// Create the response and build comment
 	response := &CommentResponse{
-		Description: "Template alias for std::map.",
+		Comment: "Template alias for std::map.",
 	}
 
 	comment := builder.BuildStructuredComment(response, entityName, entityType, nil, context)

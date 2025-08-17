@@ -19,13 +19,13 @@ type mockLLMProvider struct {
 	modelName    string
 }
 
-func (m *mockLLMProvider) GenerateDescription(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
+func (m *mockLLMProvider) Generate(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
 	if m.generateFunc != nil {
 		return m.generateFunc(ctx, req)
 	}
 	return &llm.CommentResponse{
-		Description: "/** @brief Mock comment for " + req.EntityName + " */",
-		Metadata:    make(map[string]string),
+		Comment:  "/** @brief Mock comment for " + req.EntityName + " */",
+		Metadata: make(map[string]string),
 	}, nil
 }
 
@@ -45,8 +45,8 @@ type mockLLMDocumentationService struct {
 	provider llm.Provider
 }
 
-func (m *mockLLMDocumentationService) GenerateDocumentation(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error) {
-	response, err := m.provider.GenerateDescription(ctx, llm.CommentRequest{
+func (m *mockLLMDocumentationService) Generate(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error) {
+	response, err := m.provider.Generate(ctx, llm.CommentRequest{
 		EntityName:        req.EntityName,
 		EntityType:        req.EntityType,
 		Context:           req.Context,
@@ -57,8 +57,8 @@ func (m *mockLLMDocumentationService) GenerateDocumentation(ctx context.Context,
 	}
 
 	return &llm.DocumentationResult{
-		Description: response.Description,
-		Metadata:    response.Metadata,
+		Response: response.Comment,
+		Metadata: response.Metadata,
 	}, nil
 }
 
@@ -356,8 +356,8 @@ namespace TestNamespace {
 		modelName: "test-model",
 		generateFunc: func(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
 			return &llm.CommentResponse{
-				Description: "/** @brief Generated comment for " + req.EntityName + " */",
-				Metadata:    make(map[string]string),
+				Comment:  "/** @brief Generated comment for " + req.EntityName + " */",
+				Metadata: make(map[string]string),
 			}, nil
 		},
 	}
@@ -452,8 +452,8 @@ func BenchmarkProcessFile(b *testing.B) {
 		modelName: "benchmark-model",
 		generateFunc: func(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
 			return &llm.CommentResponse{
-				Description: "/** @brief Quick comment */",
-				Metadata:    make(map[string]string),
+				Comment:  "/** @brief Quick comment */",
+				Metadata: make(map[string]string),
 			}, nil
 		},
 	}

@@ -3,6 +3,7 @@ package doxygen
 import (
 	"doxyllm-it/pkg/ast"
 	"doxyllm-it/pkg/formatter"
+	"strings"
 )
 
 // Entity represents a single entity with its associated documentation.
@@ -22,6 +23,15 @@ func (e *Entity) IsNew() bool {
 }
 
 func (e *Entity) ApplyRaw(raw string) error {
+
+	// Filter out the comment from the raw string by searching for the comment delimiter
+	// since sometimes the LLM may pass also the code after the doxygen comment
+	commentStart := strings.Index(raw, "/*")
+	commentEnd := strings.Index(raw, "*/")
+	if commentStart != -1 && commentEnd != -1 && commentEnd > commentStart {
+		raw = raw[commentStart : commentEnd+2]
+	}
+
 	err := e.doc.Parse(raw)
 	if err != nil {
 		return err
@@ -37,5 +47,5 @@ func (e *Entity) ApplyRaw(raw string) error {
 
 func (e *Entity) Context(includeParent bool, includeSiblings bool) string {
 	f := formatter.New()
-	return f.ExtractEntityContext(e.instr, includeParent, includeSiblings)
+	return f.ExtractEntityContext(e.instr)
 }

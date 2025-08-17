@@ -34,7 +34,7 @@ func (p *Parser) parseAccessSpecifier() (*ast.Entity, error) {
 		Type:        ast.EntityAccessSpecifier,
 		Name:        token.Value,
 		FullName:    token.Value,
-		Signature:   token.Value + ":",
+		Signature:   token.Value,
 		AccessLevel: accessLevel,
 	}
 

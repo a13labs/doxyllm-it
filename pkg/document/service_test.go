@@ -15,13 +15,13 @@ type mockLLMService struct {
 	generateFunc func(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error)
 }
 
-func (m *mockLLMService) GenerateDocumentation(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error) {
+func (m *mockLLMService) Generate(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error) {
 	if m.generateFunc != nil {
 		return m.generateFunc(ctx, req)
 	}
 	return &llm.DocumentationResult{
-		Description: "Mock description",
-		Metadata:    make(map[string]string),
+		Response: "Mock description",
+		Metadata: make(map[string]string),
 	}, nil
 }
 
@@ -69,8 +69,8 @@ namespace TestNamespace {
 	mockLLM := &mockLLMService{
 		generateFunc: func(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error) {
 			return &llm.DocumentationResult{
-				Description: "Generated description",
-				Metadata:    make(map[string]string),
+				Response: "Generated description",
+				Metadata: make(map[string]string),
 			}, nil
 		},
 	}
