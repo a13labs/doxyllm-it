@@ -1,6 +1,6 @@
 // Package document provides a high-level service for processing documentation
 // requests using the document abstraction
-package document
+package doxygen
 
 const defaultOllamaPromptTemplate = `You are a C++ documentation expert. Generate a Doxygen comment for the specific entity requested.
 
@@ -46,7 +46,7 @@ CRITICAL REQUIREMENTS:
 Generate ONE concise sentence (under 60 characters, no < symbols).`
 
 // getPromptTemplate returns the appropriate prompt template based on entity type
-func (p *DocumentationService) getPromptTemplate(entityType string) string {
+func (p *DoxygenService) getPromptTemplate(entityType string) string {
 	switch entityType {
 	case "name":
 		return fieldPromptTemplate

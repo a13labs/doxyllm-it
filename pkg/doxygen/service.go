@@ -1,24 +1,23 @@
 // Package document provides a high-level service for processing documentation
 // requests using the document abstraction
-package document
+package doxygen
 
 import (
 	"context"
 	"fmt"
 
 	"doxyllm-it/pkg/ast"
-	"doxyllm-it/pkg/doxygen"
 	"doxyllm-it/pkg/llm"
 )
 
-// DocumentationService provides high-level document processing with LLM integration
-type DocumentationService struct {
+// DoxygenService provides high-level document processing with LLM integration
+type DoxygenService struct {
 	llmService llm.Provider
 }
 
 // NewDocumentationService creates a new document documentation service
-func NewDocumentationService(llmService llm.Provider) *DocumentationService {
-	return &DocumentationService{
+func NewDocumentationService(llmService llm.Provider) *DoxygenService {
+	return &DoxygenService{
 		llmService: llmService,
 	}
 }
@@ -44,19 +43,19 @@ type ProcessingResult struct {
 }
 
 // ProcessUndocumentedEntities processes all undocumented entities in a document
-func (s *DocumentationService) ProcessUndocumentedEntities(ctx context.Context, doc *doxygen.DocLayer, opts ProcessingOptions) (*ProcessingResult, error) {
+func (s *DoxygenService) ProcessUndocumentedEntities(ctx context.Context, doc *DocLayer, opts ProcessingOptions) (*ProcessingResult, error) {
 	// Get undocumented entities
 	undocumented := doc.GetUndocumentedEntities()
 	return s.processEntities(ctx, doc, opts, undocumented)
 }
 
-func (s *DocumentationService) ProcessAllEntities(ctx context.Context, doc *doxygen.DocLayer, opts ProcessingOptions) (*ProcessingResult, error) {
+func (s *DoxygenService) ProcessAllEntities(ctx context.Context, doc *DocLayer, opts ProcessingOptions) (*ProcessingResult, error) {
 	// Get all entities
 	allEntities := doc.GetAllEntities()
 	return s.processEntities(ctx, doc, opts, allEntities)
 }
 
-func (s *DocumentationService) processEntities(ctx context.Context, doc *doxygen.DocLayer, opts ProcessingOptions, entities []*doxygen.Entity) (*ProcessingResult, error) {
+func (s *DoxygenService) processEntities(ctx context.Context, doc *DocLayer, opts ProcessingOptions, entities []*Entity) (*ProcessingResult, error) {
 	result := &ProcessingResult{
 		UpdatedEntities: make([]string, 0),
 		Errors:          make([]error, 0),
@@ -64,7 +63,7 @@ func (s *DocumentationService) processEntities(ctx context.Context, doc *doxygen
 
 	// Filter by excluded types
 	if len(opts.ExcludeTypes) > 0 {
-		filtered := make([]*doxygen.Entity, 0)
+		filtered := make([]*Entity, 0)
 		excludeMap := make(map[ast.EntityType]bool)
 		for _, t := range opts.ExcludeTypes {
 			excludeMap[t] = true
@@ -109,7 +108,7 @@ func (s *DocumentationService) processEntities(ctx context.Context, doc *doxygen
 }
 
 // generateEntityDocumentation generates documentation for a single entity
-func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, doc *doxygen.DocLayer, entity *doxygen.Entity, additionalContext string) error {
+func (s *DoxygenService) generateEntityDocumentation(ctx context.Context, doc *DocLayer, entity *Entity, additionalContext string) error {
 	// Extract context for the entity
 	context := entity.Context(true, true)
 	if context == "" {

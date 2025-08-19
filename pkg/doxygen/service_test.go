@@ -1,4 +1,4 @@
-package document
+package doxygen
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"doxyllm-it/pkg/ast"
-	"doxyllm-it/pkg/doxygen"
 	"doxyllm-it/pkg/llm"
 )
 
@@ -60,7 +59,7 @@ namespace TestNamespace {
 }
 `
 
-	doc, err := doxygen.NewLayerFromContent("test.hpp", testContent)
+	doc, err := NewLayerFromContent("test.hpp", testContent)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -110,7 +109,7 @@ public:
 };
 `
 
-	doc, err := doxygen.NewLayerFromContent("test.hpp", testContent)
+	doc, err := NewLayerFromContent("test.hpp", testContent)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -148,7 +147,7 @@ public:
 };
 `
 
-	doc, err := doxygen.NewLayerFromContent("test.hpp", testContent)
+	doc, err := NewLayerFromContent("test.hpp", testContent)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -183,7 +182,7 @@ namespace TestNamespace {
 }
 `
 
-	doc, err := doxygen.NewLayerFromContent("test.hpp", testContent)
+	doc, err := NewLayerFromContent("test.hpp", testContent)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}

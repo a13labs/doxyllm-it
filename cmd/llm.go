@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"doxyllm-it/pkg/document"
 	"doxyllm-it/pkg/doxygen"
 	"doxyllm-it/pkg/llm"
 
@@ -210,7 +209,7 @@ func runLLM(cmd *cobra.Command, args []string) {
 	}
 
 	// Create document service
-	docService := document.NewDocumentationService(provider)
+	docService := doxygen.NewDocumentationService(provider)
 
 	// Check if dry-run first
 	if llmDryRun {
@@ -285,25 +284,25 @@ func runLLM(cmd *cobra.Command, args []string) {
 }
 
 // processFile processes a single file using the document abstraction
-func processFile(filePath string, docService *document.DocumentationService, rootPath string) *document.ProcessingResult {
+func processFile(filePath string, docService *doxygen.DoxygenService, rootPath string) *doxygen.ProcessingResult {
 	fmt.Printf("📁 Processing: %s\n", filePath)
 
 	// Create spinner for showing progress during processing
 	spinner := NewSpinner()
 
 	// Load the document
-	spinner.Start("Loading document...")
+	spinner.Start("Loading doxygen...")
 	doc, err := doxygen.NewLayer(filePath)
 	spinner.Stop()
 	if err != nil {
 		fmt.Printf("  ❌ Failed to load document: %v\n", err)
-		return &document.ProcessingResult{}
+		return &doxygen.ProcessingResult{}
 	}
 
 	// Check if file should be ignored
 	if shouldIgnoreFile(filePath, rootPath) {
 		fmt.Printf("  ⏭️  File ignored by configuration\n")
-		return &document.ProcessingResult{}
+		return &doxygen.ProcessingResult{}
 	}
 
 	// Load configuration
@@ -329,7 +328,7 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 
-	opts := document.ProcessingOptions{
+	opts := doxygen.ProcessingOptions{
 		MaxEntities:       llmMaxEntities,
 		DryRun:            llmDryRun,
 		BackupFiles:       llmBackup,
@@ -337,7 +336,7 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 		AdditionalContext: config.Global,
 	}
 
-	var result *document.ProcessingResult
+	var result *doxygen.ProcessingResult
 	spinner.Start("Analyzing and generating documentation...")
 	if llmOverwrite {
 		result, err = docService.ProcessAllEntities(ctx, doc, opts)
@@ -348,7 +347,7 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 	spinner.Stop()
 	if err != nil {
 		fmt.Printf("  ❌ Failed to process entities: %v\n", err)
-		return &document.ProcessingResult{}
+		return &doxygen.ProcessingResult{}
 	}
 
 	// Report progress

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"doxyllm-it/pkg/document"
+	"doxyllm-it/pkg/doxygen"
 	"doxyllm-it/pkg/llm"
 )
 
@@ -360,7 +360,7 @@ namespace TestNamespace {
 	}
 
 	mockLLMService := &mockLLMDocumentationService{provider: mockProvider}
-	docService := document.NewDocumentationService(mockLLMService)
+	docService := doxygen.NewDocumentationService(mockLLMService)
 
 	// Set up test flags using the actual flag variables
 	originalDryRun := llmDryRun
@@ -409,7 +409,7 @@ func TestProcessFile_WithErrors(t *testing.T) {
 	}
 
 	mockLLMService := &mockLLMDocumentationService{provider: mockProvider}
-	docService := document.NewDocumentationService(mockLLMService)
+	docService := doxygen.NewDocumentationService(mockLLMService)
 
 	// Process a non-existent file
 	result := processFile("/non/existent/file.hpp", docService, "/tmp")
@@ -456,7 +456,7 @@ func BenchmarkProcessFile(b *testing.B) {
 	}
 
 	mockLLMService := &mockLLMDocumentationService{provider: mockProvider}
-	docService := document.NewDocumentationService(mockLLMService)
+	docService := doxygen.NewDocumentationService(mockLLMService)
 
 	// Set up for benchmark
 	originalDryRun := llmDryRun
