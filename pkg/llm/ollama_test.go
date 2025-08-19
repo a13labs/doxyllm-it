@@ -11,7 +11,7 @@ import (
 func TestOllamaProvider_GenerateComment(t *testing.T) {
 	tests := []struct {
 		name         string
-		request      CommentRequest
+		request      LLMRequest
 		responseBody string
 		expectedDesc string
 		expectError  bool
@@ -19,10 +19,8 @@ func TestOllamaProvider_GenerateComment(t *testing.T) {
 	}{
 		{
 			name: "successful comment generation",
-			request: CommentRequest{
-				EntityName: "testFunction",
-				EntityType: "function",
-				Context:    "void testFunction(int param);",
+			request: LLMRequest{
+				Prompt: "void testFunction(int param);",
 			},
 			responseBody: `{"response": "A simple test function that performs basic operations.", "done": true}`,
 			expectedDesc: "A simple test function that performs basic operations.",
@@ -31,10 +29,8 @@ func TestOllamaProvider_GenerateComment(t *testing.T) {
 		},
 		{
 			name: "response with code blocks",
-			request: CommentRequest{
-				EntityName: "TestClass",
-				EntityType: "class",
-				Context:    "class TestClass {};",
+			request: LLMRequest{
+				Prompt: "class TestClass {};",
 			},
 			responseBody: `{"response": "` + "```cpp\\nA test class for validation.\\n```" + `", "done": true}`,
 			expectedDesc: "```cpp\nA test class for validation.\n```",
@@ -43,10 +39,8 @@ func TestOllamaProvider_GenerateComment(t *testing.T) {
 		},
 		{
 			name: "HTTP error response",
-			request: CommentRequest{
-				EntityName: "testFunction",
-				EntityType: "function",
-				Context:    "void testFunction();",
+			request: LLMRequest{
+				Prompt: "void testFunction();",
 			},
 			responseBody: `{"error": "Model not found"}`,
 			expectError:  true,
@@ -93,8 +87,8 @@ func TestOllamaProvider_GenerateComment(t *testing.T) {
 				return
 			}
 
-			if response.Comment != tt.expectedDesc {
-				t.Errorf("expected description %q, got %q", tt.expectedDesc, response.Comment)
+			if response.Response != tt.expectedDesc {
+				t.Errorf("expected description %q, got %q", tt.expectedDesc, response.Response)
 			}
 
 			// Check metadata

@@ -14,17 +14,17 @@ import (
 
 // mockLLMProvider implements a mock LLM provider for testing
 type mockLLMProvider struct {
-	generateFunc func(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error)
+	generateFunc func(ctx context.Context, req llm.LLMRequest) (*llm.LLMResponse, error)
 	connected    bool
 	modelName    string
 }
 
-func (m *mockLLMProvider) Generate(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
+func (m *mockLLMProvider) Generate(ctx context.Context, req llm.LLMRequest) (*llm.LLMResponse, error) {
 	if m.generateFunc != nil {
 		return m.generateFunc(ctx, req)
 	}
-	return &llm.CommentResponse{
-		Comment:  "/** @brief Mock comment for " + req.EntityName + " */",
+	return &llm.LLMResponse{
+		Response: "/** @brief Mock comment for .... */",
 		Metadata: make(map[string]string),
 	}, nil
 }
@@ -45,19 +45,16 @@ type mockLLMDocumentationService struct {
 	provider llm.Provider
 }
 
-func (m *mockLLMDocumentationService) Generate(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
-	response, err := m.provider.Generate(ctx, llm.CommentRequest{
-		EntityName:        req.EntityName,
-		EntityType:        req.EntityType,
-		Context:           req.Context,
-		AdditionalContext: req.AdditionalContext,
+func (m *mockLLMDocumentationService) Generate(ctx context.Context, req llm.LLMRequest) (*llm.LLMResponse, error) {
+	response, err := m.provider.Generate(ctx, llm.LLMRequest{
+		Prompt: req.Prompt,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return &llm.CommentResponse{
-		Comment:  response.Comment,
+	return &llm.LLMResponse{
+		Response: response.Response,
 		Metadata: response.Metadata,
 	}, nil
 }
@@ -354,9 +351,9 @@ namespace TestNamespace {
 	mockProvider := &mockLLMProvider{
 		connected: true,
 		modelName: "test-model",
-		generateFunc: func(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
-			return &llm.CommentResponse{
-				Comment:  "/** @brief Generated comment for " + req.EntityName + " */",
+		generateFunc: func(ctx context.Context, req llm.LLMRequest) (*llm.LLMResponse, error) {
+			return &llm.LLMResponse{
+				Response: "/** @brief Generated comment for  ... */",
 				Metadata: make(map[string]string),
 			}, nil
 		},
@@ -406,7 +403,7 @@ func TestProcessFile_WithErrors(t *testing.T) {
 	mockProvider := &mockLLMProvider{
 		connected: true,
 		modelName: "test-model",
-		generateFunc: func(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
+		generateFunc: func(ctx context.Context, req llm.LLMRequest) (*llm.LLMResponse, error) {
 			return nil, &llm.ProviderError{Provider: "mock", Message: "Mock generation error"}
 		},
 	}
@@ -450,9 +447,9 @@ func BenchmarkProcessFile(b *testing.B) {
 	mockProvider := &mockLLMProvider{
 		connected: true,
 		modelName: "benchmark-model",
-		generateFunc: func(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
-			return &llm.CommentResponse{
-				Comment:  "/** @brief Quick comment */",
+		generateFunc: func(ctx context.Context, req llm.LLMRequest) (*llm.LLMResponse, error) {
+			return &llm.LLMResponse{
+				Response: "/** @brief Quick comment */",
 				Metadata: make(map[string]string),
 			}, nil
 		},

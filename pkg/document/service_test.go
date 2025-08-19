@@ -12,15 +12,15 @@ import (
 
 // mockLLMService implements a mock LLM service for testing
 type mockLLMService struct {
-	generateFunc func(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error)
+	generateFunc func(ctx context.Context, req llm.LLMRequest) (*llm.LLMResponse, error)
 }
 
-func (m *mockLLMService) Generate(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
+func (m *mockLLMService) Generate(ctx context.Context, req llm.LLMRequest) (*llm.LLMResponse, error) {
 	if m.generateFunc != nil {
 		return m.generateFunc(ctx, req)
 	}
-	return &llm.CommentResponse{
-		Comment:  "Mock description",
+	return &llm.LLMResponse{
+		Response: "Mock description",
 		Metadata: make(map[string]string),
 	}, nil
 }
@@ -67,9 +67,9 @@ namespace TestNamespace {
 
 	// Create mock LLM service
 	mockLLM := &mockLLMService{
-		generateFunc: func(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
-			return &llm.CommentResponse{
-				Comment:  "Generated description",
+		generateFunc: func(ctx context.Context, req llm.LLMRequest) (*llm.LLMResponse, error) {
+			return &llm.LLMResponse{
+				Response: "Generated description",
 				Metadata: make(map[string]string),
 			}, nil
 		},

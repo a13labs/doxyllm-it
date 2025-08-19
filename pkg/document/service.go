@@ -119,12 +119,18 @@ func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, 
 	// Determine entity type for LLM prompt
 	entityType := entity.GetInstruction().Type.String()
 
+	// Get the appropriate prompt template based on entity type
+	promptTemplate := s.getPromptTemplate(entityType)
+
+	prompt := fmt.Sprintf(
+		promptTemplate,
+		additionalContext,
+		context,
+	)
+
 	// Create documentation request
-	docRequest := llm.CommentRequest{
-		EntityName:        entity.GetInstruction().GetFullPath(),
-		EntityType:        entityType,
-		Context:           context,
-		AdditionalContext: additionalContext,
+	docRequest := llm.LLMRequest{
+		Prompt: prompt,
 	}
 
 	// Generate documentation using LLM
@@ -133,7 +139,7 @@ func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, 
 		return fmt.Errorf("LLM generation failed: %w", err)
 	}
 
-	err = entity.ApplyRaw(fmt.Sprintf("/** @brief %s */", result.Comment))
+	err = entity.ApplyRaw(fmt.Sprintf("/** @brief %s */", result.Response))
 	if err != nil {
 		return fmt.Errorf("failed to apply generated comment: %w", err)
 	}

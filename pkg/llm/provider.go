@@ -8,7 +8,7 @@ import (
 // Provider represents a generic LLM provider interface
 type Provider interface {
 	// Generate generates a documentation comment for the given entity
-	Generate(ctx context.Context, request CommentRequest) (*CommentResponse, error)
+	Generate(ctx context.Context, request LLMRequest) (*LLMResponse, error)
 
 	// TestConnection verifies the LLM provider is accessible
 	TestConnection(ctx context.Context) error
@@ -17,25 +17,15 @@ type Provider interface {
 	GetModelInfo() ModelInfo
 }
 
-type CommentRequest struct {
-	EntityName        string                 // Name of the entity to document
-	EntityType        string                 // Type of entity (function, class, namespace, etc.)
-	Context           string                 // Code context around the entity
-	AdditionalContext string                 // Additional project context
-	Options           map[string]interface{} // Provider-specific options
+type LLMRequest struct {
+	Prompt  string                 // Code context around the entity
+	Options map[string]interface{} // Provider-specific options
 }
 
-// CommentResponse represents the response from comment generation
-type CommentResponse struct {
-	Comment  string            // Generated description text
+// LLMResponse represents the response from comment generation
+type LLMResponse struct {
+	Response string            // Generated description text
 	Metadata map[string]string // Additional metadata from the LLM
-}
-
-// GroupInfo contains information about Doxygen groups
-type GroupInfo struct {
-	Name        string // Group name for @ingroup
-	Title       string // Group title
-	Description string // Group description
 }
 
 // ModelInfo contains information about the LLM model

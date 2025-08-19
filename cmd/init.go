@@ -253,20 +253,17 @@ func generateFileSummary(filePath string, provider llm.Provider) (string, error)
 
 	// Use the LLM provider to generate the summary
 	ctx := context.Background()
-	request := llm.CommentRequest{
-		EntityName:        filepath.Base(filePath),
-		EntityType:        "file",
-		Context:           contentStr,
-		AdditionalContext: prompt,
+	request := llm.LLMRequest{
+		Prompt: prompt,
 	}
 
-	response, err := provider.GenerateComment(ctx, request)
+	response, err := provider.Generate(ctx, request)
 	if err != nil {
 		return "", err
 	}
 
 	// Clean and trim the response
-	summary := strings.TrimSpace(response.Description)
+	summary := strings.TrimSpace(response.Response)
 
 	// Remove any markdown formatting
 	if strings.HasPrefix(summary, "```") {
@@ -294,20 +291,17 @@ func generateGlobalSummary(fileSummaries map[string]string, provider llm.Provide
 
 	// Use the LLM provider to generate the global summary
 	ctx := context.Background()
-	request := llm.CommentRequest{
-		EntityName:        "project",
-		EntityType:        "global",
-		Context:           summariesText.String(),
-		AdditionalContext: prompt,
+	request := llm.LLMRequest{
+		Prompt: prompt,
 	}
 
-	response, err := provider.GenerateComment(ctx, request)
+	response, err := provider.Generate(ctx, request)
 	if err != nil {
 		return "", err
 	}
 
 	// Clean and trim the response
-	summary := strings.TrimSpace(response.Description)
+	summary := strings.TrimSpace(response.Response)
 
 	// Remove any markdown formatting
 	if strings.HasPrefix(summary, "```") {
