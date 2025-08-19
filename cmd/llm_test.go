@@ -45,7 +45,7 @@ type mockLLMDocumentationService struct {
 	provider llm.Provider
 }
 
-func (m *mockLLMDocumentationService) Generate(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error) {
+func (m *mockLLMDocumentationService) Generate(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
 	response, err := m.provider.Generate(ctx, llm.CommentRequest{
 		EntityName:        req.EntityName,
 		EntityType:        req.EntityType,
@@ -56,8 +56,8 @@ func (m *mockLLMDocumentationService) Generate(ctx context.Context, req llm.Docu
 		return nil, err
 	}
 
-	return &llm.DocumentationResult{
-		Response: response.Comment,
+	return &llm.CommentResponse{
+		Comment:  response.Comment,
 		Metadata: response.Metadata,
 	}, nil
 }
@@ -280,7 +280,7 @@ ignore:
 
 func TestGetGroupForFile(t *testing.T) {
 	config := &DoxyllmConfig{
-		Groups: map[string]*document.GroupConfig{
+		Groups: map[string]*GroupConfig{
 			"headers": {
 				Name:             "headers",
 				Title:            "Header Files",

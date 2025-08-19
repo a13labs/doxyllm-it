@@ -49,12 +49,20 @@ Examples:
 	Run:  runLLM,
 }
 
+type GroupConfig struct {
+	Name             string   `yaml:"name"`             // Group name (for @defgroup/@ingroup)
+	Title            string   `yaml:"title"`            // Group title/brief description
+	Description      string   `yaml:"description"`      // Detailed group description
+	Files            []string `yaml:"files"`            // Files that belong to this group
+	GenerateDefGroup bool     `yaml:"generateDefGroup"` // Whether to generate @defgroup in header files
+}
+
 // DoxyllmConfig represents the structure of a .doxyllm.yaml configuration file
 type DoxyllmConfig struct {
-	Global string                           `yaml:"global,omitempty"`
-	Files  map[string]string                `yaml:"files,omitempty"`
-	Ignore []string                         `yaml:"ignore,omitempty"`
-	Groups map[string]*document.GroupConfig `yaml:"groups,omitempty"`
+	Global string                  `yaml:"global,omitempty"`
+	Files  map[string]string       `yaml:"files,omitempty"`
+	Ignore []string                `yaml:"ignore,omitempty"`
+	Groups map[string]*GroupConfig `yaml:"groups,omitempty"`
 }
 
 var (
@@ -201,11 +209,8 @@ func runLLM(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Create LLM documentation service
-	llmService := llm.NewDocumentationService(provider)
-
 	// Create document service
-	docService := document.NewDocumentationService(llmService)
+	docService := document.NewDocumentationService(provider)
 
 	// Check if dry-run first
 	if llmDryRun {
@@ -216,14 +221,14 @@ func runLLM(cmd *cobra.Command, args []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		err = llmService.TestConnection(ctx)
+		err = provider.TestConnection(ctx)
 		if err != nil {
 			fmt.Printf("❌ Failed to connect to LLM: %v\n", err)
 			os.Exit(1)
 		}
 	}
 
-	modelInfo := llmService.GetModelInfo()
+	modelInfo := provider.GetModelInfo()
 	fmt.Printf("🤖 Connected to %s provider\n", llmProvider)
 	fmt.Printf("📚 Using model: %s\n", modelInfo.Name)
 	if llmURL != "" {
@@ -303,7 +308,7 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 
 	// Load configuration
 	config := loadDoxyllmConfig(filePath, rootPath)
-	var group *document.GroupConfig
+	var group *GroupConfig
 
 	// Determine group for this file
 	if config != nil && config.Groups != nil {
@@ -313,11 +318,11 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 	// Add @defgroup if needed
 	if group != nil && group.GenerateDefGroup {
 		spinner.Start("Adding defgroup...")
-		err := docService.AddDefgroupToDocument(doc, group)
-		spinner.Stop()
-		if err != nil {
-			fmt.Printf("  ⚠️  Failed to add defgroup: %v\n", err)
-		}
+		// err := docService.AddDefgroupToDocument(doc, group)
+		// spinner.Stop()
+		// if err != nil {
+		// 	fmt.Printf("  ⚠️  Failed to add defgroup: %v\n", err)
+		// }
 	}
 
 	// Process undocumented entities
@@ -329,7 +334,6 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 		DryRun:            llmDryRun,
 		BackupFiles:       llmBackup,
 		FormatOutput:      llmFormatOutput,
-		GroupConfig:       group,
 		AdditionalContext: config.Global,
 	}
 
@@ -500,7 +504,7 @@ func loadDoxyllmConfig(filePath, rootPath string) *DoxyllmConfig {
 }
 
 // getGroupForFile determines which group a file belongs to
-func getGroupForFile(filePath, rootPath string, config *DoxyllmConfig) *document.GroupConfig {
+func getGroupForFile(filePath, rootPath string, config *DoxyllmConfig) *GroupConfig {
 	if config.Groups == nil {
 		return nil
 	}

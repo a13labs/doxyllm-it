@@ -11,20 +11,13 @@ import (
 	"doxyllm-it/pkg/llm"
 )
 
-// LLMService defines the interface for LLM-based documentation generation
-type LLMService interface {
-	Generate(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error)
-	TestConnection(ctx context.Context) error
-	GetModelInfo() llm.ModelInfo
-}
-
 // DocumentationService provides high-level document processing with LLM integration
 type DocumentationService struct {
-	llmService LLMService
+	llmService llm.Provider
 }
 
 // NewDocumentationService creates a new document documentation service
-func NewDocumentationService(llmService LLMService) *DocumentationService {
+func NewDocumentationService(llmService llm.Provider) *DocumentationService {
 	return &DocumentationService{
 		llmService: llmService,
 	}
@@ -37,18 +30,10 @@ type ProcessingOptions struct {
 	BackupFiles       bool             // Create backup files
 	FormatOutput      bool             // Apply clang-format after processing
 	ExcludeTypes      []ast.EntityType // Entity types to exclude
-	GroupConfig       *GroupConfig     // Group configuration for @ingroup tags
 	AdditionalContext string           // Additional context for LLM generation
 }
 
 // GroupConfig defines configuration for Doxygen groups
-type GroupConfig struct {
-	Name             string   `yaml:"name"`             // Group name (for @defgroup/@ingroup)
-	Title            string   `yaml:"title"`            // Group title/brief description
-	Description      string   `yaml:"description"`      // Detailed group description
-	Files            []string `yaml:"files"`            // Files that belong to this group
-	GenerateDefGroup bool     `yaml:"generateDefGroup"` // Whether to generate @defgroup in header files
-}
 
 // ProcessingResult contains the result of document processing
 type ProcessingResult struct {
@@ -60,7 +45,6 @@ type ProcessingResult struct {
 
 // ProcessUndocumentedEntities processes all undocumented entities in a document
 func (s *DocumentationService) ProcessUndocumentedEntities(ctx context.Context, doc *doxygen.DocLayer, opts ProcessingOptions) (*ProcessingResult, error) {
-
 	// Get undocumented entities
 	undocumented := doc.GetUndocumentedEntities()
 	return s.processEntities(ctx, doc, opts, undocumented)
@@ -111,7 +95,7 @@ func (s *DocumentationService) processEntities(ctx context.Context, doc *doxygen
 		}
 
 		// Generate documentation for the entity
-		err := s.generateEntityDocumentation(ctx, doc, entity, opts.GroupConfig, opts.AdditionalContext)
+		err := s.generateEntityDocumentation(ctx, doc, entity, opts.AdditionalContext)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("failed to document %s: %w", entityPath, err))
 			continue
@@ -124,13 +108,8 @@ func (s *DocumentationService) processEntities(ctx context.Context, doc *doxygen
 	return result, nil
 }
 
-// AddDefgroupToDocument adds a @defgroup comment to the beginning of a document
-func (s *DocumentationService) AddDefgroupToDocument(doc *doxygen.DocLayer, group *GroupConfig) error {
-	return nil
-}
-
 // generateEntityDocumentation generates documentation for a single entity
-func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, doc *doxygen.DocLayer, entity *doxygen.Entity, group *GroupConfig, additionalContext string) error {
+func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, doc *doxygen.DocLayer, entity *doxygen.Entity, additionalContext string) error {
 	// Extract context for the entity
 	context := entity.Context(true, true)
 	if context == "" {
@@ -138,10 +117,10 @@ func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, 
 	}
 
 	// Determine entity type for LLM prompt
-	entityType := s.getEntityTypeDescription(entity.GetInstruction())
+	entityType := entity.GetInstruction().Type.String()
 
 	// Create documentation request
-	docRequest := llm.DocumentationRequest{
+	docRequest := llm.CommentRequest{
 		EntityName:        entity.GetInstruction().GetFullPath(),
 		EntityType:        entityType,
 		Context:           context,
@@ -154,74 +133,10 @@ func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, 
 		return fmt.Errorf("LLM generation failed: %w", err)
 	}
 
-	err = entity.ApplyRaw(fmt.Sprintf("/** @brief %s */", result.Response))
+	err = entity.ApplyRaw(fmt.Sprintf("/** @brief %s */", result.Comment))
 	if err != nil {
 		return fmt.Errorf("failed to apply generated comment: %w", err)
 	}
 
 	return nil
-}
-
-// getEntityTypeDescription returns a description of the entity type for LLM prompts
-func (s *DocumentationService) getEntityTypeDescription(entity *ast.Entity) string {
-	switch entity.Type {
-	case ast.EntityNamespace:
-		return "namespace"
-	case ast.EntityClass:
-		return "class"
-	case ast.EntityStruct:
-		return "struct"
-	case ast.EntityEnum:
-		return "enum"
-	case ast.EntityCallable:
-		return "callable"
-	case ast.EntityName:
-		return "name"
-	case ast.EntityTypedef:
-		return "typedef"
-	case ast.EntityUsing:
-		return "using declaration"
-	default:
-		return "entity"
-	}
-}
-
-// ShouldSkipEntity determines if an entity should be skipped during processing
-func (s *DocumentationService) ShouldSkipEntity(entity *ast.Entity) bool {
-	// Skip single-letter entities (likely template parameters)
-	if len(entity.Name) == 1 {
-		return true
-	}
-
-	// Skip system entities
-	systemEntities := map[string]bool{
-		"std":       true,
-		"__gnu_cxx": true,
-		"__detail":  true,
-	}
-	if systemEntities[entity.Name] {
-		return true
-	}
-
-	// Skip common template parameters
-	commonTemplateParams := map[string]bool{
-		"T": true, "U": true, "V": true, "E": true, "N": true, "S": true,
-		"Container": true, "ElementType": true, "OtherElementType": true,
-	}
-	if commonTemplateParams[entity.Name] {
-		return true
-	}
-
-	// Skip local variables for functions
-	if entity.Type == ast.EntityName {
-		localVarNames := map[string]bool{
-			"msg": true, "result": true, "temp": true, "i": true, "j": true, "k": true,
-			"it": true, "iter": true, "val": true, "value": true, "ret": true,
-		}
-		if localVarNames[entity.Name] {
-			return true
-		}
-	}
-
-	return false
 }

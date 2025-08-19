@@ -12,15 +12,15 @@ import (
 
 // mockLLMService implements a mock LLM service for testing
 type mockLLMService struct {
-	generateFunc func(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error)
+	generateFunc func(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error)
 }
 
-func (m *mockLLMService) Generate(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error) {
+func (m *mockLLMService) Generate(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
 	if m.generateFunc != nil {
 		return m.generateFunc(ctx, req)
 	}
-	return &llm.DocumentationResult{
-		Response: "Mock description",
+	return &llm.CommentResponse{
+		Comment:  "Mock description",
 		Metadata: make(map[string]string),
 	}, nil
 }
@@ -67,9 +67,9 @@ namespace TestNamespace {
 
 	// Create mock LLM service
 	mockLLM := &mockLLMService{
-		generateFunc: func(ctx context.Context, req llm.DocumentationRequest) (*llm.DocumentationResult, error) {
-			return &llm.DocumentationResult{
-				Response: "Generated description",
+		generateFunc: func(ctx context.Context, req llm.CommentRequest) (*llm.CommentResponse, error) {
+			return &llm.CommentResponse{
+				Comment:  "Generated description",
 				Metadata: make(map[string]string),
 			}, nil
 		},
@@ -206,82 +206,6 @@ namespace TestNamespace {
 	for _, entityPath := range result.UpdatedEntities {
 		if strings.Contains(entityPath, "testVariable") {
 			t.Error("Expected variables to be excluded from processing")
-		}
-	}
-}
-
-func TestShouldSkipEntity(t *testing.T) {
-	mockLLM := &mockLLMService{}
-	service := NewDocumentationService(mockLLM)
-
-	tests := []struct {
-		name     string
-		entity   *ast.Entity
-		expected bool
-	}{
-		{
-			name: "single letter entity",
-			entity: &ast.Entity{
-				Name: "T",
-				Type: ast.EntityClass,
-			},
-			expected: true,
-		},
-		{
-			name: "std namespace",
-			entity: &ast.Entity{
-				Name: "std",
-				Type: ast.EntityNamespace,
-			},
-			expected: true,
-		},
-		{
-			name: "normal class",
-			entity: &ast.Entity{
-				Name: "MyClass",
-				Type: ast.EntityClass,
-			},
-			expected: false,
-		},
-		{
-			name: "local variable",
-			entity: &ast.Entity{
-				Name: "temp",
-				Type: ast.EntityName,
-			},
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := service.ShouldSkipEntity(tt.entity)
-			if result != tt.expected {
-				t.Errorf("Expected %v, got %v for entity %s", tt.expected, result, tt.entity.Name)
-			}
-		})
-	}
-}
-
-func TestGetEntityTypeDescription(t *testing.T) {
-	mockLLM := &mockLLMService{}
-	service := NewDocumentationService(mockLLM)
-
-	tests := []struct {
-		entityType ast.EntityType
-		expected   string
-	}{
-		{ast.EntityNamespace, "namespace"},
-		{ast.EntityClass, "class"},
-		{ast.EntityCallable, "callable"},
-		{ast.EntityName, "name"},
-	}
-
-	for _, tt := range tests {
-		entity := &ast.Entity{Type: tt.entityType}
-		result := service.getEntityTypeDescription(entity)
-		if result != tt.expected {
-			t.Errorf("Expected %s, got %s for type %v", tt.expected, result, tt.entityType)
 		}
 	}
 }
