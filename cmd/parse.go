@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"doxyllm-it/pkg/ast"
-	"doxyllm-it/pkg/cppparser"
+	"doxyllm-it/pkg/parser"
 
 	"github.com/spf13/cobra"
 )
@@ -27,7 +27,7 @@ The output can be in JSON format for further processing or human-readable format
 		}
 
 		// Parse the file
-		p := cppparser.New()
+		p := parser.New()
 		tree, err := p.Parse(filename, string(content))
 		if err != nil {
 			return fmt.Errorf("failed to parse file %s: %w", filename, err)

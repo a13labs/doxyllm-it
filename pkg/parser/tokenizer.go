@@ -1,5 +1,5 @@
 // Package parser - improved streaming tokenizer implementation for C++ header files
-package cppparser
+package parser
 
 import (
 	"fmt"

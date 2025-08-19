@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	ast "doxyllm-it/pkg/ast"
-	parser "doxyllm-it/pkg/cppparser"
+	parser "doxyllm-it/pkg/parser"
 )
 
 // SourceFile represents a C++ header file with its parsed AST and provides

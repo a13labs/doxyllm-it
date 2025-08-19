@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"doxyllm-it/pkg/cppparser"
 	"doxyllm-it/pkg/formatter"
+	"doxyllm-it/pkg/parser"
 
 	"github.com/spf13/cobra"
 )
@@ -27,7 +27,7 @@ Use :: for global scope entities.`,
 			return fmt.Errorf("failed to read file %s: %w", filename, err)
 		}
 
-		p := cppparser.New()
+		p := parser.New()
 		tree, err := p.Parse(filename, string(content))
 		if err != nil {
 			return fmt.Errorf("failed to parse file %s: %w", filename, err)

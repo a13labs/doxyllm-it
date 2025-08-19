@@ -1,4 +1,4 @@
-package cppparser
+package parser
 
 import (
 	ast "doxyllm-it/pkg/ast"

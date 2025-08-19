@@ -1,5 +1,5 @@
 // Package parser implements a streaming token-driven C++ header file parser with O(1) memory complexity
-package cppparser
+package parser
 
 import (
 	ast "doxyllm-it/pkg/ast"
