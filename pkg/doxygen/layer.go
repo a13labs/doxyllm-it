@@ -29,7 +29,7 @@ func NewLayerFromContent(filename string, content string) (*DocLayer, error) {
 
 	instructions := src.GetInstructions()
 	for _, instr := range instructions {
-		var doxygenComment *DataEntry
+		var doxygenComment *DocumentationEntry
 		var comment *ast.Entity
 		var isNew bool
 
@@ -40,7 +40,7 @@ func NewLayerFromContent(filename string, content string) (*DocLayer, error) {
 		}
 
 		// Try to find a preceding comment since this is not a name entity
-		if dc, err := newDataEntry(comment); err == nil {
+		if dc, err := createDocumentationEntry(comment); err == nil {
 			doxygenComment = dc
 		} else {
 			isNew = true
@@ -54,11 +54,9 @@ func NewLayerFromContent(filename string, content string) (*DocLayer, error) {
 				src.GetTree().InsertBefore(instr, comment)
 			}
 
-			doxygenComment = &DataEntry{
+			doxygenComment = &DocumentationEntry{
 				Raw:        comment,
-				Params:     make(map[string]string),
-				TParams:    make(map[string]string),
-				CustomTags: make(map[string]string),
+				CustomTags: make(DoxygenTags, 0),
 			}
 		}
 

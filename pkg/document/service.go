@@ -32,12 +32,13 @@ func NewDocumentationService(llmService LLMService) *DocumentationService {
 
 // ProcessingOptions contains options for document processing
 type ProcessingOptions struct {
-	MaxEntities  int              // Maximum entities to process (0 = unlimited)
-	DryRun       bool             // Don't make actual changes
-	BackupFiles  bool             // Create backup files
-	FormatOutput bool             // Apply clang-format after processing
-	ExcludeTypes []ast.EntityType // Entity types to exclude
-	GroupConfig  *GroupConfig     // Group configuration for @ingroup tags
+	MaxEntities       int              // Maximum entities to process (0 = unlimited)
+	DryRun            bool             // Don't make actual changes
+	BackupFiles       bool             // Create backup files
+	FormatOutput      bool             // Apply clang-format after processing
+	ExcludeTypes      []ast.EntityType // Entity types to exclude
+	GroupConfig       *GroupConfig     // Group configuration for @ingroup tags
+	AdditionalContext string           // Additional context for LLM generation
 }
 
 // GroupConfig defines configuration for Doxygen groups
@@ -54,7 +55,6 @@ type ProcessingResult struct {
 	EntitiesProcessed int      // Number of entities processed
 	EntitiesUpdated   int      // Number of entities actually updated
 	UpdatedEntities   []string // List of updated entity paths
-	DefgroupAdded     bool     // Whether @defgroup was added
 	Errors            []error  // Non-fatal errors encountered
 }
 
@@ -111,7 +111,7 @@ func (s *DocumentationService) processEntities(ctx context.Context, doc *doxygen
 		}
 
 		// Generate documentation for the entity
-		err := s.generateEntityDocumentation(ctx, doc, entity, opts.GroupConfig)
+		err := s.generateEntityDocumentation(ctx, doc, entity, opts.GroupConfig, opts.AdditionalContext)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("failed to document %s: %w", entityPath, err))
 			continue
@@ -130,7 +130,7 @@ func (s *DocumentationService) AddDefgroupToDocument(doc *doxygen.DocLayer, grou
 }
 
 // generateEntityDocumentation generates documentation for a single entity
-func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, doc *doxygen.DocLayer, entity *doxygen.Entity, group *GroupConfig) error {
+func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, doc *doxygen.DocLayer, entity *doxygen.Entity, group *GroupConfig, additionalContext string) error {
 	// Extract context for the entity
 	context := entity.Context(true, true)
 	if context == "" {
@@ -145,7 +145,7 @@ func (s *DocumentationService) generateEntityDocumentation(ctx context.Context, 
 		EntityName:        entity.GetInstruction().GetFullPath(),
 		EntityType:        entityType,
 		Context:           context,
-		AdditionalContext: "", // TODO: Add support for .doxyllm.yaml context
+		AdditionalContext: additionalContext,
 	}
 
 	// Generate documentation using LLM

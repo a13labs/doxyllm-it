@@ -10,7 +10,7 @@ import (
 type Entity struct {
 	layer *DocLayer   // The layer this entity belongs to
 	instr *ast.Entity // The entity this comment is associated with
-	doc   *DataEntry
+	doc   *DocumentationEntry
 	isNew bool
 }
 

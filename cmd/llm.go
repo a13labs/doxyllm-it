@@ -325,11 +325,12 @@ func processFile(filePath string, docService *document.DocumentationService, roo
 	defer cancel()
 
 	opts := document.ProcessingOptions{
-		MaxEntities:  llmMaxEntities,
-		DryRun:       llmDryRun,
-		BackupFiles:  llmBackup,
-		FormatOutput: llmFormatOutput,
-		GroupConfig:  group,
+		MaxEntities:       llmMaxEntities,
+		DryRun:            llmDryRun,
+		BackupFiles:       llmBackup,
+		FormatOutput:      llmFormatOutput,
+		GroupConfig:       group,
+		AdditionalContext: config.Global,
 	}
 
 	var result *document.ProcessingResult
@@ -476,6 +477,7 @@ func shouldIgnoreFile(filePath, rootPath string) bool {
 
 // loadDoxyllmConfig loads the .doxyllm.yaml configuration file
 func loadDoxyllmConfig(filePath, rootPath string) *DoxyllmConfig {
+	var config DoxyllmConfig
 	var rootDir string
 	if info, err := os.Stat(rootPath); err == nil && info.IsDir() {
 		rootDir = rootPath
@@ -486,13 +488,12 @@ func loadDoxyllmConfig(filePath, rootPath string) *DoxyllmConfig {
 	doxyllmPath := filepath.Join(rootDir, ".doxyllm.yaml")
 	content, err := os.ReadFile(doxyllmPath)
 	if err != nil {
-		return nil
+		return &DoxyllmConfig{}
 	}
 
-	var config DoxyllmConfig
 	if err := yaml.Unmarshal(content, &config); err != nil {
 		fmt.Printf("⚠️  Warning: Failed to parse .doxyllm.yaml: %v\n", err)
-		return nil
+		return &DoxyllmConfig{}
 	}
 
 	return &config

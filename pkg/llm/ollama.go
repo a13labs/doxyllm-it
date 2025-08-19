@@ -21,21 +21,25 @@ const defaultOllamaPromptTemplate = `You are a C++ documentation expert. Generat
 CRITICAL INSTRUCTIONS:
 - Generate ONLY the Doxygen comment, no code is allowed
 - You must include Doxygen tags (@brief, @param, @return, etc.)
-- You must include comment markers (/** */) - the system will format these
+- You must include comment markers (/** */) - the system requires this format
 - Document ONLY the target entity.
 - Focus on describing the purpose, behavior, and usage
 - For functions: Describe what it does, not parameters/return (those will be handled separately)
 - For classes: Describe the class responsibility and main purpose
 - For namespaces: Describe the purpose and scope
 - For templates: Describe the template parameters and their usage
-- These are the only allowed Doxygen tags, do not use any other tags @brief, @param, @tparam, @return.
-%s
 
 %s
 
+%s
 
+ONLY DOXYGEN TAGS:
+ - @brief
+ - @param
+ - @tparam
+ - @return
 
-Generate focused doxygen content for this entity (no source code).`
+Generate focused doxygen content for this entity (NO SOURCE CODE).`
 
 const fieldPromptTemplate = `You are a C++ documentation expert. Generate a very concise description for a struct/class field.
 
@@ -98,7 +102,7 @@ func (p *OllamaProvider) Generate(ctx context.Context, request CommentRequest) (
 	// Build additional context section
 	var contextSection string
 	if request.AdditionalContext != "" {
-		contextSection = fmt.Sprintf("ADDITIONAL PROJECT CONTEXT:\n%s\n", request.AdditionalContext)
+		contextSection = fmt.Sprintf("PROJECT CONTEXT:\n%s\n", request.AdditionalContext)
 	}
 
 	// Get the appropriate prompt template based on entity type

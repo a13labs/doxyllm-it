@@ -45,13 +45,16 @@ func TestParseDoxygenCommentWithInlineMarker(t *testing.T) {
 			Signature: tt.comment,
 		}
 		t.Run(tt.name, func(t *testing.T) {
-			result, _ := newDataEntry(e)
+			result, _ := createDocumentationEntry(e)
 			if result == nil {
 				t.Fatalf("NewDoxygenComment returned nil")
 			}
 
-			if result.Brief != tt.expected {
-				t.Errorf("NewDoxygenComment Brief = %q, want %q", result.Brief, tt.expected)
+			briefTag := result.CustomTags.Get("brief")
+			if len(briefTag) == 0 {
+				t.Errorf("NewDoxygenComment Brief = nil, want %q", tt.expected)
+			} else if briefTag[0].Value != tt.expected {
+				t.Errorf("NewDoxygenComment Brief = %q, want %q", briefTag[0].Value, tt.expected)
 			}
 
 			// Verify Raw field is preserved
@@ -154,23 +157,27 @@ func TestParseDoxygenCommentParamVsTParam(t *testing.T) {
 				Type:      ast.EntityComment,
 				Signature: tt.comment,
 			}
-			result, _ := newDataEntry(e)
+			result, _ := createDocumentationEntry(e)
 
 			if result == nil {
 				t.Fatal("ParseDoxygenComment returned nil")
 			}
 
 			// Check brief
-			if result.Brief != tt.expectedBrief {
-				t.Errorf("Brief = %q, want %q", result.Brief, tt.expectedBrief)
+			briefTag := result.CustomTags.Get("brief")
+			if len(briefTag) > 0 {
+				if briefTag[0].Value != tt.expectedBrief {
+					t.Errorf("Brief = %q, want %q", briefTag[0].Value, tt.expectedBrief)
+				}
 			}
 
 			// Check Params
-			if len(result.Params) != len(tt.expectedParams) {
-				t.Errorf("Params length = %d, want %d", len(result.Params), len(tt.expectedParams))
+			params := result.CustomTags.Get("param")
+			if len(params) != len(tt.expectedParams) {
+				t.Errorf("Params length = %d, want %d", len(params), len(tt.expectedParams))
 			}
 			for key, expectedValue := range tt.expectedParams {
-				if actualValue, exists := result.Params[key]; !exists {
+				if actualValue, exists := result.CustomTags.GetParam(key, ""); !exists {
 					t.Errorf("Params missing key %q", key)
 				} else if actualValue != expectedValue {
 					t.Errorf("Params[%q] = %q, want %q", key, actualValue, expectedValue)
@@ -178,11 +185,12 @@ func TestParseDoxygenCommentParamVsTParam(t *testing.T) {
 			}
 
 			// Check TParams
-			if len(result.TParams) != len(tt.expectedTParams) {
-				t.Errorf("TParams length = %d, want %d", len(result.TParams), len(tt.expectedTParams))
+			tparams := result.CustomTags.Get("tparam")
+			if len(tparams) != len(tt.expectedTParams) {
+				t.Errorf("TParams length = %d, want %d", len(tparams), len(tt.expectedTParams))
 			}
 			for key, expectedValue := range tt.expectedTParams {
-				if actualValue, exists := result.TParams[key]; !exists {
+				if actualValue, exists := result.CustomTags.GetTParam(key); !exists {
 					t.Errorf("TParams missing key %q", key)
 				} else if actualValue != expectedValue {
 					t.Errorf("TParams[%q] = %q, want %q", key, actualValue, expectedValue)
@@ -191,12 +199,12 @@ func TestParseDoxygenCommentParamVsTParam(t *testing.T) {
 
 			// Verify that tparams are not in params and vice versa
 			for key := range tt.expectedTParams {
-				if _, exists := result.Params[key]; exists {
+				if _, exists := result.CustomTags.GetParam(key, ""); exists {
 					t.Errorf("TParam %q incorrectly found in Params", key)
 				}
 			}
 			for key := range tt.expectedParams {
-				if _, exists := result.TParams[key]; exists {
+				if _, exists := result.CustomTags.GetTParam(key); exists {
 					t.Errorf("Param %q incorrectly found in TParams", key)
 				}
 			}
@@ -216,25 +224,26 @@ func TestParseDoxygenCommentRegressionPreventParamTParamMixup(t *testing.T) {
 		Type:      ast.EntityComment,
 		Signature: comment,
 	}
-	result, _ := newDataEntry(e)
+	result, _ := createDocumentationEntry(e)
 	if result == nil {
 		t.Fatal("ParseDoxygenComment returned nil")
 	}
 
 	// The bug: @tparam should NOT be in Params
-	if _, exists := result.Params["T"]; exists {
+
+	if _, exists := result.CustomTags.GetParam("T", ""); exists {
 		t.Error("Regression: @tparam 'T' found in Params map, should be in TParams only")
 	}
 
 	// Correct behavior: @tparam should be in TParams
-	if value, exists := result.TParams["T"]; !exists {
+	if value, exists := result.CustomTags.GetTParam("T"); !exists {
 		t.Error("@tparam 'T' not found in TParams map")
 	} else if value != "The type of elements in the list." {
 		t.Errorf("TParams['T'] = %q, want %q", value, "The type of elements in the list.")
 	}
 
 	// Verify Params is empty for this case
-	if len(result.Params) != 0 {
-		t.Errorf("Params should be empty, got %d entries: %v", len(result.Params), result.Params)
+	if len(result.CustomTags.Get("param")) != 0 {
+		t.Errorf("Params should be empty, got %d entries: %v", len(result.CustomTags.Get("param")), result.CustomTags.Get("param"))
 	}
 }
