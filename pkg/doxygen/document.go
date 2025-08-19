@@ -8,20 +8,20 @@ import (
 	"os"
 )
 
-// DocLayer represents a layer of documentation entities.
-type DocLayer struct {
+// Document represents a layer of documentation entities.
+type Document struct {
 	entitiesCache []*Entity
 	sourceFile    *source.SourceFile
 	isModified    bool
 }
 
-func NewLayerFromContent(filename string, content string) (*DocLayer, error) {
+func NewFromContent(filename string, content string) (*Document, error) {
 	src, err := source.NewSourceFromContent(filename, content)
 	if err != nil {
 		return nil, err
 	}
 
-	layer := &DocLayer{
+	layer := &Document{
 		entitiesCache: make([]*Entity, 0),
 		sourceFile:    src,
 		isModified:    false,
@@ -73,17 +73,17 @@ func NewLayerFromContent(filename string, content string) (*DocLayer, error) {
 	return layer, nil
 }
 
-func NewLayer(filename string) (*DocLayer, error) {
+func NewFromFile(filename string) (*Document, error) {
 
 	content, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %s: %w", filename, err)
 	}
 
-	return NewLayerFromContent(filename, string(content))
+	return NewFromContent(filename, string(content))
 }
 
-func (l *DocLayer) GetEntities(newOnly bool) []*Entity {
+func (l *Document) GetEntities(newOnly bool) []*Entity {
 	if newOnly {
 		var newOnlyEntities []*Entity
 		for _, entity := range l.entitiesCache {
@@ -96,19 +96,19 @@ func (l *DocLayer) GetEntities(newOnly bool) []*Entity {
 	return l.entitiesCache
 }
 
-func (l *DocLayer) GetUndocumentedEntities() []*Entity {
+func (l *Document) GetUndocumentedEntities() []*Entity {
 	return l.GetEntities(true)
 }
 
-func (l *DocLayer) GetAllEntities() []*Entity {
+func (l *Document) GetAllEntities() []*Entity {
 	return l.GetEntities(false)
 }
 
-func (l *DocLayer) IsModified() bool {
+func (l *Document) IsModified() bool {
 	return l.isModified
 }
 
-func (l *DocLayer) SaveToString(clanged bool) (string, error) {
+func (l *Document) SaveToString(clanged bool) (string, error) {
 	f := formatter.New()
 
 	reconstructed := f.ReconstructCode(l.sourceFile.GetTree(), -1, true)
@@ -119,7 +119,7 @@ func (l *DocLayer) SaveToString(clanged bool) (string, error) {
 	return reconstructed, nil
 }
 
-func (l *DocLayer) Save(clanged bool) error {
+func (l *Document) Save(clanged bool) error {
 	content, err := l.SaveToString(clanged)
 	if err != nil {
 		return err

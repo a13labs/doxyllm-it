@@ -59,7 +59,7 @@ namespace TestNamespace {
 }
 `
 
-	doc, err := NewLayerFromContent("test.hpp", testContent)
+	doc, err := NewFromContent("test.hpp", testContent)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -109,7 +109,7 @@ public:
 };
 `
 
-	doc, err := NewLayerFromContent("test.hpp", testContent)
+	doc, err := NewFromContent("test.hpp", testContent)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -147,7 +147,7 @@ public:
 };
 `
 
-	doc, err := NewLayerFromContent("test.hpp", testContent)
+	doc, err := NewFromContent("test.hpp", testContent)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}
@@ -182,7 +182,7 @@ namespace TestNamespace {
 }
 `
 
-	doc, err := NewLayerFromContent("test.hpp", testContent)
+	doc, err := NewFromContent("test.hpp", testContent)
 	if err != nil {
 		t.Fatalf("Failed to create document: %v", err)
 	}

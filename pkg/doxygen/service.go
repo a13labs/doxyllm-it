@@ -43,19 +43,19 @@ type ProcessingResult struct {
 }
 
 // ProcessUndocumentedEntities processes all undocumented entities in a document
-func (s *DoxygenService) ProcessUndocumentedEntities(ctx context.Context, doc *DocLayer, opts ProcessingOptions) (*ProcessingResult, error) {
+func (s *DoxygenService) ProcessUndocumentedEntities(ctx context.Context, doc *Document, opts ProcessingOptions) (*ProcessingResult, error) {
 	// Get undocumented entities
 	undocumented := doc.GetUndocumentedEntities()
 	return s.processEntities(ctx, doc, opts, undocumented)
 }
 
-func (s *DoxygenService) ProcessAllEntities(ctx context.Context, doc *DocLayer, opts ProcessingOptions) (*ProcessingResult, error) {
+func (s *DoxygenService) ProcessAllEntities(ctx context.Context, doc *Document, opts ProcessingOptions) (*ProcessingResult, error) {
 	// Get all entities
 	allEntities := doc.GetAllEntities()
 	return s.processEntities(ctx, doc, opts, allEntities)
 }
 
-func (s *DoxygenService) processEntities(ctx context.Context, doc *DocLayer, opts ProcessingOptions, entities []*Entity) (*ProcessingResult, error) {
+func (s *DoxygenService) processEntities(ctx context.Context, doc *Document, opts ProcessingOptions, entities []*Entity) (*ProcessingResult, error) {
 	result := &ProcessingResult{
 		UpdatedEntities: make([]string, 0),
 		Errors:          make([]error, 0),
@@ -108,7 +108,7 @@ func (s *DoxygenService) processEntities(ctx context.Context, doc *DocLayer, opt
 }
 
 // generateEntityDocumentation generates documentation for a single entity
-func (s *DoxygenService) generateEntityDocumentation(ctx context.Context, doc *DocLayer, entity *Entity, additionalContext string) error {
+func (s *DoxygenService) generateEntityDocumentation(ctx context.Context, doc *Document, entity *Entity, additionalContext string) error {
 	// Extract context for the entity
 	context := entity.Context(true, true)
 	if context == "" {

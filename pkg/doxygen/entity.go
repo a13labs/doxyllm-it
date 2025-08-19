@@ -8,7 +8,7 @@ import (
 
 // Entity represents a single entity with its associated documentation.
 type Entity struct {
-	layer *DocLayer   // The layer this entity belongs to
+	layer *Document   // The layer this entity belongs to
 	instr *ast.Entity // The entity this comment is associated with
 	doc   *DocumentationEntry
 	isNew bool

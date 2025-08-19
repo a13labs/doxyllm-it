@@ -292,7 +292,7 @@ func processFile(filePath string, docService *doxygen.DoxygenService, rootPath s
 
 	// Load the document
 	spinner.Start("Loading doxygen...")
-	doc, err := doxygen.NewLayer(filePath)
+	doc, err := doxygen.NewFromFile(filePath)
 	spinner.Stop()
 	if err != nil {
 		fmt.Printf("  ❌ Failed to load document: %v\n", err)
